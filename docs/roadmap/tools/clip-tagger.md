@@ -10,7 +10,7 @@ For a longer clip or VOD: sample frames on an interval, run the **already traine
 
 ## Why it exists (and why it is not Stage 1–5 work)
 
-This is an **application** of frame classification, not a different model. No architecture change, no extra training objective — just repeated inference + aggregation. Correct to focus APS360 effort on single-frame accuracy first.
+This is an **application** of frame classification, not a different model. No architecture change, no extra training objective — just repeated inference + aggregation. Correct to focus effort on single-frame accuracy first.
 
 ## Inputs / outputs
 

@@ -1,8 +1,8 @@
-# Frame to Game — APS360 Roadmap
+# Frame to Game — Roadmap
 
 CNN that maps a single gameplay frame → one of six games (Valorant, League of Legends, CS2, Minecraft, Overwatch 2, Marvel Rivals).
 
-**Course focus:** frame classification only. Clip / interval tagging is not a model change — it is deterministic multi-frame inference (sample frames → predict → majority vote / threshold). Defer that until after the model works.
+**Focus:** frame classification only. Clip / interval tagging is not a model change — it is deterministic multi-frame inference (sample frames → predict → majority vote / threshold). Defer that until after the model works.
 
 **Working assumption:** start with personal clips you already have to build and verify the data tools; only after that pipeline is solid do we chase volume from public/streamer sources.
 
@@ -10,11 +10,11 @@ CNN that maps a single gameplay frame → one of six games (Valorant, League of 
 
 ---
 
-## Progress snapshot *(updated 2026-11-12)*
+## Progress snapshot
 
 | Area | Status | Extent |
 |---|---|---|
-| Planning docs (roadmap, tool pages, design decisions, docs layout) | **done** | Living docs; open decisions still blank until we decide them |
+| Planning docs (roadmap, tool pages, design decisions) | **done** | Living docs; open decisions still blank until we decide them |
 | Stage 0 — repo / env / pytest | **done** | See Stage 0 checklist below |
 | Stage 1 — frame extractor | **implemented** | Single-video CLI/API + unit/system/personal tests; **not** batch-over-catalog yet |
 | Stage 1 — frame cleaner | **implemented** | Black / blur / aHash dedupe + reject log; D11 non-game filter **not** included |
@@ -25,34 +25,36 @@ CNN that maps a single gameplay frame → one of six games (Valorant, League of 
 
 ### Pipeline manager?
 
-**Not yet.** Each tool is manifest in → manifest out (`extract` → `clean` → later `split`). For APS360, chain with CLI or a thin `gfc-run` script later. Avoid Airflow/Prefect-style systems until batch volume hurts.
+**Not yet.** Each tool is manifest in → manifest out (`extract` → `clean` → later `split`). Chain with CLI or a thin `gfc-run` script later. Avoid heavy workflow engines until batch volume hurts.
 
 ---
 
-## Project deadlines
+## Timeline (approximate)
 
-| Deliverable | Weight | Deadline |
+Durations are rough working estimates, not calendar dates.
+
+| Phase | Approx. effort | Notes |
 |---|---|---|
-| Project Proposal | 5% | Fri Oct 16 — done |
-| **Progress Report** | **5%** | **Fri Nov 20** |
-| Final Report | 10% | Tue Dec 8 |
+| Stage 1 remainder (catalog and/or quality encoder) | ~2 days | Finish personal-clip tooling |
+| Stage 2 — splitter + augmentation | ~2 days | Leak-free splits before any model numbers |
+| Stage 3 — scale volume | ~2 days | Can overlap once tools work |
+| Stage 4 — baseline | ~1–2 days | Histogram + logistic regression + figures |
+| Stage 5 — first CNN train/eval | ~2 days | Feasibility results, not final polish |
+| Stage 6 — mid-project writeup | ~1–2 days | Package data + baseline + CNN results |
+| Stage 7 — hardening + final writeup | ~2 weeks | Full eval, remaining data, optional clip-tag demo |
 
-Progress report expects: **most/all data**, a **baseline with results**, a **primary CNN with results**, plus a short feasibility argument.
+**Near-term priority:** finish Stage 1–2 on personal clips quickly → Stage 3 volume → baseline → first CNN → mid-project writeup. Do not spend the whole next stretch only on tooling.
 
----
+### Does “personal clips first” still make sense?
 
-## Does “personal clips first” align with next week?
+**Yes for tooling. Not enough alone for a mid-project check-in.**
 
-**Yes for tooling. Not enough alone for the progress report.**
-
-| Progress-report ask | Personal-clips-first tools | Still needed by Nov 20 |
+| Mid-project ask | Personal-clips-first tools | Still needed soon after |
 |---|---|---|
 | Data processing done + stats + examples | Build extract / clean / split / quality tools on your clips | Scale to **most** of the target (~2–3k frames/game) once tools work |
 | Plan for never-before-seen test data | Hold out personal sessions as a personal-clip test set | Also plan unseen-streamer public test videos |
 | Baseline + quantitative/qualitative results | Same cleaned frames feed the baseline | Implement colour-histogram + logistic regression and run it |
 | Primary CNN + results | Same dataset | Train at least a first CNN and show curves / sample preds |
-
-**Practical order for the next ~8 days:** finish Stage 1–2 on personal clips quickly → Stage 3 volume → Stage 4 baseline → Stage 5 first CNN → package into progress report. Do not spend the whole week only on tooling.
 
 ---
 
@@ -76,7 +78,7 @@ Quality re-encoding is shared by **augmentation** and **quality-tier eval** (CRF
 
 ## Stages
 
-### Stage 0 — Repo & environment ✅ **complete**
+### Stage 0 — Repo & environment ✅ **complete** (~done)
 Scaffold so tools and tests can land without rework.
 
 - [x] Python env + dependency list (`requirements.txt` / `pyproject.toml`, editable install)
@@ -98,14 +100,14 @@ Each tool page has a **Testing** section. Default rule:
 | Kind | What | Where |
 |---|---|---|
 | **Unit** | Pure logic with no real video (schemas, hash distance, split assignment, histogram dims, vote aggregation) | `tests/unit/` — fast, CI-friendly, synthetic fixtures |
-| **System / integration** | Real ffmpeg or a tiny checked-in fixture clip end-to-end | `tests/system/` — may skip if ffmpeg/fixture missing |
+| **System / integration** | Real ffmpeg or a tiny synthetic clip end-to-end | `tests/system/` — may skip if ffmpeg missing |
 | **Manual spot-check** | Visual “does this look right?” (blur reject, HUD not flipped) | Documented on the tool page; not a substitute for automated tests |
 
-**Fixture policy:** do not commit large personal clips. Use a tiny synthetic video (e.g. generated by ffmpeg in the test, or a ≤2s checked-in fixture under `tests/fixtures/`). Personal-clip smoke runs stay local and undocumented paths.
+**Fixture policy:** do not commit large personal clips. Use a tiny synthetic video (e.g. generated by ffmpeg in the test, or a ≤2s checked-in fixture under `tests/fixtures/`). Personal-clip smoke runs stay local.
 
 ---
 
-### Stage 1 — Personal-clip data tools *(in progress)*
+### Stage 1 — Personal-clip data tools *(in progress, ~2 days remaining)*
 Prove every data step on clips you already have before caring about volume.
 
 | Tool | Status | Extent | Detail |
@@ -119,7 +121,7 @@ Prove every data step on clips you already have before caring about volume.
 
 ---
 
-### Stage 2 — Dataset assembly (still personal clips)
+### Stage 2 — Dataset assembly *(~2 days)*
 Turn cleaned frames into train/val/test without leakage.
 
 | Tool | One-liner | Why it matters | Detail |
@@ -131,8 +133,8 @@ Turn cleaned frames into train/val/test without leakage.
 
 ---
 
-### Stage 3 — Scale volume *(after tools work)*
-Same tools, more sources. Progress report wants **most** of the data by Nov 20.
+### Stage 3 — Scale volume *(~2 days, after tools work)*
+Same tools, more sources. Mid-project check-in wants **most** of the data in place.
 
 | Tool | One-liner | Why it matters | Detail |
 |---|---|---|---|
@@ -149,48 +151,46 @@ Constraints from the proposal (keep when collecting):
 
 ---
 
-### Stage 4 — Baseline model
+### Stage 4 — Baseline model *(~1–2 days)*
 Non-deep sanity check before (and beside) the CNN.
 
 | Tool | One-liner | Why it matters | Detail |
 |---|---|---|---|
-| Colour-histogram baseline | RGB histogram → multinomial logistic regression | Progress-report required; shows palette-only performance vs spatial CNN | [tools/baseline.md](tools/baseline.md) |
+| Colour-histogram baseline | RGB histogram → multinomial logistic regression | Required mid-project comparison; shows palette-only performance vs spatial CNN | [tools/baseline.md](tools/baseline.md) |
 
 **Exit:** quantitative metrics + a few qualitative examples (e.g. Minecraft easy, OW2 vs Marvel Rivals hard).
 
 ---
 
-### Stage 5 — Primary CNN
+### Stage 5 — Primary CNN *(~2 days for first results)*
 From-scratch CNN on 256×144 RGB frames (proposal architecture as starting point).
 
 | Tool | One-liner | Why it matters | Detail |
 |---|---|---|---|
-| CNN train / eval loop | Train, validate, checkpoint, basic metrics | Core graded model | [tools/cnn-trainer.md](tools/cnn-trainer.md) |
+| CNN train / eval loop | Train, validate, checkpoint, basic metrics | Core model | [tools/cnn-trainer.md](tools/cnn-trainer.md) |
 
-**Exit for progress report:** architecture diagram, param count rough idea, ≥1 quantitative + ≥1 qualitative result, short note on challenges.
+**Exit for mid-project check-in:** architecture diagram, param count rough idea, ≥1 quantitative + ≥1 qualitative result, short note on challenges.
 
-**Later (final report):** unknown-class confidence threshold; flatten vs GAP experiment; quality-tier eval; unseen-streamer + personal-clip breakdowns.
+**Later (final hardening):** unknown-class confidence threshold; flatten vs GAP experiment; quality-tier eval; unseen-streamer + personal-clip breakdowns.
 
 ---
 
-### Stage 6 — Progress report package *(due Fri Nov 20)*
-Write to the rubric, not a second research paper.
+### Stage 6 — Mid-project writeup *(~1–2 days)*
+Package what exists; keep text short and figure-heavy.
 
 - Brief project description (input = frame, output = game / unknown)
 - Data processing section: sources, cleaning steps, class counts, example frames, plan for new test data
 - Baseline results
 - Primary model results
-- Feasibility argument for Dec 8
-
-LaTeX, ≤3 pages main text. Template lives under [`../proposal/source/`](../proposal/source/).
+- Feasibility argument for finishing the remaining stages
 
 ---
 
-### Stage 7 — Final report hardening *(Nov 20 → Dec 8)*
+### Stage 7 — Hardening + final writeup *(~2 weeks)*
 - Finish remaining data / channel diversity if still short
 - Tune CNN; run full evaluation suite (per-game F1, confusion, quality tiers)
 - Optional: unknown threshold; majority-vote clip tagging as a **demo**, not a model change — [tools/clip-tagger.md](tools/clip-tagger.md)
-- Final report (10%)
+- Final writeup
 
 ---
 
@@ -211,18 +211,18 @@ LaTeX, ≤3 pages main text. Template lives under [`../proposal/source/`](../pro
 
 ---
 
-## Suggested near-term order (now → Nov 20)
+## Suggested near-term order
 
 1. ~~Stage 0 setup~~ ✅  
 2. ~~Frame extractor (single-video + tests)~~ ✅  
 3. ~~Frame cleaner~~ ✅ — D11 non-game rule still open  
-4. Clip catalog (batch) **or** quality encoder  
+4. Clip catalog (batch) **or** quality encoder *(~2 days)*  
 5. Optional thin CLI orchestrator (`extract → clean`) once batching hurts  
-6. Splitter + class-count plots  
-7. More personal clips / public sources (volume)  
-8. Baseline end-to-end  
-9. First CNN train run  
-10. Progress report figures + writeup  
+6. Splitter + class-count plots *(~2 days)*  
+7. More personal clips / public sources (volume) *(~2 days)*  
+8. Baseline end-to-end *(~1–2 days)*  
+9. First CNN train run *(~2 days)*  
+10. Mid-project figures + writeup *(~1–2 days)*  
 
 ---
 
