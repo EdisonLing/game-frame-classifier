@@ -4,7 +4,7 @@ Living log of choices for Frame to Game. Fill in **Decision** / **Rationale** / 
 
 **Statuses:** `open` · `leaning` · `decided` · `deferred` · `rejected`
 
-**Sources of prompts:** proposal · [TA feedback](proposal/ta-feedback.md) · roadmap work · experiments
+**Sources of prompts:** proposal notes · reviewer feedback · roadmap work · experiments
 
 ---
 

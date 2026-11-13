@@ -6,7 +6,7 @@ CNN that maps a single gameplay frame → one of six games (Valorant, League of 
 
 **Working assumption:** start with personal clips you already have to build and verify the data tools; only after that pipeline is solid do we chase volume from public/streamer sources.
 
-**Related docs:** [docs index](../INDEX.md) · [design decisions](../design-decisions.md) · [TA proposal feedback](../proposal/ta-feedback.md)
+**Related docs:** [docs index](../INDEX.md) · [design decisions](../design-decisions.md)
 
 ---
 
@@ -14,7 +14,7 @@ CNN that maps a single gameplay frame → one of six games (Valorant, League of 
 
 | Area | Status | Extent |
 |---|---|---|
-| Planning docs (roadmap, tool pages, design decisions, TA feedback index, docs layout) | **done** | Living docs; open decisions still blank until we decide them |
+| Planning docs (roadmap, tool pages, design decisions, docs layout) | **done** | Living docs; open decisions still blank until we decide them |
 | Stage 0 — repo / env / pytest | **done** | See Stage 0 checklist below |
 | Stage 1 — frame extractor | **implemented** | Single-video CLI/API + unit/system/personal tests; **not** batch-over-catalog yet |
 | Stage 1 — frame cleaner | **implemented** | Black / blur / aHash dedupe + reject log; D11 non-game filter **not** included |
@@ -29,7 +29,7 @@ CNN that maps a single gameplay frame → one of six games (Valorant, League of 
 
 ---
 
-## Course deadlines (from syllabus)
+## Project deadlines
 
 | Deliverable | Weight | Deadline |
 |---|---|---|
@@ -37,7 +37,7 @@ CNN that maps a single gameplay frame → one of six games (Valorant, League of 
 | **Progress Report** | **5%** | **Fri Nov 20** |
 | Final Report | 10% | Tue Dec 8 |
 
-Progress report expects: **most/all data**, a **baseline with results**, a **primary CNN with results**, plus a short feasibility argument. See [`../course/project_progress_report_rubric.pdf`](../course/project_progress_report_rubric.pdf).
+Progress report expects: **most/all data**, a **baseline with results**, a **primary CNN with results**, plus a short feasibility argument.
 
 ---
 
@@ -232,11 +232,9 @@ See also [`../INDEX.md`](../INDEX.md).
 
 ```text
 docs/
-  INDEX.md              doc hub
-  design-decisions.md   open/decided choices (TA suggestions land here)
-  course/               syllabus + rubrics
-  proposal/             PDF/ZIP/LaTeX + ta-feedback.md
+  INDEX.md
+  design-decisions.md
   roadmap/
-    ROADMAP.md          ← this file
-    tools/              one page per tool
+    ROADMAP.md
+    tools/
 ```
