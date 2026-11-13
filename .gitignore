@@ -218,3 +218,17 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Project data (personal clips / extracted frames — keep local)
+data/raw/
+data/frames/
+data/manifests/
+*.mp4
+*.mkv
+*.mov
+*.avi
+!tests/fixtures/**
+
+# Course handouts / submitted proposal — local reference only for now
+docs/course/
+docs/proposal/
