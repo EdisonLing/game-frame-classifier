@@ -2,12 +2,14 @@
 
 Official layout: **[docs/data-layout.md](../docs/data-layout.md)**.
 
-**Collect now (drag-and-drop):**
+## Collecting clips (drag and drop)
 
 ```text
-data/raw/<Game>/<source>/your_original_filename.mp4
+data/raw/<source>/<Game>/*.mp4
 ```
 
-Games: `Valorant`, `League_of_Legends`, `CS2`, `Minecraft`, `Overwatch_2`, `Marvel_Rivals`
+1. Create a folder for yourself or a friend under `raw/` (e.g. `edison`, `friend_alex`).
+2. Inside it, use the game folders: `Valorant`, `League_of_Legends`, `CS2`, `Minecraft`, `Overwatch_2`, `Marvel_Rivals`.
+3. Drop clips in — **no renaming**.
 
-A later script can copy into a stricter canonical tree from those paths. Do not rename clips while collecting.
+A later script can copy/normalize paths for tooling; collection stays source-first.

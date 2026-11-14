@@ -19,6 +19,6 @@ Tools are chained by **manifests** (extract → clean → quality). A pipeline m
 
 ## Docs
 - [Docs index](docs/INDEX.md)
-- [Data layout](docs/data-layout.md) — where to put clips (`data/raw/<Game>/...`)
+- [Data layout](docs/data-layout.md) — where to put clips (`data/raw/<source>/<Game>/...`)
 - [Project roadmap](docs/roadmap/ROADMAP.md) — stages, tools, progress plan
 - [Design decisions](docs/design-decisions.md) — incremental adopt/reject log
