@@ -172,9 +172,9 @@ Related open fork from proposal: **flatten vs global average pooling** — decid
 |---|---|
 | **Status** | decided |
 | **Options** | Flat dumps · game-first · source-first · person__session |
-| **Decision** | **Collect now:** `data/raw/<source>/<Game>/` with original filenames (drag-and-drop, no rename). **Later:** normalize script copies into a tooling layout from filepath |
-| **Rationale** | Folder-per-source is easiest for friends/personal dumps; game still in path for labels; source ≈ channel for caps |
-| **Date** | 2026-11-14 |
+| **Decision** | **Collect now:** `data/raw/<Game>/<source>/` with original filenames (drag-and-drop, no rename). **Later:** normalize script copies into a tooling layout from filepath |
+| **Rationale** | Most concerns are per-game; friends often only have one title; easier to fill League/OW2/Rivals first |
+| **Date** | 2026-11-14 (revised: game-first) |
 | **Links** | [data-layout.md](data-layout.md) |
 
 ### D20 — Manifest format
@@ -224,8 +224,8 @@ Related open fork from proposal: **flatten vs global average pooling** — decid
 
 | Date | ID | Change |
 |---|---|---|
-| 2026-11-14 | D19 | Source-first `raw/<source>/<Game>/`; normalize script later |
-| 2026-11-14 | D19 | Earlier game-first / person__session drafts superseded |
+| 2026-11-14 | D19 | Game-first `raw/<Game>/<source>/` (final for collection) |
+| 2026-11-14 | D19 | Source-first draft tried same day; superseded |
 | 2026-11-13 | D22 | Quality encoder: ffmpeg CRF round-trip; tiers full/medium/low = 0/28/38 |
 | 2026-11-12 | D11 | Still open; cleaner ships black/blur/dedupe only (no lobby/non-game detector) |
 | 2026-11-12 | — | Frame cleaner implemented (Pillow aHash + FIND_EDGES blur var≥400); no pipeline manager yet |

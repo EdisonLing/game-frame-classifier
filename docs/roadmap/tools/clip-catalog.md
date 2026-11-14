@@ -21,8 +21,8 @@ Without a catalog, labels live in folder names or memory and break as soon as yo
 
 ## Known design choices
 
-- Layout: `data/raw/<source>/<Game>/` — see [data-layout.md](../../data-layout.md)
-- **Label UX (locked for v1):** source = top folder; game = next folder; filenames kept as-is
+- Layout: `data/raw/<Game>/<source>/` — see [data-layout.md](../../data-layout.md)
+- **Label UX (locked for v1):** game = top folder; source = next folder; filenames kept as-is
 - Store enough ids to support **video/source-level splits** later (not frame-level)
 - Personal clips: treat `<source>` (and later session, after normalize) as the split unit
 

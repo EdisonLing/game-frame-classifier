@@ -19,7 +19,7 @@ Personal clips are perfect for **building** the pipeline, but the progress repor
 | **In** | Source list (URLs / dataset ids) + permission notes |
 | **Out** | Files under `data/raw/<Game>/...` per [data-layout.md](../../data-layout.md); later catalog rows |
 
-**Filing:** follow [docs/data-layout.md](../../data-layout.md) — `data/raw/<source>/<Game>/` (drag-and-drop; no rename).
+**Filing:** follow [docs/data-layout.md](../../data-layout.md) — `data/raw/<Game>/<source>/` (drag-and-drop; no rename).
 
 ## Known design choices (from proposal)
 

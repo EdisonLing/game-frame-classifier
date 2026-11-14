@@ -15,19 +15,17 @@ data/
 
 ## Raw clips — collection layout (`data/raw/`)
 
-**Source first, then game.** Drag-and-drop friendly: make a folder for each person/channel, then drop clips into the right game subfolder. **Do not rename files.**
+**Game first, then source.** Fill one game at a time; friends who only play one title drop into that game’s folder. **Do not rename files.**
 
 ```text
 data/raw/
-  <source>/
-    <Game>/
+  <Game>/
+    <source>/
       anything.mp4
       another_clip.mkv
 ```
 
-### Exact game folder names
-
-Inside each source, use only these six names:
+### Exact game folder names (top level under `raw/`)
 
 - `Valorant`
 - `League_of_Legends`
@@ -40,20 +38,22 @@ Inside each source, use only these six names:
 
 ```text
 data/raw/
-  edison/
-    League_of_Legends/
+  League_of_Legends/
+    edison/
       ranked_01.mp4
-    Valorant/
-      VALORANT_replay_....mp4
-    Overwatch_2/
-      qp_01.mp4
-    Marvel_Rivals/
-      qp_02.mp4
-  friend_alex/
-    League_of_Legends/
+    friend_alex/
       customs_01.mp4
-    Marvel_Rivals/
+  Overwatch_2/
+    edison/
+      qp_01.mp4
+  Marvel_Rivals/
+    edison/
+      qp_02.mp4
+    friend_alex/
       ranked_03.mp4
+  Valorant/
+    edison/
+      VALORANT_replay_....mp4
 ```
 
 `<source>` ≈ channel for the ~1/15 cap (you, a friend, a streamer name, etc.).
@@ -62,16 +62,16 @@ data/raw/
 
 | Rule | Detail |
 |---|---|
-| Path | `data/raw/<source>/<Game>/<file>` |
+| Path | `data/raw/<Game>/<source>/<file>` |
 | Rename files? | **No** — keep original names |
 | Labels | Game = `<Game>` folder; source/channel = `<source>` folder |
 | Files | Prefer `.mp4`; other common containers OK |
 | Priority | Fill **League_of_Legends**, **Overwatch_2**, **Marvel_Rivals** first |
-| Holdout | Later, some sources/sessions are frozen as personal test — don’t use them for tuning |
+| Holdout | Later, some sources are frozen as personal test — don’t use them for tuning |
 
 ### Later: normalize script (not built yet)
 
-A future script can walk `data/raw/**`, read game + source from the **filepath**, and **copy** (not destroy) videos into whatever tooling layout we want (e.g. flat per-run extract dirs, or `person__session` style). Collection stays messy-friendly; normalization is a separate step.
+A future script can walk `data/raw/**`, read game + source from the **filepath**, and **copy** videos into whatever tooling layout we want. Collection stays drag-and-drop; normalization is a separate step.
 
 Until that exists, extract manually with `--game` matching the game folder name.
 
@@ -89,12 +89,12 @@ data/frames/
     low/
 ```
 
-Batch runs can mirror source/game:
+Batch runs can mirror game/source:
 
 ```text
 data/frames/
-  edison/
-    League_of_Legends/
+  League_of_Legends/
+    edison/
       ranked_01/
         ...
 ```
@@ -105,7 +105,7 @@ Optional shared tables (clip catalog, train/val/test lists):
 
 ```text
 data/manifests/
-  clips.csv                 # future catalog (paths encode source + game)
+  clips.csv                 # future catalog (paths encode game + source)
   splits/
     train.csv
     val.csv
