@@ -6,7 +6,7 @@ CNN that maps a single gameplay frame → one of six games (Valorant, League of 
 
 **Working assumption:** start with personal clips you already have to build and verify the data tools; only after that pipeline is solid do we chase volume from public/streamer sources.
 
-**Related docs:** [docs index](../INDEX.md) · [design decisions](../design-decisions.md)
+**Related docs:** [docs index](../INDEX.md) · [data layout](../data-layout.md) · [design decisions](../design-decisions.md)
 
 ---
 

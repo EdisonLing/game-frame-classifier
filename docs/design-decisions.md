@@ -166,6 +166,17 @@ Related open fork from proposal: **flatten vs global average pooling** — decid
 
 ## Implementation forks (fill as we build tools)
 
+### D19 — Raw clip folder layout
+
+| | |
+|---|---|
+| **Status** | decided |
+| **Options** | Flat dumps · game folders · game + person/session |
+| **Decision** | `data/raw/<Game>/` required; `person__session/` subfolders recommended; flat game folders OK while collecting |
+| **Rationale** | Enough for `--game` labelling now; sessions support caps + video-level splits |
+| **Date** | 2026-11-14 |
+| **Links** | [data-layout.md](data-layout.md) |
+
 ### D20 — Manifest format
 
 | | |
@@ -213,6 +224,7 @@ Related open fork from proposal: **flatten vs global average pooling** — decid
 
 | Date | ID | Change |
 |---|---|---|
+| 2026-11-14 | D19 | Official data layout: game folders + optional person__session |
 | 2026-11-13 | D22 | Quality encoder: ffmpeg CRF round-trip; tiers full/medium/low = 0/28/38 |
 | 2026-11-12 | D11 | Still open; cleaner ships black/blur/dedupe only (no lobby/non-game detector) |
 | 2026-11-12 | — | Frame cleaner implemented (Pillow aHash + FIND_EDGES blur var≥400); no pipeline manager yet |

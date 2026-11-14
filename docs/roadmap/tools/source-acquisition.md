@@ -17,7 +17,9 @@ Personal clips are perfect for **building** the pipeline, but the progress repor
 | | |
 |---|---|
 | **In** | Source list (URLs / dataset ids) + permission notes |
-| **Out** | New catalog rows + downloaded files under `data/raw/` |
+| **Out** | Files under `data/raw/<Game>/...` per [data-layout.md](../../data-layout.md); later catalog rows |
+
+**Filing:** follow the official layout in [docs/data-layout.md](../../data-layout.md) (game folders + `person__session` subfolders).
 
 ## Known design choices (from proposal)
 

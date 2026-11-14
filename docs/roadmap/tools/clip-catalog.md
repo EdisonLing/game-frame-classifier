@@ -16,12 +16,13 @@ Without a catalog, labels live in folder names or memory and break as soon as yo
 
 | | |
 |---|---|
-| **In** | Folder(s) of personal clips; a simple way to assign game labels (folder convention or CSV) |
-| **Out** | Manifest (CSV/JSON/Parquet — TBD) with one row per clip |
+| **In** | `data/raw/` tree per [data-layout.md](../../data-layout.md) |
+| **Out** | Manifest (CSV/JSON — TBD) with one row per clip → usually `data/manifests/clips.csv` |
 
 ## Known design choices
 
-- Six game labels matching the proposal: Valorant, LoL, CS2, Minecraft, Overwatch 2, Marvel Rivals
+- Six game folders / labels: see [data-layout.md](../../data-layout.md)
+- **Label UX (locked for v1):** folder-per-game; session id from `person__session` subfolder when present
 - Store enough ids to support **video/session-level splits** later (not frame-level)
 - Personal clips: treat a recording session as the split unit
 
@@ -29,7 +30,6 @@ Without a catalog, labels live in folder names or memory and break as soon as yo
 
 - **Stack:** *(likely Python + pathlib; manifest format TBD)*
 - **Architecture:** —
-- **Label UX:** folder-per-game vs sidecar CSV vs interactive CLI
 - **Schema fields beyond path/game/session:** exact column list TBD
 
 ## Implementation notes
