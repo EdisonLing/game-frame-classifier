@@ -42,8 +42,9 @@ Inside each source, use only these six names:
 data/raw/
   edison/
     League_of_Legends/
-      VALORANT_replay_....mp4          # wait — wrong game folder; put Valorant clips under Valorant/
       ranked_01.mp4
+    Valorant/
+      VALORANT_replay_....mp4
     Overwatch_2/
       qp_01.mp4
     Marvel_Rivals/
