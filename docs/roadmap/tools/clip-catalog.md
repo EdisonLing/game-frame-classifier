@@ -22,9 +22,9 @@ Without a catalog, labels live in folder names or memory and break as soon as yo
 ## Known design choices
 
 - Six game folders / labels: see [data-layout.md](../../data-layout.md)
-- **Label UX (locked for v1):** folder-per-game; session id from `person__session` subfolder when present
-- Store enough ids to support **video/session-level splits** later (not frame-level)
-- Personal clips: treat a recording session as the split unit
+- **Label UX (locked for v1):** folder-per-game; **source** = immediate subfolder; filenames kept as-is
+- Store enough ids to support **video/source-level splits** later (not frame-level)
+- Personal clips: treat a source (and later session, after normalize) as the split unit
 
 ## Undecided / blank
 

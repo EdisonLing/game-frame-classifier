@@ -2,10 +2,12 @@
 
 Official layout: **[docs/data-layout.md](../docs/data-layout.md)**.
 
-- `raw/` — source clips (gitignored), one folder per game  
-- `frames/` — extract / clean / quality outputs (gitignored)  
-- `manifests/` — shared catalogs & splits (gitignored)
+**Collect now (drag-and-drop):**
 
-Create game folders under `raw/` as you collect:
+```text
+data/raw/<Game>/<source>/your_original_filename.mp4
+```
 
-`Valorant`, `League_of_Legends`, `CS2`, `Minecraft`, `Overwatch_2`, `Marvel_Rivals`
+Games: `Valorant`, `League_of_Legends`, `CS2`, `Minecraft`, `Overwatch_2`, `Marvel_Rivals`
+
+A later script can copy into a stricter canonical tree from those paths. Do not rename clips while collecting.

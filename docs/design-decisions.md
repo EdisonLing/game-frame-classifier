@@ -170,10 +170,10 @@ Related open fork from proposal: **flatten vs global average pooling** — decid
 
 | | |
 |---|---|
-| **Status** | decided |
-| **Options** | Flat dumps · game folders · game + person/session |
-| **Decision** | `data/raw/<Game>/` required; `person__session/` subfolders recommended; flat game folders OK while collecting |
-| **Rationale** | Enough for `--game` labelling now; sessions support caps + video-level splits |
+| **Status** | decided (updated) |
+| **Options** | Flat dumps · game folders · game + person__session · game + source (original filenames) |
+| **Decision** | **Collect now:** `data/raw/<Game>/<source>/` with original filenames (drag-and-drop). **Later:** normalize script copies into a stricter canonical tree from filepath |
+| **Rationale** | Faster personal/friends collection; caps/splits still use `<source>` as the channel unit |
 | **Date** | 2026-11-14 |
 | **Links** | [data-layout.md](data-layout.md) |
 
@@ -224,7 +224,8 @@ Related open fork from proposal: **flatten vs global average pooling** — decid
 
 | Date | ID | Change |
 |---|---|---|
-| 2026-11-14 | D19 | Official data layout: game folders + optional person__session |
+| 2026-11-14 | D19 | Collect as game/source/original names; canonical copy script later |
+| 2026-11-14 | D19 | Official data layout: game folders + optional person__session (superseded same day) |
 | 2026-11-13 | D22 | Quality encoder: ffmpeg CRF round-trip; tiers full/medium/low = 0/28/38 |
 | 2026-11-12 | D11 | Still open; cleaner ships black/blur/dedupe only (no lobby/non-game detector) |
 | 2026-11-12 | — | Frame cleaner implemented (Pillow aHash + FIND_EDGES blur var≥400); no pipeline manager yet |
