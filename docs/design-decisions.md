@@ -44,7 +44,7 @@ Called out positively in TA feedback. Treat as decided unless we explicitly reop
 | **Decision** | |
 | **Rationale** | |
 | **Date** | |
-| **Links** | [`proposal/source/arch_diagram.pdf`](proposal/source/arch_diagram.pdf) |
+| **Links** | Architecture figure lives in local proposal materials (not in git) |
 
 **Suggested fix (TA, not adopted):** enlarge labels under Deduplicate / Auto Filter; simplify data-pipeline half; CNN left→right.
 
@@ -190,11 +190,11 @@ Related open fork from proposal: **flatten vs global average pooling** — decid
 
 | | |
 |---|---|
-| **Status** | open |
+| **Status** | decided |
 | **Options** | ffmpeg video CRF roundtrip · JPEG quality proxy · both |
-| **Decision** | |
-| **Rationale** | |
-| **Date** | |
+| **Decision** | ffmpeg H.264 CRF round-trip for stills; CRF 0 = byte-copy |
+| **Rationale** | Matches proposal CRF numbers; JPEG-only qscale would diverge from eval language |
+| **Date** | 2026-11-13 |
 | **Links** | [tools/quality-encoder.md](roadmap/tools/quality-encoder.md) |
 
 ### D23 — Training stack / hardware
@@ -213,6 +213,7 @@ Related open fork from proposal: **flatten vs global average pooling** — decid
 
 | Date | ID | Change |
 |---|---|---|
+| 2026-11-13 | D22 | Quality encoder: ffmpeg CRF round-trip; tiers full/medium/low = 0/28/38 |
 | 2026-11-12 | D11 | Still open; cleaner ships black/blur/dedupe only (no lobby/non-game detector) |
 | 2026-11-12 | — | Frame cleaner implemented (Pillow aHash + FIND_EDGES blur var≥400); no pipeline manager yet |
 | 2026-11-12 | D21 | JPEG locked for frame extractor v1 |

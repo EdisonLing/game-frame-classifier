@@ -16,6 +16,7 @@ dev = ["pytest>=8.0"]
 [project.scripts]
 gfc-extract-frames = "game_frame_classifier.frame_extractor:main"
 gfc-clean-frames = "game_frame_classifier.frame_cleaner:main"
+gfc-encode-quality = "game_frame_classifier.quality_encoder:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

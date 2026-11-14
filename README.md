@@ -7,6 +7,7 @@ CNN that identifies which game a gameplay frame is from, intended use cases incl
 pip install -e ".[dev]"
 gfc-extract-frames path\to\clip.mp4 -o data/frames/my_clip --game Valorant
 gfc-clean-frames data/frames/my_clip/frames_manifest.csv -o data/frames/my_clip_cleaned
+gfc-encode-quality data/frames/my_clip_cleaned/frames_manifest.csv -o data/frames/my_clip_quality
 # audit pipeline:
 gfc-extract-frames path\to\clip.mp4 -o data/frames/my_clip --game Valorant --debug
 gfc-clean-frames data/frames/my_clip/frames_manifest.csv -o data/frames/my_clip_cleaned --debug
@@ -14,7 +15,7 @@ pytest -m "not personal"   # CI-safe
 pytest -m personal         # local clip / GFC_TEST_VIDEO smokes
 ```
 
-Tools are chained by **manifests** (extract → clean). A pipeline manager is optional later — not required yet.
+Tools are chained by **manifests** (extract → clean → quality). A pipeline manager is optional later — not required yet.
 
 ## Docs
 - [Docs index](docs/INDEX.md)

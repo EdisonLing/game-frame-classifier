@@ -18,7 +18,8 @@ CNN that maps a single gameplay frame → one of six games (Valorant, League of 
 | Stage 0 — repo / env / pytest | **done** | See Stage 0 checklist below |
 | Stage 1 — frame extractor | **implemented** | Single-video CLI/API + unit/system/personal tests; **not** batch-over-catalog yet |
 | Stage 1 — frame cleaner | **implemented** | Black / blur / aHash dedupe + reject log; D11 non-game filter **not** included |
-| Stage 1 — catalog / quality encoder | **not started** | Next up: catalog or quality encoder |
+| Stage 1 — quality encoder | **implemented** | CRF tiers full/medium/low (0/28/38) via ffmpeg round-trip; aug range 28–40 exported |
+| Stage 1 — clip catalog | **not started** | **next** — batch labelling |
 | Stages 2–7 | **not started** | No heavy pipeline framework yet — see note below |
 
 **Verified:** extractor + cleaner tests green; sample under `data/frames/valorant_smoke/` and cleaned output under `data/frames/valorant_smoke_cleaned/`.
@@ -112,12 +113,12 @@ Prove every data step on clips you already have before caring about volume.
 
 | Tool | Status | Extent | Detail |
 |---|---|---|---|
-| Clip catalog | planned | — | [tools/clip-catalog.md](tools/clip-catalog.md) |
+| Clip catalog | planned | **next** | [tools/clip-catalog.md](tools/clip-catalog.md) |
 | Frame extractor | **implemented** | Single video → frames @ 5s, 256×144 JPEG, CSV/JSON manifest, CLI `gfc-extract-frames` / module API; unit + synthetic system + optional personal smoke (20s stream-copy trim). **Gaps:** no catalog-driven batch; full-clip personal runs are manual CLI (not default in pytest); game label still passed by hand | [tools/frame-extractor.md](tools/frame-extractor.md) |
 | Frame cleaner | **implemented** | Manifest in → kept/reject manifests; black + blur + aHash dedupe; reasons logged. **Gaps:** no D11 non-game/lobby detector; thresholds are v1 defaults (tunable via CLI) | [tools/frame-cleaner.md](tools/frame-cleaner.md) |
-| Quality encoder | planned | **next candidates:** catalog or this | [tools/quality-encoder.md](tools/quality-encoder.md) |
+| Quality encoder | **implemented** | Manifest → `full`/`medium`/`low` folders (CRF 0/28/38); ffmpeg still round-trip; summary JSON | [tools/quality-encoder.md](tools/quality-encoder.md) |
 
-**Stage 1 exit (not met yet):** folder of labelled personal clips → cleaned labelled frame set + low-quality variants. Extract + clean work on smoke-scale data; no batch catalog / quality tiers yet.
+**Stage 1 exit (almost):** extract + clean + quality tiers work. Still missing **clip catalog** for batch labelled volume.
 
 ---
 
@@ -198,10 +199,10 @@ Package what exists; keep text short and figure-heavy.
 
 | # | Tool | Stage | Status | Extent |
 |---|---|---|---|---|
-| 1 | [Clip catalog](tools/clip-catalog.md) | 1 | planned | — |
+| 1 | [Clip catalog](tools/clip-catalog.md) | 1 | planned | **next** |
 | 2 | [Frame extractor](tools/frame-extractor.md) | 1 | **implemented** | Single-video extract + tests; no batch catalog yet |
 | 3 | [Frame cleaner](tools/frame-cleaner.md) | 1 | **implemented** | Black/blur/dedupe + reject log; D11 deferred |
-| 4 | [Quality encoder](tools/quality-encoder.md) | 1 | planned | — |
+| 4 | [Quality encoder](tools/quality-encoder.md) | 1 | **implemented** | CRF tiers 0/28/38 via ffmpeg round-trip |
 | 5 | [Dataset splitter](tools/dataset-splitter.md) | 2 | planned | — |
 | 6 | [Augmentation pipeline](tools/augmentation.md) | 2 | planned | — |
 | 7 | [Source acquisition](tools/source-acquisition.md) | 3 | planned | — |
@@ -216,13 +217,14 @@ Package what exists; keep text short and figure-heavy.
 1. ~~Stage 0 setup~~ ✅  
 2. ~~Frame extractor (single-video + tests)~~ ✅  
 3. ~~Frame cleaner~~ ✅ — D11 non-game rule still open  
-4. Clip catalog (batch) **or** quality encoder *(~2 days)*  
-5. Optional thin CLI orchestrator (`extract → clean`) once batching hurts  
-6. Splitter + class-count plots *(~2 days)*  
-7. More personal clips / public sources (volume) *(~2 days)*  
-8. Baseline end-to-end *(~1–2 days)*  
-9. First CNN train run *(~2 days)*  
-10. Mid-project figures + writeup *(~1–2 days)*  
+4. ~~Quality encoder~~ ✅  
+5. Clip catalog (batch) *(~1–2 days)*  
+6. Optional thin CLI orchestrator (`extract → clean → quality`) once batching hurts  
+7. Splitter + class-count plots *(~2 days)*  
+8. More personal clips / public sources (volume) *(~2 days)*  
+9. Baseline end-to-end *(~1–2 days)*  
+10. First CNN train run *(~2 days)*  
+11. Mid-project figures + writeup *(~1–2 days)*  
 
 ---
 

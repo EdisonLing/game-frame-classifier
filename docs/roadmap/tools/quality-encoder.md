@@ -1,63 +1,64 @@
 # Quality encoder
 
 **Stage:** 1 — Personal-clip data tools  
-**Status:** planned  
+**Status:** implemented  
 **Back to:** [ROADMAP.md](../ROADMAP.md)
 
 ## What it does (high level)
 
-Re-encodes frames (or short clips) at controlled lower bitrates using ffmpeg CRF settings, producing medium/low quality variants of the same content.
+Re-encodes frames at controlled quality tiers using an **ffmpeg H.264 CRF round-trip**, producing full / medium / low copies of the same content with tier metadata.
 
 ## Why we need it
 
-Real clips are messy: compression, Medal/GPU overlays, re-uploads. The proposal treats quality as a first-class axis:
-
-1. **Train augmentation** — random low-bitrate re-encode on 30–50% of training frames  
-2. **Eval** — same test frames scored at full / medium / low (CRF 0 / 28 / 38)
-
-One shared tool keeps those CRF definitions consistent.
+1. **Train augmentation** — random CRF in **28–40** on a fraction of train frames (wired later in [augmentation](augmentation.md))  
+2. **Eval** — same frames scored at **full / medium / low** (CRF **0 / 28 / 38**)
 
 ## Inputs / outputs
 
 | | |
 |---|---|
-| **In** | Clean frames (or parent clips) + target CRF / quality tier |
-| **Out** | Degraded copies + metadata noting quality tier |
+| **In** | `frames_manifest.csv` / `.json` (cleaned frames preferred) |
+| **Out** | `output_dir/<tier>/` images + manifests; `quality_summary.json` |
 
-## Known design choices (from proposal)
+## Known design choices (locked for v1)
 
-- Tooling: **ffmpeg**
-- Augmentation CRF range: **28–40** on **30–50%** of train frames (applied in [augmentation](augmentation.md), after split)
-- Eval tiers: **CRF 0 / 28 / 38** (full / medium / low)
-- Degraded copies must **never cross splits** — encode after split assignment, or tag lineage carefully
+- **Stack:** Python + ffmpeg `libx264` (same style as extractor)
+- **Method (D22):** still → 1-frame H.264 at CRF → JPEG (not a JPEG-quality-only proxy)
+- **CRF 0 (`full`):** byte-copy of the source (no re-encode)
+- Eval tiers: **full=0, medium=28, low=38**
+- Augmentation range constants: **28–40** (`AUGMENT_CRF_MIN/MAX`)
+- Per-tier folders so degraded copies do not silently mix with originals
 
-## Undecided / blank
+## CLI
 
-- **Stack:** —
-- **Operate on images vs re-encode via short video roundtrip:** TBD (ffmpeg CRF is video-oriented; image JPEG quality is an alternative for frame-only workflows)
-- **Storage layout:** parallel folders per tier vs on-the-fly during training
-- **Architecture:** —
+```bash
+gfc-encode-quality data/frames/my_clip_cleaned/frames_manifest.csv -o data/frames/my_clip_quality
+gfc-encode-quality ... -o out --tiers full medium low
+```
 
-## Implementation notes
+## Module API
 
--
+- `crf_for_tier(tier)` / `degrade_frame_ffmpeg(src, dest, crf=…)`
+- `encode_frame_record(...)` / `encode_manifest(...)`
 
 ## Acceptance checks
 
-- [ ] Produce medium + low versions of a known good frame
-- [ ] Visual difference is obvious; file sizes drop
-- [ ] Tier label stored in metadata
-- [ ] Same CRF settings reusable by augmentation + eval
+- [x] Tier → CRF map matches proposal
+- [x] Medium/low encodes exist; low typically smaller than full copy
+- [x] Manifests store `quality_tier` + `crf` + source frame id
+- [x] Optional personal smoke on `valorant_smoke` when present
 
 ## Testing
 
 | Kind | Cases |
 |---|---|
-| **Unit** | Tier → CRF mapping (0/28/38) is exact; invalid tier rejected; metadata fields include `quality_tier` / CRF |
-| **System** | Encode one synthetic frame/clip at medium + low → output files exist; low tier file smaller (or higher compression metric) than full; skip if ffmpeg missing |
-| **Manual** | Side-by-side open full vs CRF 38 — blocky but recognizable |
+| **Unit** | Tier map; unknown tier rejected; CRF bounds |
+| **System** | Synthetic frame encode; manifest multi-tier layout; bad tier fails fast |
+| **Personal** | `valorant_smoke` → 4 frames × 3 tiers when extract exists |
 
-**How to run:** `pytest tests/unit/test_quality_encoder.py tests/system/test_quality_encoder.py`
+```bash
+pytest tests/unit/test_quality_encoder.py tests/system/test_quality_encoder.py
+```
 
 ## Ties to proposal
 
