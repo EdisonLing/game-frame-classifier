@@ -181,11 +181,11 @@ Related open fork from proposal: **flatten vs global average pooling** — decid
 
 | | |
 |---|---|
-| **Status** | open |
+| **Status** | decided |
 | **Options** | CSV · JSONL · Parquet · other |
-| **Decision** | |
-| **Rationale** | |
-| **Date** | |
+| **Decision** | **CSV + JSON** side by side (`clips.csv` / `clips.json`, and the same for frame manifests) |
+| **Rationale** | Matches extract/clean/quality already shipping; CSV for sheets, JSON for code |
+| **Date** | 2026-11-14 |
 
 ### D21 — Frame image format on disk
 
@@ -224,6 +224,7 @@ Related open fork from proposal: **flatten vs global average pooling** — decid
 
 | Date | ID | Change |
 |---|---|---|
+| 2026-11-14 | D20 | Manifests: CSV + JSON side by side |
 | 2026-11-14 | D19 | Game-first `raw/<Game>/<source>/` (final for collection) |
 | 2026-11-14 | D19 | Source-first draft tried same day; superseded |
 | 2026-11-13 | D22 | Quality encoder: ffmpeg CRF round-trip; tiers full/medium/low = 0/28/38 |

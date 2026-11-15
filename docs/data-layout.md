@@ -105,7 +105,8 @@ Optional shared tables (clip catalog, train/val/test lists):
 
 ```text
 data/manifests/
-  clips.csv                 # future catalog (paths encode game + source)
+  clips.csv                 # from gfc-catalog-clips (also clips.json)
+  clips.json
   splits/
     train.csv
     val.csv

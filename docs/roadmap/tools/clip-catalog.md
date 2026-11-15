@@ -1,7 +1,7 @@
 # Clip catalog
 
 **Stage:** 1 — Personal-clip data tools  
-**Status:** planned  
+**Status:** implemented  
 **Back to:** [ROADMAP.md](../ROADMAP.md)
 
 ## What it does (high level)
@@ -17,7 +17,7 @@ Without a catalog, labels live in folder names or memory and break as soon as yo
 | | |
 |---|---|
 | **In** | `data/raw/` tree per [data-layout.md](../../data-layout.md) |
-| **Out** | Manifest (CSV/JSON — TBD) with one row per clip → usually `data/manifests/clips.csv` |
+| **Out** | `clips.csv` + `clips.json` (one row per clip) → usually under `data/manifests/` |
 
 ## Known design choices
 
@@ -25,32 +25,50 @@ Without a catalog, labels live in folder names or memory and break as soon as yo
 - **Label UX (locked for v1):** game = top folder; source = next folder; filenames kept as-is
 - Store enough ids to support **video/source-level splits** later (not frame-level)
 - Personal clips: treat `<source>` (and later session, after normalize) as the split unit
+- **Stack:** Python + pathlib; ffprobe for duration/width/height
+- **Manifests:** CSV + JSON (same pattern as frame manifests; D20)
+- **Paths:** absolute (supports external drives)
+- **Empty raw:** empty catalog (not an error)
+- **clip_id:** `Game/source/filename` (stable across re-runs)
+- **Extensions:** `.mp4`, `.mkv`, `.webm`, `.mov`, `.avi`
+- Unknown game folder → error; loose files not under `<Game>/<source>/` → ignored
 
-## Undecided / blank
+### Schema (v1)
 
-- **Stack:** *(likely Python + pathlib; manifest format TBD)*
-- **Architecture:** —
-- **Schema fields beyond path/game/session:** exact column list TBD
+| Column | Meaning |
+|---|---|
+| `clip_id` | `Game/source/filename` |
+| `path` | Absolute path to the video |
+| `game` | Game folder name |
+| `source` | Source/channel folder name |
+| `filename` | Original filename |
+| `duration_s` | Duration from ffprobe |
+| `width` | Video width |
+| `height` | Video height |
 
-## Implementation notes
+## Usage
 
--
+```bash
+gfc-catalog-clips                  # defaults: data/raw → data/manifests
+gfc-catalog-clips data/raw -o data/manifests
+python -m game_frame_classifier.clip_catalog data/raw -o data/manifests
+```
 
 ## Acceptance checks
 
-- [ ] Point at a personal-clip folder → get a complete manifest
-- [ ] Every row has a valid game label and a resolvable path
-- [ ] Session/video id is stable enough for the splitter
+- [x] Point at a personal-clip folder → get a complete manifest
+- [x] Every row has a valid game label and a resolvable path
+- [x] Session/video id is stable enough for the splitter (`clip_id`)
 
 ## Testing
 
 | Kind | Cases |
 |---|---|
-| **Unit** | Valid game labels accepted; unknown label rejected; missing file → clear error; session id stable for same path; empty folder → empty manifest (or explicit error — pick one and lock it) |
-| **System** | Temp dir with fake files named by folder-per-game (or CSV) → manifest row count/fields match; re-run is idempotent (same ids) |
+| **Unit** | Valid game labels accepted; unknown label rejected; `clip_id` stable; empty folder → empty manifest; loose/non-video ignored |
+| **System** | Temp dir with ffmpeg synthetic clip under `Valorant/edison/` → row count/fields match; re-run same ids; unreadable file → clear error |
 | **Manual** | Once: point at a real personal-clip folder; spot-check a few rows |
 
-**How to run (once implemented):** `pytest tests/unit/test_clip_catalog.py tests/system/test_clip_catalog.py`
+**How to run:** `pytest tests/unit/test_clip_catalog.py tests/system/test_clip_catalog.py`
 
 ## Ties to proposal
 
