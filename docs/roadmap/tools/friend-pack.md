@@ -413,20 +413,20 @@ Timestamped steps, ffmpeg commands and stderr tails for failures, with the chose
 
 ## 8. Size and time
 
-Per minute of footage at 1 slot / 5 s, `full` + `crf45`, JPEG q2. Measured 1080p/4K stills, interpolated 1440p; the tool records real numbers in every pack so this table gets replaced by measurements.
+Measured on 15 min of real gameplay; full numbers, timing and method in [handoff-sizes.md](../../handoff-sizes.md). Every pack also records its own input and output bytes.
 
-| Source | ≈ MiB / min | ≈ % of a 20–50 Mbps recording |
-|---|---:|---:|
-| Compact 256×144 | 0.3 | < 0.2 % |
-| 1080p | 5 | 1.5–3.5 % |
-| 1440p | 8 | 2–5 % |
-| 2160p | 13 | 3.5–9 % |
+| Source | Per slot (full + crf45) | MiB / footage min | % of an NVIDIA "High" 60 fps recording | Time per footage min (fast 8-core) |
+|---|---:|---:|---:|---:|
+| Compact 256×144 | 25 KiB | 0.3 | 0.25 % (vs 1080p) | same as native |
+| 1080p | 466 KiB | 5.5 | 4.7 % | 12 s |
+| 1440p | 716 KiB | 8.4 | 4.1 % | 22 s |
+| 2160p | 1,295 KiB | 15.2 | 4.2 % | 51 s |
 
 Zip ≈ unzipped (stored JPEGs).
 
 **Disk check:** before starting and before each clip, require free space ≥ 2.2 × the estimated output of what remains (staged frames and the zip coexist briefly), using `0.15 bytes/pixel/image` (`15 KB` per image in compact mode). Not enough → stop with a clear message; completed clips stay resumable.
 
-**Time:** dominated by the x264 re-encode at native resolution. Rough expectation on a 6–8 core gaming PC: 10–20 min per hour of 1080p60, 20–40 min per hour of 1440p60; HEVC/AV1/4K sources slower. The tool shows a measured ETA after the first clip, runs ffmpeg at below-normal priority, and states that the PC stays usable but fans may spin up.
+**Time:** about 75 % is the x264 re-encode at native resolution. Measured 12 / 22 / 51 min per footage hour at 1080p / 1440p / 4K (60 fps H.264) on a fast 8-core; expect about 2× on a typical 6-core, more on older laptops, 2× for 120 fps sources. The tool shows a measured ETA after the first clip, runs ffmpeg at below-normal priority, and states that the PC stays usable but fans may spin up.
 
 ---
 
