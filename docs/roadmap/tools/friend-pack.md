@@ -234,11 +234,11 @@ At least one tier must exist (`include_full` or a non-empty `crf_list`). The too
 Friends with large libraries would otherwise face many hours of processing and a huge upload for far more frames than one person's share of a game. Each run processes at most `footage_budget_min` of footage (default 180), spread across as many recording days as possible.
 
 1. **Eligible** = probed OK, not `already_packed`, not a duplicate. If their total duration ≤ budget (or budget is `0`), take all.
-2. **Recording start** per clip = container `creation_time` if present, else file modified time − duration. **Day** = local calendar date of that start.
+2. **Recording start** per clip = `recorded_start_utc` (§5.2b). **Day** = local calendar date of that start.
 3. Order days oldest first. Within a day, order clips by quick id (deterministic, effectively random).
 4. **Round-robin:** repeatedly pass over the days, offering each day's next clip. Take it if the running total + its duration ≤ budget; otherwise skip it for this run and keep going (shorter clips may still fit). Stop when no remaining clip fits.
 5. If nothing fits because every clip is longer than the budget, take the single shortest clip.
-6. Unselected clips are listed in `clips.csv` as `skipped` / `over_budget` with quick id and probe fields (no SHA-256) and are not written to `history.json`. Running the tool again on the same folder repeats the spread over what is left.
+6. Unselected clips are listed in `clips.csv` as `skipped` / `over_budget` with quick id, probe fields and all timing fields (no SHA-256) and are not written to `history.json`. Running the tool again on the same folder repeats the spread over what is left.
 
 When over budget, the scan summary says so and allows a one-off override (not saved):
 
@@ -250,6 +250,31 @@ Press Enter to continue, or type the hours to process this time (0 = all):
 ```
 
 `--budget-hours N` sets the same override from the command line. Whole clips only: a clip is never cut to fit.
+
+### 5.2b Recording time
+
+Dates let me cross-reference clips later with game patches and seasons, sessions (D01 splits), and settings eras. File times are fragile (downloads reset them; copies reset the created time), so every clip that probes OK gets all the evidence plus one best estimate. Converting local times on the friend's PC uses its own timezone and daylight-saving rules for that date, which ingest could not reconstruct later.
+
+| Field | Source |
+|---|---|
+| `file_mtime_utc`, `file_mtime_local` | File modified time (local = ISO 8601 with that date's UTC offset) |
+| `file_created_utc` | File created time (often the copy time; evidence only) |
+| `container_creation_utc` | `format.tags.creation_time`, when the recorder writes it |
+| `filename_datetime_local` | First timestamp parsed from the filename or parent folders (patterns below), local time with offset |
+| `recorded_start_utc` | Best estimate: container creation time, else filename time, else modified time − duration |
+| `recorded_start_source` | `container`, `filename` or `mtime` |
+
+Filename patterns (first match wins, digits validated as a real date between 2010 and today + 1 day):
+
+| Pattern | Typical source |
+|---|---|
+| `YYYY.MM.DD - HH.MM.SS` | NVIDIA App / ShadowPlay |
+| `YYYY-MM-DD HH-MM-SS` / `YYYY-MM-DD_HH-MM-SS` | OBS, Windows Game Bar |
+| `YYYY.MM.DD-HH.MM` | Valorant replays |
+| `YYYYMMDD_HHMMSS` / `YYYYMMDD-HHMMSS` | Steam, Medal, ShareX, phones |
+| `YYYY-MM-DD` (date only) | Folder names; time left empty |
+
+Container times flagged as obviously wrong (before 2010, or `1970`/`1904` epochs) are ignored. The pack manifest also records the PC's timezone (§6.2). Game patch or season is not looked up on the friend's PC; I derive it from `recorded_start_utc` after ingest.
 
 ### 5.3 Pre-filter (same for every tier)
 
@@ -375,7 +400,7 @@ CSV + JSON side by side (D20). All paths inside manifests are relative to the pa
   "tool": { "name": "gfc-friendpack", "version": "1.0.0", "source_commit": "abc1234" },
   "recipe": { "...": "resolved recipe.json with crf_list as a list, plus sampler: bucket_v1" },
   "ffmpeg": { "ffmpeg_version": "n8.1.x-...", "ffprobe_version": "n8.1.x-...", "build": "BtbN win64-gpl", "x264_core": "x264 - core 165 r3222 ..." },
-  "host": { "os": "Windows-10.0.26100", "cpu_count": 16, "python": "3.13.x" },
+  "host": { "os": "Windows-10.0.26100", "cpu_count": 16, "python": "3.13.x", "tz_name": "Eastern Standard Time", "utc_offset_min": -300 },
   "contributor": { "handle": "alex", "contributor_id": "3b8f...", "consent": { "data_use": true, "public_examples": false, "acknowledged_utc": "2026-11-20T03:10:02Z" } },
   "game": { "label": "Valorant", "other_name": null },
   "notes": { "colourblind_mode": "none", "graphics_preset": "high", "game_specific": { "enemy_highlight": "red" }, "free_text": "" },
@@ -396,7 +421,7 @@ CSV + JSON side by side (D20). All paths inside manifests are relative to the pa
 | `status`, `status_detail` | §5.9 |
 | `original_filename`, `original_relpath`, `aliases` | Relative to the chosen folder; `aliases` = other paths with the same hash |
 | `file_bytes` | Source size (size-savings tracking) |
-| `file_mtime_utc`, `file_created_utc`, `container_creation_utc` | Timing evidence for session grouping (D01); lost forever once files move, so captured here |
+| `file_mtime_utc`, `file_mtime_local`, `file_created_utc`, `container_creation_utc`, `filename_datetime_local`, `recorded_start_utc`, `recorded_start_source` | Recording time evidence + best estimate (§5.2b), for sessions (D01), game patch / season, settings eras; lost forever once files move, so captured here |
 | `duration_s`, `start_time_s` | Container duration and start offset |
 | `container`, `video_codec`, `profile`, `pix_fmt`, `bit_depth`, `bitrate_bps`, `encoder_tag` | Source quality and recorder evidence |
 | `width`, `height`, `sar`, `rotation` | Native geometry (aspect policy is decided later) |
@@ -427,7 +452,7 @@ Timestamped steps, ffmpeg commands and stderr tails for failures, with the chose
 
 ## 7. Keep vs lose
 
-**Kept** (sufficient to use the frames as sources of truth): §6.2–6.4 above, specifically game label, stable source and contributor ids, consent, content hash, original names, file timing, full probe, native-resolution stills for every tier, actual timestamps, slot pairing, recipe and tool/ffmpeg/x264 versions, sizes and hashes for every image.
+**Kept** (sufficient to use the frames as sources of truth): §6.2–6.4 above, specifically game label, stable source and contributor ids, consent, content hash, original names, recording time (all evidence + best estimate + timezone), full probe, native-resolution stills for every tier, actual timestamps, slot pairing, recipe and tool/ffmpeg/x264 versions, sizes and hashes for every image.
 
 **Accepted losses**
 
@@ -490,9 +515,9 @@ Zip ≈ unzipped (stored JPEGs).
 
 - **Read-only on clips.** The tool never writes next to, renames, or deletes source files. All output goes under the pack's `output/`.
 - **No network access** anywhere in the code (tested by a static check that no networking module is imported).
-- **No machine details:** no hostname, username, absolute paths or hardware serials. OS version and CPU count only.
+- **No machine details:** no hostname, username, absolute paths or hardware serials. OS version, CPU count and timezone only.
 - **Consent recorded per pack:** data use (required) and public examples (optional, default no). Without public-example consent, that friend's frames never appear in published docs or report figures.
-- **What the notice says:** frames (no audio, no video) are sampled every 5 s; filenames and video metadata are included; data stays on my machine for this project's training and evaluation; nothing is redistributed; ask and I delete it.
+- **What the notice says:** frames (no audio, no video) are sampled every 5 s; filenames, recording dates and video metadata are included; data stays on my machine for this project's training and evaluation; nothing is redistributed; ask and I delete it.
 - Packs are stored only under gitignored `data/`. Handles never appear in tracked files.
 
 ---
@@ -553,7 +578,7 @@ scripts/build_friend_pack.py
 
 ## 13. Testing and release
 
-**Unit:** recipe validation and precedence; budget selection (under budget takes all, round-robin across days, skip-and-continue when a clip doesn't fit, single-longer-than-budget case, determinism, rerun picks only unsent clips); handle normalisation; label hints; bucket math (boundaries, OFF, negative times); showinfo parsing; alignment pairing; JPEG SOF reader; manifest round-trip; zip validator (traversal, absolute paths, symlinks, ratio, oversize, nested zip, count mismatch); stdlib-only and no-network import checks.
+**Unit:** recipe validation and precedence; filename timestamp patterns (each pattern, invalid dates, future dates, folder-only dates); recorded-start fallback order and bogus container epochs; DST offsets on both sides of a change; budget selection (under budget takes all, round-robin across days, skip-and-continue when a clip doesn't fit, single-longer-than-budget case, determinism, rerun picks only unsent clips); handle normalisation; label hints; bucket math (boundaries, OFF, negative times); showinfo parsing; alignment pairing; JPEG SOF reader; manifest round-trip; zip validator (traversal, absolute paths, symlinks, ratio, oversize, nested zip, count mismatch); stdlib-only and no-network import checks.
 
 **System (synthetic clips generated in tests):** CFR 30/60; VFR with gaps and start offset; odd dimensions; 3440×1440 and 1280×960; HDR-tagged 10-bit HEVC; AV1; MKV with attached picture; clip shorter than one interval; zero-byte and truncated files; Unicode filename; duplicate file; Steam `session.mpd` folder; compact mode equals pipeline derive byte-for-byte on the same native image; resume after a killed run; full round trip pack → ingest → derive.
 
@@ -585,7 +610,7 @@ GFC Friend Pack — turn your game clips into frames for {collector_name}'s scho
 
 What it does: samples one picture every 5 seconds from each clip, plus a
 low-quality copy of the same picture, and saves basic video info (file
-names, resolution, length). No audio, no video, nothing uploaded. Your
+names, recording dates, resolution, length). No audio, no video, nothing uploaded. Your
 clips are only read, never changed. Everything stays on {collector_name}'s
 PC for this project. Ask and it gets deleted.
 
