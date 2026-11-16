@@ -41,7 +41,7 @@ The frames they send are a **source of truth** in my pipeline (the masters are g
    - name / handle (becomes the source id)
    - "OK to process your clips into frames for this project?" (must be yes)
    - "OK if a few of your frames appear in my report or README?" (default no)
-4. **Scan summary.** Clip count, total duration, resolutions, files skipped and why, estimated output size, free disk space.
+4. **Scan summary.** Clip count, total duration, resolutions, files skipped and why, estimated output size and time, free disk space. Over the footage budget (default 3 h per game), it picks clips spread across recording days and says to run again later for more (§5.2a).
 5. **Game prompt.** Numbered list of the six games plus *Other*. Pre-selected when folder/file names agree on one game; a warning (and confirmation) when names suggest a different game than the one picked.
 6. **Optional notes** (Enter skips each): colourblind mode, graphics preset, one game-specific question from the recipe (for example Minecraft shaders), free text.
 7. **Confirm and run.** Per-clip progress with percentage and a measured ETA after the first clip. Closing the window or Ctrl+C stops cleanly; running again on the same folder resumes.
@@ -77,7 +77,7 @@ Power-user flags (also used by me for testing and for my own clips):
 
 ```text
 START HERE.bat <folder> [--game Valorant] [--other-name Apex_Legends] [--compact]
-               [--yes] [--include-packed] [--no-zip] [--output <dir>]
+               [--budget-hours N] [--yes] [--include-packed] [--no-zip] [--output <dir>]
 ```
 
 ---
@@ -148,6 +148,8 @@ Two files, so I can ship an updated recipe without touching a friend's name or c
   "derive": { "aspect": "pad_16x9", "aspect_tolerance": 0.01, "scale_flags": "bicubic" },
   "video_extensions": [".mp4", ".mkv", ".mov", ".webm", ".avi", ".m4v", ".flv", ".ts"],
   "min_duration_s": 1.0,
+  "footage_budget_min": 180,
+  "budget_selection": "spread_days_v1",
   "games": ["Valorant", "League_of_Legends", "CS2", "Minecraft", "Overwatch_2", "Marvel_Rivals"],
   "questions": {
     "all": [
@@ -171,11 +173,13 @@ Two files, so I can ship an updated recipe without touching a friend's name or c
 | `frame_mode` | `native` (default) or `compact` (256×144 via §5.7) | enum |
 | `hdr_policy` | Tone-map HDR sources to SDR before every tier (§5.3) | enum |
 | `derive` | Aspect + scaler used for compact mode; identical to my pipeline's derive step (D27) | — |
+| `footage_budget_min` | Max minutes of footage processed per run (one run = one game); `0` = no limit. Extra clips wait for the next run (§5.2a) | int ≥ 0 |
+| `budget_selection` | How clips are picked when over budget | enum |
 | `questions` | Optional per-run notes; data-driven so I can change them without code | — |
 
 At least one tier must exist (`include_full` or a non-empty `crf_list`). The tool refuses to start on an invalid recipe and says which field is wrong. Every pack embeds the resolved recipe, so if a friend edits this file, ingest still knows exactly what was produced.
 
-**Defaults and why:** interval 5 s (proposal sampling), tiers `full` + `crf45` (D04: medium 38 is docs-only), native frames (D25). Halving `interval_s` to 2.5 would be a strict superset of the 5 s samples (even buckets pick the same frames), at 2× size; not the default.
+**Defaults and why:** interval 5 s (proposal sampling), tiers `full` + `crf45` (D04: medium 38 is docs-only), native frames (D25), budget 3 h per game per run (about 2,160 usable frames; one person's share of a game rarely needs more, and big libraries stay at roughly 1–2.5 h of processing on a typical PC and a ~1.5 GB zip at 1440p). Halving `interval_s` to 2.5 would be a strict superset of the 5 s samples (even buckets pick the same frames), at 2× size; not the default.
 
 ### 4.2 `config/user.json` (created on first run)
 
@@ -198,7 +202,7 @@ At least one tier must exist (`include_full` or a non-empty `crf_list`). The too
 
 ### 4.3 `config/history.json`
 
-`{ "<clip_sha256>": { "pack_id": "...", "game": "Valorant", "packed_utc": "..." } }`, appended after each successful zip. Clips already present are skipped unless `--include-packed`. If a clip was packed before under a different game, the tool warns and asks.
+`{ "<quick_id>": { "clip_sha256": "...", "pack_id": "...", "game": "Valorant", "packed_utc": "..." } }`, appended after each successful zip. Clips already present are skipped unless `--include-packed`. If a clip was packed before under a different game, the tool warns and asks. Clips left out by the footage budget are not added, so the next run picks from them.
 
 ---
 
@@ -210,7 +214,8 @@ At least one tier must exist (`include_full` or a non-empty `crf_list`). The too
 - Candidate = extension in `video_extensions` (case-insensitive). Other files are listed as skipped (`not_video`).
 - A folder containing `session.mpd` is a Steam Game Recording (fragmented `.m4s`, not a playable file). Skip it as `steam_recording` and tell the friend to export the clip to MP4 in Steam first.
 - Paths longer than 259 characters are skipped as `path_too_long` with the advice to move the folder closer to the drive root.
-- Hash every candidate (SHA-256, 1 MiB streaming). Identical files in one run are processed once; extra paths are recorded as `aliases`. Hashes in `history.json` are skipped as `already_packed`.
+- **Quick id** for every candidate: `sha256(file size ‖ first 1 MiB ‖ last 1 MiB)[:16]`. Cheap even for hundreds of GB (full hashing would read every byte). Quick ids in `history.json` are skipped as `already_packed`; equal quick ids in one run mark duplicates.
+- **Full SHA-256** (1 MiB streaming) only for clips selected for processing (§5.2a), right before extraction. Identical files in one run are processed once; extra paths are recorded as `aliases`.
 
 ### 5.2 Probe
 
@@ -222,6 +227,29 @@ At least one tier must exist (`include_full` or a non-empty `crf_list`). The too
 - **HDR:** `color_transfer ∈ {smpte2084, arib-std-b67}`.
 - **Odd dimensions:** if width or height is odd, every tier gets `crop=trunc(iw/2)*2:trunc(ih/2)*2` (x264 4:2:0 needs even sizes; applying it to all tiers keeps them pixel-aligned). Recorded as `even_cropped`.
 - The probe JSON is saved per clip after removing `format.filename` (absolute path). Tags are kept.
+- Every candidate is probed (about 50 ms each) because the budget needs durations; a progress counter shows during the scan.
+
+### 5.2a Footage budget (`spread_days_v1`)
+
+Friends with large libraries would otherwise face many hours of processing and a huge upload for far more frames than one person's share of a game. Each run processes at most `footage_budget_min` of footage (default 180), spread across as many recording days as possible.
+
+1. **Eligible** = probed OK, not `already_packed`, not a duplicate. If their total duration ≤ budget (or budget is `0`), take all.
+2. **Recording start** per clip = container `creation_time` if present, else file modified time − duration. **Day** = local calendar date of that start.
+3. Order days oldest first. Within a day, order clips by quick id (deterministic, effectively random).
+4. **Round-robin:** repeatedly pass over the days, offering each day's next clip. Take it if the running total + its duration ≤ budget; otherwise skip it for this run and keep going (shorter clips may still fit). Stop when no remaining clip fits.
+5. If nothing fits because every clip is longer than the budget, take the single shortest clip.
+6. Unselected clips are listed in `clips.csv` as `skipped` / `over_budget` with quick id and probe fields (no SHA-256) and are not written to `history.json`. Running the tool again on the same folder repeats the spread over what is left.
+
+When over budget, the scan summary says so and allows a one-off override (not saved):
+
+```text
+Found 412 videos (61 h 20 min). This run will process 3 h 0 min: 38 clips across 27 days.
+Estimated time: about 2 h. Estimated output: about 1.5 GB.
+Run it again later on the same folder to send more.
+Press Enter to continue, or type the hours to process this time (0 = all): 
+```
+
+`--budget-hours N` sets the same override from the command line. Whole clips only: a clip is never cut to fit.
 
 ### 5.3 Pre-filter (same for every tier)
 
@@ -309,7 +337,7 @@ Batched per tier folder through the concat demuxer, falling back to one ffmpeg c
 |---|---|
 | `ok` | All tiers extracted and aligned; ≥ 1 complete slot |
 | `failed` | ffmpeg / probe error mid-clip; staged files removed; error text kept |
-| `skipped` | `not_video`, `steam_recording`, `path_too_long`, `unreadable`, `no_video`, `too_short`, `already_packed`, `duplicate_in_run` |
+| `skipped` | `not_video`, `steam_recording`, `path_too_long`, `unreadable`, `no_video`, `too_short`, `already_packed`, `duplicate_in_run`, `over_budget` |
 
 A failed clip never stops the run.
 
@@ -351,7 +379,8 @@ CSV + JSON side by side (D20). All paths inside manifests are relative to the pa
   "contributor": { "handle": "alex", "contributor_id": "3b8f...", "consent": { "data_use": true, "public_examples": false, "acknowledged_utc": "2026-11-20T03:10:02Z" } },
   "game": { "label": "Valorant", "other_name": null },
   "notes": { "colourblind_mode": "none", "graphics_preset": "high", "game_specific": { "enemy_highlight": "red" }, "free_text": "" },
-  "input": { "files_seen": 15, "videos_found": 14, "clips_ok": 12, "clips_failed": 1, "clips_skipped": 1, "input_bytes": 21474836480, "input_duration_s": 7860.4 },
+  "input": { "files_seen": 15, "videos_found": 14, "clips_ok": 12, "clips_failed": 1, "clips_skipped": 1, "input_bytes": 21474836480, "input_duration_s": 7860.4,
+             "footage_budget_min": 180, "eligible_duration_s": 7860.4, "selected_duration_s": 7860.4, "over_budget_clips": 0 },
   "output": { "tiers": ["full", "crf45"], "frame_mode": "native", "slots": 1560, "images": 3120, "file_count": 3134, "uncompressed_bytes": 1116684288 },
   "timing": { "wall_s": 2412.7 }
 }
@@ -363,7 +392,7 @@ CSV + JSON side by side (D20). All paths inside manifests are relative to the pa
 
 | Column | Notes |
 |---|---|
-| `clip_key`, `clip_sha256` | Identity; dedupe across friends and runs |
+| `clip_key`, `clip_sha256`, `quick_id` | Identity; dedupe across friends and runs (`clip_key` / `clip_sha256` empty for `over_budget`) |
 | `status`, `status_detail` | §5.9 |
 | `original_filename`, `original_relpath`, `aliases` | Relative to the chosen folder; `aliases` = other paths with the same hash |
 | `file_bytes` | Source size (size-savings tracking) |
@@ -443,7 +472,8 @@ Zip ≈ unzipped (stored JPEGs).
 | Ultrawide, 4:3 stretched, any aspect | Stored as-is (native); aspect policy applied later (D27) |
 | Attached cover art / extra streams | Stream choice in §5.2 |
 | Corrupt or crash-truncated files | Probe failure → skipped; mid-decode error → failed; run continues |
-| Same file twice, or already sent | SHA-256 dedupe in run + `history.json` |
+| Same file twice, or already sent | Quick id + SHA-256 dedupe in run; `history.json` across runs |
+| Hundreds of GB of clips | Quick id instead of full hashing at scan; footage budget spread across days; rerun for more |
 | Mixed games in one folder | Label hints warn; README says one game per folder |
 | Steam Game Recording folders | Detected and skipped with export instructions |
 | Unicode / long paths | Argument lists only (no shell); ASCII output names; path-length skip |
@@ -523,7 +553,7 @@ scripts/build_friend_pack.py
 
 ## 13. Testing and release
 
-**Unit:** recipe validation and precedence; handle normalisation; label hints; bucket math (boundaries, OFF, negative times); showinfo parsing; alignment pairing; JPEG SOF reader; manifest round-trip; zip validator (traversal, absolute paths, symlinks, ratio, oversize, nested zip, count mismatch); stdlib-only and no-network import checks.
+**Unit:** recipe validation and precedence; budget selection (under budget takes all, round-robin across days, skip-and-continue when a clip doesn't fit, single-longer-than-budget case, determinism, rerun picks only unsent clips); handle normalisation; label hints; bucket math (boundaries, OFF, negative times); showinfo parsing; alignment pairing; JPEG SOF reader; manifest round-trip; zip validator (traversal, absolute paths, symlinks, ratio, oversize, nested zip, count mismatch); stdlib-only and no-network import checks.
 
 **System (synthetic clips generated in tests):** CFR 30/60; VFR with gaps and start offset; odd dimensions; 3440×1440 and 1280×960; HDR-tagged 10-bit HEVC; AV1; MKV with attached picture; clip shorter than one interval; zero-byte and truncated files; Unicode filename; duplicate file; Steam `session.mpd` folder; compact mode equals pipeline derive byte-for-byte on the same native image; resume after a killed run; full round trip pack → ingest → derive.
 
