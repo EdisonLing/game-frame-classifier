@@ -223,8 +223,22 @@ __marimo__/
 data/raw/
 data/frames/
 data/manifests/
+data/bench_extract/
+data/bench_handoff/
 *.mp4
 *.mkv
 *.mov
 *.avi
 !tests/fixtures/**
+
+# Local README section drafts (polish later; live README keeps short snippets)
+docs/readme-drafts/**
+!docs/readme-drafts/.gitkeep
+
+# Local short decisions scratch (not public; see skill decisions-log)
+docs/decisions-log.md
+
+# Full still/CRF catalog (local). Public docs only use docs/examples/.
+docs/examples-library/**
+!docs/examples-library/.gitkeep
+!docs/examples-library/README.md
