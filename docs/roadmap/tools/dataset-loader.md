@@ -44,7 +44,7 @@ def class_weights(rows: list[SlotRow]) -> np.ndarray          # n / (k * count_c
 ```
 
 - `load_split` accepts `train` and `val` freely. For `test_session` and `test_source` it requires `allow_test=True`, which only [evaluation](evaluation.md) passes (D13).
-- `tier_mode`: `assigned` (the row's `tier`, the default everywhere), `full` or `low` (the per-tier diagnostic).
+- `tier_mode`: `assigned` (the row's `tier`, the default everywhere), `full` or `low` (the per-tier diagnostic). `low` raises for a row with an empty `path_low` (quick-mode clip); callers filter those rows first.
 - `load_image_u8` opens with Pillow, converts to RGB and raises if the size is not 256×144. It never resizes (D27).
 - `label` in the file must equal `LABELS.index(game)`; a mismatch raises.
 

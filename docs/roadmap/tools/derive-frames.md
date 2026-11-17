@@ -44,8 +44,8 @@ Exit codes: `0` success, `1` at least one clip failed, `2` usage or missing inpu
 ## Behaviour
 
 1. **Find clips.** Every `frame_sources/<Game>/<source>/<clip_key>/clip.json` where `<Game>` is one of the six games. Folders starting with `_` (`_other`, `_packs`, `_personal`, `_index`, `_stats`, `_tmp`) are not clips. `_other` material is not derived in v1.
-2. **Tiers.** Tier folders present in the clip folder. A clip must have `full` and exactly one `crf<N>` tier matching the recipe; otherwise it is reported and left out of the tables.
-3. **Slots.** Parse `bucket` from `<clip_key>_<tier>_b<bucket>.jpg`. A slot exists when both tiers have that bucket. Unpaired files are counted and ignored.
+2. **Tiers.** Tier folders present in the clip folder. A clip must have `full` and at most one `crf<N>` tier matching the recipe. A clip with only `full` is a quick-mode clip (D04): it is kept, with `low_tier` empty. Anything else is reported and left out of the tables.
+3. **Slots.** Parse `bucket` from `<clip_key>_<tier>_b<bucket>.jpg`. A slot exists when every tier of the clip has that bucket (for a quick-mode clip, every `full` file is a slot). Unpaired files are counted and ignored.
 4. **Derive.** For each tier folder, `sourcing.derive` pad-then-scale (`pad` to 16:9 when the aspect is off by more than the tolerance, `scale=256:144:flags=bicubic`, JPEG `q2`) into `data/frames/<Game>/<source>/<clip_key>/<tier>/` with the **same file names**. A clip is skipped when its output folders already hold one image per slot per tier.
 5. **Already model-size sources.** When a clip's native size equals `compact_size` (a compact contributor pack), files are copied byte for byte and `derive_id` is `compact_passthrough`.
 6. **Check.** Every derived image is read back with `sourcing.hashing.jpeg_size` and must be exactly 256×144.
@@ -67,7 +67,7 @@ Exit codes: `0` success, `1` at least one clip failed, `2` usage or missing inpu
 | `recorded_start_utc`, `recorded_start_source`, `duration_s` | From `clip.json`; input to sessions |
 | `native_width`, `native_height`, `padded` | Native geometry (`width`, `height` in `clip.json`); `padded` = aspect pad applied |
 | `hdr`, `vfr`, `video_codec`, `encoder_tag` | From `clip.json`, for shortcut analysis |
-| `low_tier` | e.g. `crf45` |
+| `low_tier` | e.g. `crf45`; empty for a quick-mode clip |
 | `low_encoder` | From `clip.json`: `h264_d3d12va`, `libx264`, `mixed`, or empty for packs made before D28's revision (treated as `libx264`). Lets evaluation split results by encoder |
 | `slots` | Paired slots found on disk |
 | `derive_id` | `pad16x9_bicubic_256x144_q2` or `compact_passthrough` |
@@ -81,7 +81,7 @@ Exit codes: `0` success, `1` at least one clip failed, `2` usage or missing inpu
 | `game`, `source` | `Valorant`, `contributor_alex` |
 | `bucket`, `target_time_s` | `12`, `60.0` (`bucket × interval_s`) |
 | `path_full` | `frames/Valorant/contributor_alex/c1a2b3c4d5e6f/full/c1a2b3c4d5e6f_full_b000012.jpg` |
-| `path_low` | `frames/Valorant/contributor_alex/c1a2b3c4d5e6f/crf45/c1a2b3c4d5e6f_crf45_b000012.jpg` |
+| `path_low` | `frames/Valorant/contributor_alex/c1a2b3c4d5e6f/crf45/c1a2b3c4d5e6f_crf45_b000012.jpg`; empty for a quick-mode clip |
 
 Paths are relative to the data root. Original file names from `clip.json` are deliberately not copied into these tables.
 

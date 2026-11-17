@@ -110,7 +110,7 @@ offset = int(sha256(clip_key)[:8], 16)
 tier   = "crf45" if (bucket + offset) % 2 == 1 else "full"
 ```
 
-Applied to every used slot in every split. `path` is `path_low` for `crf45` and `path_full` for `full`.
+Applied to every used slot in every split. `path` is `path_low` for `crf45` and `path_full` for `full`. A slot with an empty `path_low` (quick-mode clip, D04) is always `full`.
 
 ### 5. Class balance (D34)
 
@@ -123,7 +123,7 @@ No downsampling. All kept slots are used (subject to the source cap); the traine
 | `train.csv`, `val.csv`, `test_session.csv`, `test_source.csv` (+ `.json`) | One row per used slot |
 | `ledger.csv` | `clip_key, split, first_assigned_utc, note` |
 | `sessions.csv` | `clip_key, game, source, session, recorded_start_utc, recorded_start_source, duration_s, slots_kept, split` |
-| `counts.csv` | `game, split, slots, slots_full, slots_low, clips, sessions, sources`, with `ALL` rows per game and per split |
+| `counts.csv` | `game, split, slots, slots_full, slots_low, slots_quick, clips, sessions, sources`, with `ALL` rows per game and per split |
 | `sources.csv` | `game, source, source_kind, split, slots, share` (share of that game's slots in that split) |
 | `unused.csv` | Kept slots not used, with reason (`source_cap`, `bridges_splits`) |
 | `reassigned.csv` | Clips moved to a more held-out split, with the run time and reason |

@@ -28,7 +28,7 @@ Called out positively in TA feedback. Treat as decided unless we explicitly reop
 | D01 | Split by **video/session**, not by frame | decided | Leakage fix vs prior work |
 | D02 | Test on **unseen streamers** + **held-out personal sessions** | decided | |
 | D03 | **Augment only after** splitting | decided | |
-| D04 | Ops stills **full + low (CRF 45)**; medium=38 docs only; **every frame used (train, val, test, baseline, CNN) is one tier: half full, half low**, fixed per slot by bucket parity with a per-clip offset (not both tiers per slot); **per-tier eval is a diagnostic on top** | decided (revised 2026-11-17) | Small 256×144 Δ → no 2× dataset; dual folders kept for sampling + per-tier diagnostics. Was: random full *or* low per train example |
+| D04 | Ops stills **full + low (CRF 45)**; medium=38 docs only; **every frame used (train, val, test, baseline, CNN) is one tier: half full, half low**, fixed per slot by bucket parity with a per-clip offset (not both tiers per slot); **per-tier eval is a diagnostic on top**. **Quick mode** (opt-in per contributor, kit only): a clip with no low tier uses `full` for every slot; its slots are counted and reported, so the drift above half full stays visible | decided (revised 2026-11-17) | Small 256×144 Δ → no 2× dataset; dual folders kept for sampling + per-tier diagnostics. Was: random full *or* low per train example |
 | D05 | Colour-histogram + logistic regression baseline | decided | Exposes what spatial layout adds |
 | D06 | Keep menus/overlays in the data (do not strip as “bad”) | decided | Differs from Trivedi et al. |
 | D07 | Course primary goal = **frame classification**; clip tagging = inference glue | decided | See roadmap |
@@ -410,6 +410,7 @@ Related open fork from proposal: **flatten vs global average pooling** — decid
 | 2026-11-17 | D29–D31, D38 | Decided: training reads only split manifests from frame sources; ledger-based split; shared evaluation and run layout |
 | 2026-11-17 | D13, D15, D16, D23, D30, D33–D37 | Provisional working defaults recorded with their alternatives (see [training-pipeline.md](training-pipeline.md) §4.2) |
 | 2026-11-17 | D14, D16b | Decided: generated data tables; flatten primary with GAP as a config switch |
+| 2026-11-17 | D04 / D25 | **Quick mode** added to the Frame Export Kit: full quality only, about 4× faster on the CPU, asked on first run and changeable at the Start question or with `--change-mode`. Quick-mode clips use `full` for every slot; downstream reports their share |
 | 2026-11-17 | D04 | Tier rule made concrete: bucket parity with a per-clip offset, so it is stable when footage is added |
 | 2026-11-17 | D04 | Quality mix → **half full / half low (CRF 45) wherever frames are used**, assigned once per slot (deterministic, half and half within each clip); replaces random per-draw train sampling. Per-tier eval kept as a diagnostic (both tiers of each test slot) |
 | 2026-11-16 | D25 | Tool renamed friend pack → **Frame Export Kit** (`gfc-frame-export`, package `frame_export`); its zips are contributor packs |

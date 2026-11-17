@@ -113,7 +113,9 @@ offset = int(sha256(clip_key)[:8], 16)
 tier   = "crf45" if (bucket + offset) % 2 == 1 else "full"
 ```
 
-Consecutive samples of a clip alternate, so each clip is half and half to within one frame. The `crf45` tier is made by the GPU encoder at QP 51 where available and by libx264 CRF 45 otherwise; the encoder is recorded per frame and reported by evaluation (D28). The splitter writes the result into the `tier` column; nothing downstream picks a tier itself. The per-tier diagnostic (every held-out slot scored at both tiers) is part of evaluation.
+Consecutive samples of a clip alternate, so each clip is half and half to within one frame. The `crf45` tier is made by the GPU encoder at QP 51 where available and by libx264 CRF 45 otherwise; the encoder is recorded per frame and reported by evaluation (D28). The splitter writes the result into the `tier` column; nothing downstream picks a tier itself.
+
+**Quick-mode clips** (contributors who chose the kit's quick mode) have no low tier. Every slot of such a clip is `full` and its `path_low` is empty; the splitter counts these slots per game and split, and the per-tier diagnostic skips them. Quick mode moves the overall mix above half full by the share of quick-mode footage, which `counts.csv` shows. The per-tier diagnostic (every held-out slot scored at both tiers) is part of evaluation.
 
 ### 3.4 Image contract
 

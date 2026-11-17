@@ -60,7 +60,7 @@ gfc-clean-frames --slots data/manifests/slots.csv --debug
 
 **Rules**
 
-1. **One verdict per slot.** Black and blur are measured on the `full` image only, with the thresholds above (they were tuned at 256×144). Both tiers of the slot are kept or rejected together, so a kept slot always has both images.
+1. **One verdict per slot.** Black and blur are measured on the `full` image only, with the thresholds above (they were tuned at 256×144). All tiers of the slot (one for a quick-mode clip) are kept or rejected together, so a kept slot always has both images.
 2. **Near-duplicates across a whole source.** Within one `(game, source)`, slots are visited in order of the clip's `recorded_start_utc` (empty last), then `clip_key`, then `bucket`. A slot whose aHash is within the Hamming limit of an already kept slot of that source is a `duplicate` of it. This catches overlapping instant-replay clips, not only repeats inside one clip. Different sources are never compared.
 3. **Quarantine list.** `quarantine.csv` has columns `slot_id, reason, note`. Listed slots are rejected with reason `manual:<reason>` (for example `manual:lobby`, `manual:desktop`). This is the hand quarantine D11 calls for until the detector exists, kept as a file so it is repeatable.
 4. **Nothing is deleted or copied.** Rejected slots stay on disk and in the table; they are candidate material for the unknown class later (D24).

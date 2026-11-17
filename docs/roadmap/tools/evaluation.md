@@ -80,7 +80,7 @@ A class with no rows in the split gets `null` scores and is left out of macro-F1
 
 ### Tier diagnostic (`tier_diagnostic.json`)
 
-With `--tier-diagnostic`, every row is predicted twice, at `path_full` and at `path_low`: accuracy and macro-F1 at each tier, the difference, and the share of rows whose prediction changes between tiers. This is the "accuracy at each quality level" result from the proposal, on paired frames (D04).
+With `--tier-diagnostic`, every row that has both tiers is predicted twice, at `path_full` and at `path_low` (quick-mode rows, with an empty `path_low`, are left out and counted): accuracy and macro-F1 at each tier, the difference, and the share of rows whose prediction changes between tiers. This is the "accuracy at each quality level" result from the proposal, on paired frames (D04).
 
 ### Files written to `<run>/eval/<split>/`
 
