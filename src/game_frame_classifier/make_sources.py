@@ -144,7 +144,9 @@ def apply_rebuilds(fs_root: Path, index: dict[str, Any], clip_keys: list[str]) -
             continue
         sha, rec = item
         rel = str(rec.get("rel_dir") or "")
-        dest = fs_root / Path(rel)
+        dest = (fs_root / Path(rel)).resolve()
+        if len(Path(rel).parts) != 3 or dest.parent.parent.parent != fs_root.resolve():
+            raise MakeSourcesError(f"index entry for {key} has an invalid rel_dir {rel!r}; not deleting")
         if dest.is_dir():
             shutil.rmtree(dest)
         index.pop(sha, None)
@@ -336,7 +338,11 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.rebuild and not args.dry_run:
         fs_root.mkdir(parents=True, exist_ok=True)
-        apply_rebuilds(fs_root, index, list(args.rebuild))
+        try:
+            apply_rebuilds(fs_root, index, list(args.rebuild))
+        except MakeSourcesError as exc:
+            print(f"error: {exc}")
+            return EXIT_USAGE
         save_index(fs_root, index)
     elif args.rebuild and args.dry_run:
         for key in args.rebuild:

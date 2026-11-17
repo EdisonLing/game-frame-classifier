@@ -10,6 +10,7 @@ import pytest
 from game_frame_classifier.make_sources import (
     CLIP_COLUMNS,
     MakeSourcesError,
+    apply_rebuilds,
     build_clip_row,
     check_source_name,
     main,
@@ -112,3 +113,25 @@ def test_build_clip_row_columns(tmp_path):
     )
     assert set(row) == set(CLIP_COLUMNS)
     assert row["original_relpath"] == "x.mp4"
+
+
+@pytest.mark.parametrize("rel_dir", ["", ".", "Valorant", "Valorant/tester", "../outside/x/c123", "../x/c123", "Valorant/tester/c1/extra"])
+def test_rebuild_refuses_invalid_rel_dir(tmp_path, rel_dir):
+    fs_root = tmp_path / "frame_sources"
+    keep = fs_root / "Valorant" / "tester" / "c000000000001"
+    keep.mkdir(parents=True)
+    index = {"a" * 64: {"clip_key": "c000000000001", "rel_dir": rel_dir}}
+    with pytest.raises(MakeSourcesError):
+        apply_rebuilds(fs_root, index, ["c000000000001"])
+    assert keep.is_dir()
+    assert "a" * 64 in index
+
+
+def test_rebuild_removes_valid_clip_folder(tmp_path):
+    fs_root = tmp_path / "frame_sources"
+    clip = fs_root / "Valorant" / "tester" / "c000000000001"
+    clip.mkdir(parents=True)
+    index = {"a" * 64: {"clip_key": "c000000000001", "rel_dir": "Valorant/tester/c000000000001"}}
+    assert apply_rebuilds(fs_root, index, ["c000000000001"]) == ["c000000000001"]
+    assert not clip.exists()
+    assert index == {}
