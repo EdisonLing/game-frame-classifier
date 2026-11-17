@@ -8,7 +8,7 @@ from pathlib import Path
 from game_frame_classifier.frame_export import cli, paths
 from game_frame_classifier.frame_export import run as run_mod
 from game_frame_classifier.sourcing.packzip import validate_pack_zip
-from tests.helpers.ffmpeg_fixtures import make_testsrc_video, requires_ffmpeg
+from tests.helpers.ffmpeg_fixtures import make_testsrc_video, requires_ffmpeg, requires_gpu
 
 ROOT = Path(__file__).resolve().parents[2]
 USER = {
@@ -207,3 +207,77 @@ def test_output_must_already_exist(tmp_path, monkeypatch):
     assert cli.main([str(clips), "--yes", "--game", "CS2", "--no-open", "--output", str(missing)]) == 2
     assert not missing.exists()
     assert cli.main([str(clips), "--yes", "--game", "CS2", "--no-zip", "--output", str(tmp_path)]) == 2
+
+
+def _one_clip_run(tmp_path, monkeypatch, extra=(), clips_n=1):
+    home = make_home(tmp_path, monkeypatch)
+    clips = tmp_path / "clips"
+    for day in range(1, clips_n + 1):
+        make_testsrc_video(clips / f"m 2026-10-0{day} 10-00-00.mp4", duration_s=6, width=320, height=180)
+    code = cli.main([str(clips), "--yes", "--game", "CS2", "--no-open", *extra])
+    (zip_path,) = (home / "output").glob("GFC_CS2_tester_*.zip")
+    (manifest,) = validate_pack_zip(zip_path, tmp_path / "scratch")
+    return code, manifest, zip_path
+
+
+@requires_gpu
+def test_gpu_run_is_recorded_without_warnings(tmp_path, monkeypatch, capsys):
+    code, manifest, zip_path = _one_clip_run(tmp_path, monkeypatch)
+    out = capsys.readouterr().out
+    assert code == 0 and "WARNING" not in out
+    assert "Video encoding: graphics card" in out
+    enc = manifest["encoder"]
+    assert (enc["requested"], enc["gpu_available"], enc["clips_gpu"], enc["clips_cpu"]) == ("gpu", True, 1, 0)
+    assert enc["gpu_adapter"]
+    low = [f for f in pack_table(zip_path, "frames.json") if f["tier"] == "crf45"]
+    assert {(f["encoder"], f["encoder_rc"]) for f in low} == {("h264_d3d12va", "qp51")}
+
+
+@requires_ffmpeg
+def test_unavailable_gpu_warns_and_uses_cpu(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(
+        cli.gpu, "detect_gpu", lambda tools, probe_dir: cli.gpu.GpuStatus(False, "Some GPU", "Resolution not supported"),
+    )
+    code, manifest, zip_path = _one_clip_run(tmp_path, monkeypatch)
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "WARNING: The graphics card video encoder can't be used on this PC" in out
+    assert "Reason: Resolution not supported" in out
+    assert "WARNING: This run used the CPU because the graphics card encoder wasn't available." in out
+    enc = manifest["encoder"]
+    assert (enc["gpu_available"], enc["gpu_unavailable_reason"], enc["clips_cpu"]) == (False, "Resolution not supported", 1)
+    low = [f for f in pack_table(zip_path, "frames.json") if f["tier"] == "crf45"]
+    assert {(f["encoder"], f["encoder_rc"]) for f in low} == {("libx264", "crf45")}
+
+
+@requires_ffmpeg
+def test_cpu_flag_skips_the_gpu_without_a_warning(tmp_path, monkeypatch, capsys):
+    def boom(*a, **k):
+        raise AssertionError("GPU self-test must not run with --cpu")
+
+    monkeypatch.setattr(cli.gpu, "detect_gpu", boom)
+    code, manifest, _ = _one_clip_run(tmp_path, monkeypatch, extra=["--cpu"])
+    out = capsys.readouterr().out
+    assert code == 0 and "WARNING" not in out and "Video encoding: CPU (--cpu)" in out
+    assert (manifest["encoder"]["requested"], manifest["encoder"]["clips_cpu"]) == ("cpu", 1)
+
+
+@requires_ffmpeg
+def test_clip_level_fallback_warns_then_stops_trying_the_gpu(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(cli.gpu, "detect_gpu", lambda tools, probe_dir: cli.gpu.GpuStatus(True, "Fake GPU"))
+    monkeypatch.setattr(cli.gpu, "GPU_ENCODER", "h264_no_such_encoder")
+    code, manifest, zip_path = _one_clip_run(tmp_path, monkeypatch, clips_n=4)
+    out = capsys.readouterr().out
+    assert code == 0
+    assert out.count("it was redone on the CPU") == 3
+    assert "failed 3 times in a row, so the rest of" in out
+    assert "WARNING: 4 of 4 clips were encoded on the CPU" in out
+    enc = manifest["encoder"]
+    assert (enc["clips_cpu"], enc["clips_gpu_fallback"]) == (4, 3)  # 4th clip never tried the GPU
+    assert enc["gpu_stopped_reason"]
+    rows = pack_table(zip_path, "clips.json")
+    assert sorted(r["low_encoder"] for r in rows) == ["libx264"] * 4
+    assert sum(1 for r in rows if r["gpu_fallback"]) == 3
+    with zipfile.ZipFile(zip_path) as zf:
+        log = next(zf.read(n) for n in zf.namelist() if n.endswith("run_log.txt")).decode("utf-8")
+    assert "gpu fallback" in log and "gpu stopped after 3 failed clips in a row" in log

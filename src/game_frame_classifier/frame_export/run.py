@@ -19,6 +19,7 @@ from typing import Any
 from game_frame_classifier.sourcing import SCHEMA_PACK
 from game_frame_classifier.sourcing.extract import extract_clip
 from game_frame_classifier.sourcing.ffbin import FFTools, version_line
+from game_frame_classifier.sourcing.gpu import GPU_ENCODER, GpuStatus
 from game_frame_classifier.sourcing.hashing import sha256_file
 from game_frame_classifier.sourcing.labels import OTHER, label_hints
 from game_frame_classifier.sourcing.manifests import (
@@ -40,6 +41,9 @@ PIXEL_BYTES = 0.15
 COMPACT_IMAGE_BYTES = 15_000
 DISK_FACTOR = 2.2
 SECONDS_PER_MP_SECOND = 0.1
+X264_TIER_WORK = 0.75
+GPU_TIER_WORK = 0.65
+GPU_MAX_FAILURES = 3  # clips in a row whose GPU encode failed before the run stops trying the GPU
 
 
 class DiskSpaceError(RuntimeError):
@@ -55,10 +59,16 @@ class RunContext:
     user: settings.UserSettings
     game: str
     other_name: str
+    gpu: GpuStatus | None = None  # None: the GPU was not tried (--cpu or recipe encoder x264)
+    gpu_stopped: str = ""  # set when repeated GPU failures switched the rest of the run to the CPU
 
     @property
     def selected(self) -> list[ScanItem]:
         return [it for it in self.items if it.status == "selected"]
+
+    @property
+    def use_gpu(self) -> bool:
+        return self.gpu is not None and self.gpu.available and not self.gpu_stopped
 
 
 def _replace_ci(text: str, old: str, new: str) -> str:
@@ -117,9 +127,10 @@ def estimate_bytes(items: list[ScanItem], recipe: Recipe) -> int:
     return int(total)
 
 
-def estimate_seconds(items: list[ScanItem], recipe: Recipe) -> float:
-    """Measured on a fast 8-core: about 0.1 s per footage second per megapixel at 60 fps."""
-    work = 0.25 * (1 if recipe.include_full else 0) + 0.75 * len(recipe.crf_list)
+def estimate_seconds(items: list[ScanItem], recipe: Recipe, gpu: bool = False) -> float:
+    """Measured on a fast 8-core: about 0.1 s per footage second per megapixel at 60 fps (x264)."""
+    tier_work = GPU_TIER_WORK if gpu else X264_TIER_WORK
+    work = 0.25 * (1 if recipe.include_full else 0) + tier_work * len(recipe.crf_list)
     total = 0.0
     for it in items:
         megapixels = it.info.width * it.info.height / 1e6
@@ -212,6 +223,7 @@ def process(
     remaining_s = sum(it.info.duration_s for it in todo)
     started = time.perf_counter()
     footage_done = 0.0
+    gpu_streak = 0
     for n, it in enumerate(todo, 1):
         need = estimate_bytes([it], ctx.recipe) * DISK_FACTOR
         free = shutil.disk_usage(work).free
@@ -238,7 +250,7 @@ def process(
             clip_key = "c" + sha[:12]
             result = extract_clip(
                 ctx.tools, it.path, it.info, ctx.recipe, clip_key,
-                work / "stage" / clip_key, frames_root, pack, show,
+                work / "stage" / clip_key, frames_root, pack, show, use_gpu=ctx.use_gpu,
             )
         except KeyboardInterrupt:
             _cleanup_clip(work, frames_root, clip_key)
@@ -255,12 +267,24 @@ def process(
         wall = time.perf_counter() - t0
         write_json(it.info.raw, probe_dir / f"{clip_key}.json")
         data = {"clip_key": clip_key, "clip_sha256": sha, "wall_s": round(wall, 1), "result": asdict(result)}
+        data["result"]["gpu_fallback"] = log.sanitize(result.gpu_fallback)  # ffmpeg errors can name the clip's path
         settings.atomic_write_json(work / "done" / f"{it.quick_id}.json", data)
         done[it.quick_id] = data
         footage_done += it.info.duration_s
         remaining_s -= it.info.duration_s
-        log.write(f"clip ok {it.relpath} slots={result.slots} wall={wall:.1f}s")
+        log.write(f"clip ok {it.relpath} slots={result.slots} wall={wall:.1f}s encoder={result.low_encoder}")
         print(f"\r{prefix} 100%  {result.slots} slots                    ")
+        if result.gpu_fallback:
+            gpu_streak += 1
+            log.write(f"gpu fallback {it.relpath}: {result.gpu_fallback}")
+            print("      WARNING: the graphics card encode failed on this clip, so it was redone on the CPU (slower).")
+            if gpu_streak >= GPU_MAX_FAILURES and ctx.use_gpu:
+                ctx.gpu_stopped = result.gpu_fallback
+                log.write(f"gpu stopped after {gpu_streak} failed clips in a row")
+                print(f"      WARNING: the graphics card encode failed {gpu_streak} times in a row, so the rest of")
+                print("      this run uses the CPU (slower, and your PC stays busier). Details are in run_log.txt.")
+        elif result.low_encoder == GPU_ENCODER:
+            gpu_streak = 0
     return done, failed
 
 
@@ -335,9 +359,29 @@ def clip_row(
             unpaired_dropped=r["unpaired_dropped"],
             max_align_err_s=r["max_align_err_s"],
             x264_core=r["x264_core"],
+            low_encoder=r.get("low_encoder", ""),
+            gpu_fallback=r.get("gpu_fallback", ""),
             wall_s=done["wall_s"],
         )
     return row
+
+
+def encoder_summary(ctx: RunContext, done: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    """Which encoder made the degraded tiers, and why the CPU was used if it was (D28)."""
+    encoders = [d["result"].get("low_encoder", "") for d in done.values()]
+    gpu = ctx.gpu
+    return {
+        "requested": "cpu" if gpu is None else "gpu",
+        "gpu_encoder": GPU_ENCODER,
+        "gpu_available": bool(gpu and gpu.available),
+        "gpu_adapter": gpu.adapter if gpu else "",
+        "gpu_unavailable_reason": gpu.reason if gpu else "",
+        "gpu_stopped_reason": ctx.gpu_stopped,
+        "clips_gpu": encoders.count(GPU_ENCODER),
+        "clips_cpu": encoders.count("libx264"),
+        "clips_mixed": encoders.count("mixed"),
+        "clips_gpu_fallback": sum(1 for d in done.values() if d["result"].get("gpu_fallback")),
+    }
 
 
 def _os_string() -> str:
@@ -413,6 +457,7 @@ def finalize(
             "build": ctx.tools.origin,
             "x264_core": x264,
         },
+        "encoder": encoder_summary(ctx, done),
         "host": {
             "os": _os_string(),
             "cpu_count": os.cpu_count() or 0,

@@ -11,7 +11,7 @@ EXPECTED = {
     "sourcing/__init__.py", "sourcing/recipe.py", "sourcing/ffbin.py", "sourcing/probe.py",
     "sourcing/sampler.py", "sourcing/timeinfo.py", "sourcing/budget.py", "sourcing/hashing.py",
     "sourcing/labels.py", "sourcing/manifests.py", "sourcing/extract.py", "sourcing/derive.py",
-    "sourcing/packzip.py", "frame_export/__init__.py", "frame_export/__main__.py", "frame_export/paths.py",
+    "sourcing/packzip.py", "sourcing/gpu.py", "frame_export/__init__.py", "frame_export/__main__.py", "frame_export/paths.py",
     "frame_export/settings.py", "frame_export/scan.py", "frame_export/run.py", "frame_export/cli.py",
 }
 ALLOWED_MODULES = {

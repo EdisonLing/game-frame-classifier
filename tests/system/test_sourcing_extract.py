@@ -6,6 +6,8 @@ from pathlib import Path
 
 import pytest
 
+from game_frame_classifier.sourcing import extract as extract_mod
+from game_frame_classifier.sourcing import gpu
 from game_frame_classifier.sourcing.derive import derive_dir
 from game_frame_classifier.sourcing.extract import extract_clip
 from game_frame_classifier.sourcing.ffbin import find_tools
@@ -19,6 +21,7 @@ from tests.helpers.ffmpeg_fixtures import (
     make_testsrc_video,
     make_vfr_offset_video,
     requires_ffmpeg,
+    requires_gpu,
 )
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -30,11 +33,11 @@ def recipe(**overrides):
     return recipe_from_dict(data, overrides)
 
 
-def run_extract(base: Path, video: Path, r):
+def run_extract(base: Path, video: Path, r, use_gpu: bool = False):
     tools = find_tools()
     info = probe_file(video, tools)
     pack = base / "pack"
-    result = extract_clip(tools, video, info, r, KEY, base / "stage", pack / "frames", pack)
+    result = extract_clip(tools, video, info, r, KEY, base / "stage", pack / "frames", pack, use_gpu=use_gpu)
     return info, result, pack
 
 
@@ -47,6 +50,8 @@ def test_cfr_clip_two_tiers(tmp_path):
     assert sorted({i.bucket for i in res.images}) == [0, 1, 2]
     assert {i.tier for i in res.images} == {"full", "crf45"}
     assert res.x264_core.startswith("x264 - core")
+    assert (res.low_encoder, res.gpu_fallback) == ("libx264", "")
+    assert {(i.tier, i.encoder, i.encoder_rc) for i in res.images} == {("full", "", ""), ("crf45", "libx264", "crf45")}
     for img in res.images:
         path = pack / img.rel_path
         assert path.name == f"{KEY}_{img.tier}_b{img.bucket:06d}.jpg"
@@ -120,3 +125,55 @@ def test_compact_mode_matches_pipeline_derive(tmp_path):
         compacts = sorted((i for i in compact.images if i.tier == tier), key=lambda i: i.bucket)
         derived = [sha256_file(tmp_path / f"derived_{tier}" / f"{k:06d}.jpg") for k in range(len(compacts))]
         assert derived == [i.sha256 for i in compacts]
+
+
+@requires_gpu
+def test_gpu_encodes_the_crf_tier_at_constant_qp(tmp_path):
+    video = make_vfr_offset_video(tmp_path / "vfr.mp4")
+    _, cpu, _ = run_extract(tmp_path / "cpu", video, recipe())
+    info, res, pack = run_extract(tmp_path / "gpu", video, recipe(), use_gpu=True)
+    assert (res.low_encoder, res.gpu_fallback, res.x264_core) == (gpu.GPU_ENCODER, "", "")
+    assert {(i.tier, i.encoder, i.encoder_rc) for i in res.images} == {
+        ("full", "", ""), ("crf45", gpu.GPU_ENCODER, "qp51"),
+    }
+    assert (res.slots, res.unpaired_dropped) == (cpu.slots, 0)
+    assert [i.pts_time_s for i in res.images] == [i.pts_time_s for i in cpu.images]
+    full = {i.sha256 for i in res.images if i.tier == "full"}
+    assert full == {i.sha256 for i in cpu.images if i.tier == "full"}  # full tier never touches the GPU
+    assert not (tmp_path / "gpu" / "stage").exists()
+
+
+@requires_ffmpeg
+def test_gpu_failure_redoes_the_tier_on_the_cpu(tmp_path, monkeypatch):
+    monkeypatch.setattr(gpu, "GPU_ENCODER", "h264_no_such_encoder")
+    progress: list[float] = []
+    tools = find_tools()
+    video = make_testsrc_video(tmp_path / "cfr.mp4", duration_s=12)
+    info = probe_file(video, tools)
+    pack = tmp_path / "pack"
+    res = extract_clip(
+        tools, video, info, recipe(), KEY, tmp_path / "stage", pack / "frames", pack, progress.append, use_gpu=True,
+    )
+    assert res.low_encoder == "libx264" and res.x264_core.startswith("x264 - core")
+    assert res.gpu_fallback  # the reason is recorded (wording depends on the machine)
+    assert (res.slots, res.unpaired_dropped) == (3, 0)
+    assert {i.encoder_rc for i in res.images if i.tier == "crf45"} == {"crf45"}
+    assert progress[-1] == 1.0 and not (tmp_path / "stage").exists()
+
+
+@requires_gpu
+def test_gpu_output_that_does_not_line_up_is_redone_on_the_cpu(tmp_path, monkeypatch):
+    monkeypatch.setattr(extract_mod, "_lines_up", lambda *a: False)
+    video = make_testsrc_video(tmp_path / "cfr.mp4", duration_s=12)
+    _, res, _ = run_extract(tmp_path, video, recipe(), use_gpu=True)
+    assert res.low_encoder == "libx264"
+    assert "don't line up" in res.gpu_fallback
+    assert res.slots == 3
+
+
+@requires_gpu
+def test_unsupported_resolution_falls_back(tmp_path):
+    video = make_testsrc_video(tmp_path / "wide.mp4", duration_s=6, width=8192, height=1080)
+    _, res, _ = run_extract(tmp_path, video, recipe(), use_gpu=True)
+    assert res.low_encoder == "libx264" and res.gpu_fallback
+    assert res.slots == 2

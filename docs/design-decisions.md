@@ -217,12 +217,14 @@ Related open fork from proposal: **flatten vs global average pooling** — decid
 
 | | |
 |---|---|
-| **Status** | decided (not built yet) |
+| **Status** | decided; **revised 2026-11-17** (friend default is now GPU with CPU fallback, see Update) |
 | **Prompt** | Frame Export Kit wall time is ~75% libx264; GPU (AMF/NVENC) is faster but not true CRF and differs by vendor |
 | **Options** | (A) libx264 everywhere (B) GPU everywhere including friends (C) **Friends libx264; personal optional AMF toggle** (D) Friends libx264; personal AMF-only (replace x264) |
 | **Decision** | **(C).** Frame Export Kit and the named **low / crf45** eval recipe stay **software libx264**. Personal `gfc-make-sources` / quality path may expose an **AMF toggle** for speed on my AMD machine. Manifest must record encoder + settings. Official comparable eval uses the x264 low tier; AMF output is a local speed path / optional extra stress, not a silent substitute for “CRF 45.” NVENC later is the same idea if needed — not the friend default. |
 | **Rationale** | Mixing friend GPU vendors into the default low tier would confound source with artifact family. Keeping friends on pinned x264 preserves pack interchangeability. Personal AMF is fine when I accept non-identical mush and label it; replacing personal x264 entirely would make my data systematically different from friends (D rejected). |
-| **Date** | 2026-11-16 |
+| **Update (2026-11-17)** | Friend packs now try **one vendor-neutral GPU encoder, `h264_d3d12va` (Direct3D 12, constant QP), and fall back to libx264**. Reasons: x264 on a friend's CPU is slow and keeps the PC busy; per-vendor artifacts in the low tier are accepted as long as bitrate and quality are similar. Recipe `encoder` = `auto` (try GPU) or `x264`; `gpu_qp` maps each CRF tier to its QP (`{"45": 51}`). QP 51 is the H.264 maximum and the closest match to x264 CRF 45 (AMD test, 1440p60: 1.18 vs 1.34 Mbps; 32.7 vs 31.1 dB PSNR at 256x144, so slightly milder). The tier id stays `crf45`; **each frame row records `encoder` and `encoder_rc`** (`h264_d3d12va`/`qp51` or `libx264`/`crf45`) so ingest can split or weight by encoder. The `full` tier never uses the GPU. Input is also decoded on the GPU (`d3d11va`, bit-exact; ffmpeg falls back to software decode by itself). NVIDIA and Intel were not tested. |
+| **Fallback** | Startup self-test (30-frame encode, about 0.3 s); failing it means CPU for the run, with a printed warning and reason. Per tier: any ffmpeg error, missing frames or timestamps that don't match the full tier redo that tier on libx264, with a warning. After 3 clips in a row fall back, the rest of the run uses the CPU. `--cpu` forces x264 with no warning. Everything is recorded in `pack_manifest.json` (`encoder`), `clips.csv` (`low_encoder`, `gpu_fallback`) and `run_log.txt`. Level is pinned to 5.2 above 4K60 macroblock rates, since drivers refuse to open the encoder otherwise (4K120, 3440x1440@144). |
+| **Date** | 2026-11-16 (revised 2026-11-17) |
 | **Links** | [tools/frame-export-kit.md](roadmap/tools/frame-export-kit.md), [tools/quality-encoder.md](roadmap/tools/quality-encoder.md), D22 / D25 / D26 |
 
 ### D23 — Training stack / hardware
@@ -411,6 +413,7 @@ Related open fork from proposal: **flatten vs global average pooling** — decid
 | 2026-11-17 | D04 | Tier rule made concrete: bucket parity with a per-clip offset, so it is stable when footage is added |
 | 2026-11-17 | D04 | Quality mix → **half full / half low (CRF 45) wherever frames are used**, assigned once per slot (deterministic, half and half within each clip); replaces random per-draw train sampling. Per-tier eval kept as a diagnostic (both tiers of each test slot) |
 | 2026-11-16 | D25 | Tool renamed friend pack → **Frame Export Kit** (`gfc-frame-export`, package `frame_export`); its zips are contributor packs |
+| 2026-11-17 | D28 | Friends try GPU (D3D12 constant QP 51) with libx264 fallback and warnings; encoder recorded per frame |
 | 2026-11-16 | D28 | Friends stay libx264; personal optional AMF speed toggle (not friend default; not AMF-only personal) |
 | 2026-11-16 | D25 | Decided: spec v1 (recipe file, embeddable Python + pinned ffmpeg, manifests, ingest checks) |
 | 2026-11-16 | D26 | Frame sources first-class; one `sourcing` path for my clips and contributor packs; `bucket_v1` sampler |

@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import functools
 import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -16,6 +18,24 @@ def ffmpeg_available() -> bool:
 requires_ffmpeg = pytest.mark.skipif(
     not ffmpeg_available(),
     reason="ffmpeg/ffprobe not on PATH",
+)
+
+
+@functools.lru_cache(maxsize=1)
+def gpu_encoder_available() -> bool:
+    """True when the D3D12 GPU encoder self-test passes on this machine."""
+    if not ffmpeg_available():
+        return False
+    from game_frame_classifier.sourcing.ffbin import find_tools
+    from game_frame_classifier.sourcing.gpu import detect_gpu
+
+    with tempfile.TemporaryDirectory() as tmp:
+        return detect_gpu(find_tools(), Path(tmp) / "probe").available
+
+
+requires_gpu = pytest.mark.skipif(
+    not gpu_encoder_available(),
+    reason="no working D3D12 GPU encoder on this machine",
 )
 
 

@@ -24,6 +24,8 @@ def test_repo_recipe_loads_with_spec_defaults():
     assert r.compact_size == (256, 144)
     assert ".mp4" in r.video_extensions
     assert r.games[0] == "Valorant"
+    assert r.encoder == "auto"
+    assert r.gpu_qp == {45: 51}
 
 
 @pytest.mark.parametrize(
@@ -74,6 +76,12 @@ def test_missing_field_rejected():
         ("compact_size", [255, 144]),
         ("video_extensions", ["mp4"]),
         ("games", ["Valorant", "Other"]),
+        ("encoder", "nvenc"),
+        ("gpu_qp", [51]),
+        ("gpu_qp", {"45": 52}),
+        ("gpu_qp", {"45": True}),
+        ("gpu_qp", {"x": 51}),
+        ("gpu_qp", {"38": 44}),
     ],
 )
 def test_invalid_values(key, value):
@@ -90,6 +98,16 @@ def test_question_default_must_be_a_choice():
         recipe_from_dict(d)
 
 
+def test_gpu_qp_may_skip_crfs_when_encoder_is_x264():
+    d = base()
+    d["encoder"] = "x264"
+    d["gpu_qp"] = {}
+    assert recipe_from_dict(d).gpu_qp == {}
+    d["encoder"] = "auto"
+    with pytest.raises(RecipeError, match="no entry for CRF 45"):
+        recipe_from_dict(d)
+
+
 def test_overrides_apply():
     r = recipe_from_dict(base(), {"frame_mode": "compact", "footage_budget_min": 0})
     assert r.frame_mode == "compact" and r.footage_budget_min == 0
@@ -101,6 +119,7 @@ def test_manifest_snapshot():
     assert m["crf_list"] == [45]
     assert m["tiers"] == ["full", "crf45"]
     assert m["schema"] == "gfc.recipe/1"
+    assert (m["encoder"], m["gpu_qp"]) == ("auto", {"45": 51})
 
 
 def test_load_recipe_bad_json(tmp_path):

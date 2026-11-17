@@ -169,6 +169,8 @@ Two files, so I can ship an updated recipe without touching a friend's name or c
 | `include_full` | Extract a tier from the original video | bool |
 | `crf_list` | Comma-separated H.264 CRFs; each becomes a tier `crf<N>` (re-encode the video, then extract). Accepts `"45"`, `"38,45"` or a JSON list | ints 1–51, deduplicated, sorted |
 | `x264_preset` | libx264 preset for the CRF re-encode (same as repo quality encoder) | x264 preset name |
+| `encoder` | `auto` = try the GPU encoder (D3D12) and fall back to libx264; `x264` = always libx264 | `auto` or `x264` |
+| `gpu_qp` | Constant QP used on the GPU in place of each CRF tier, e.g. `{"45": 51}` | CRF 1–51 → QP 1–51; must cover every `crf_list` entry when `encoder` is `auto` |
 | `jpeg_qscale` | mjpeg `-q:v` for every still (D21) | 2–31 |
 | `frame_mode` | `native` (default) or `compact` (256×144 via §5.7) | enum |
 | `hdr_policy` | Tone-map HDR sources to SDR before every tier (§5.3) | enum |
@@ -326,7 +328,8 @@ ffmpeg -hide_banner -nostdin -loglevel error -y -i <file> -map 0:<v> -an -sn -dn
        -fps_mode passthrough -progress pipe:1 <stage>/tmp_crf<N>.mp4
 ```
 
-- Software libx264 on purpose for **contributor packs** (D28): not NVENC / AMF / QuickSync. Hardware encoders differ by vendor and generation and have no true CRF, so a GPU `crf45` tier would carry a per-friend encoder signature (a source confound). x264 with a pinned build gives the same artifacts on every PC. The cost is time (§8). **Personal** `gfc-make-sources` may later offer an **AMF toggle** for speed on my machine; that path is local-only and must be recorded in the manifest — it is not the friend default.
+- **GPU first, libx264 fallback (D28, revised 2026-11-17).** With recipe `encoder: "auto"` the kit self-tests `h264_d3d12va` (Direct3D 12, one API for NVIDIA / AMD / Intel, Windows 11) at startup and encodes each CRF tier at constant QP `gpu_qp[N]` (45 → 51, the H.264 maximum and the nearest match to x264 CRF 45). Input is decoded on the GPU (`-hwaccel d3d11va`, bit-exact; software decode if the GPU can't). Frames reach the encoder as `format=nv12,hwupload` after the tone-map / even-crop filters. Each vendor's encoder leaves its own artifacts; that is accepted, and every image row records `encoder` and `encoder_rc` so ingest can see which tier came from where.
+- **Fallback is per tier and always warns.** No working GPU encoder at startup → CPU for the run + warning with the reason. A GPU encode that errors, yields no frames, or whose timestamps differ from the full tier by more than half a frame → that tier is discarded and redone with libx264 + a warning (and `gpu_fallback` in `clips.csv`). Three clips in a row falling back → the rest of the run uses the CPU. The summary repeats the warning. `--cpu` or `encoder: "x264"` force x264 silently. Level is pinned to 5.2 above 4K60 macroblock rates because drivers refuse to open the encoder otherwise.
 - `-fps_mode passthrough` keeps frames 1:1, so the same sampler picks the same frames in every tier. The temp is `.mp4` (exact timestamps; `.mkv` rounds to 1 ms). Deleted after extraction.
 - The x264 build string (`x264 - core NNN rNNNN ...`) is read from the first 64 KiB of the temp file and recorded.
 
@@ -481,7 +484,7 @@ Zip ≈ unzipped (stored JPEGs).
 
 **Disk check:** before starting and before each clip, require free space ≥ 2.2 × the estimated output of what remains (staged frames and the zip coexist briefly), using `0.15 bytes/pixel/image` (`15 KB` per image in compact mode). Not enough → stop with a clear message; completed clips stay resumable.
 
-**Time:** about 75 % is the x264 re-encode at native resolution. Measured 12 / 22 / 51 min per footage hour at 1080p / 1440p / 4K (60 fps H.264) on a fast 8-core; expect about 2× on a typical 6-core, more on older laptops, 2× for 120 fps sources. The tool shows a measured ETA after the first clip, runs ffmpeg at below-normal priority, and states that the PC stays usable but fans may spin up.
+**Time:** with the CPU encoder about 75 % is the x264 re-encode at native resolution; the GPU encoder cut the encode step about 2.2× on the test PC (RX 9070 XT, 1440p60: 20 s → 9 s per footage minute of encode, and about 3.7× less CPU time). The ETA assumes 15 % less work per CRF tier on GPU; re-measure on a friend's PC. The figures below are for the CPU path. Measured 12 / 22 / 51 min per footage hour at 1080p / 1440p / 4K (60 fps H.264) on a fast 8-core; expect about 2× on a typical 6-core, more on older laptops, 2× for 120 fps sources. The tool shows a measured ETA after the first clip, runs ffmpeg at below-normal priority, and states that the PC stays usable but fans may spin up.
 
 ---
 

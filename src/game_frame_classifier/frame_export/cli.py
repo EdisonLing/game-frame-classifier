@@ -10,7 +10,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-from game_frame_classifier.sourcing import ffbin
+from game_frame_classifier.sourcing import ffbin, gpu
 from game_frame_classifier.sourcing.labels import (
     DISPLAY_NAMES,
     OTHER,
@@ -79,6 +79,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--no-zip", action="store_true", help="leave the pack folder unzipped")
     p.add_argument("--output", help="existing folder to save the finished zip in (default: the tool's output folder)")
     p.add_argument("--no-open", action="store_true", help="do not open Explorer when done")
+    p.add_argument("--cpu", action="store_true", help="encode on the CPU even if the graphics card encoder works")
     p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     return p
 
@@ -271,6 +272,42 @@ def open_explorer(path: Path) -> None:
         subprocess.Popen(f'"{explorer}" /select,"{path}"')
 
 
+def choose_encoder(
+    args: argparse.Namespace, recipe: Recipe, tools: ffbin.FFTools, probe_dir: Path,
+) -> gpu.GpuStatus | None:
+    """Self-test the GPU encoder and say which encoder this run uses; None means CPU by choice."""
+    if args.cpu:
+        print("Video encoding: CPU (--cpu).")
+        return None
+    if recipe.encoder != "auto" or not recipe.crf_list:
+        print("Video encoding: CPU (set in config/recipe.json).")
+        return None
+    status = gpu.detect_gpu(tools, paths.ensure_inside_home(probe_dir))
+    if status.available:
+        print(f"Video encoding: graphics card ({status.adapter or 'Direct3D 12'}).")
+    else:
+        print("WARNING: The graphics card video encoder can't be used on this PC, so this run uses")
+        print("         the CPU instead. The pictures are still fine to send, but it is slower and")
+        print("         keeps your PC busier while it runs.")
+        print(f"         Reason: {status.reason or 'unknown'}")
+    return status
+
+
+def print_encoder_note(ctx: RunContext, done: dict[str, dict[str, Any]]) -> None:
+    """Repeat any CPU fallback at the end, where people look."""
+    if ctx.gpu is None:
+        return
+    if not ctx.gpu.available:
+        print("WARNING: This run used the CPU because the graphics card encoder wasn't available.")
+        return
+    cpu = sum(1 for d in done.values() if d["result"].get("low_encoder") not in (gpu.GPU_ENCODER, ""))
+    if cpu:
+        print(
+            f"WARNING: {cpu} of {len(done)} clips were encoded on the CPU because the graphics card "
+            "encoder failed. Details are in run_log.txt inside the zip."
+        )
+
+
 def _main(args: argparse.Namespace) -> int:
     home = paths.app_home().resolve()
     if "%" in str(home):
@@ -377,6 +414,7 @@ def _main(args: argparse.Namespace) -> int:
 
     ctx = RunContext(root, items, recipe, tools, user, game, other_name)
     work = work_dir(ctx)
+    ctx.gpu = choose_encoder(args, recipe, tools, work.parent / f"gpu_probe_{work.name}")
     state = load_state(work)
     if state is not None:
         print("Continuing an earlier run on this folder.")
@@ -384,7 +422,7 @@ def _main(args: argparse.Namespace) -> int:
         state = new_state(ask_notes(recipe, game, interactive))
 
     est = estimate_bytes(selected, recipe)
-    secs = estimate_seconds(selected, recipe)
+    secs = estimate_seconds(selected, recipe, gpu=ctx.use_gpu)
     out_dir = paths.ensure_inside_home(paths.output_dir())
     out_dir.mkdir(parents=True, exist_ok=True)
     zip_dir = chosen_zip_dir or out_dir
@@ -414,6 +452,12 @@ def _main(args: argparse.Namespace) -> int:
         f"run start v{__version__} game={game} recipe={recipe.recipe_id} mode={recipe.frame_mode} "
         f"clips={len(selected)} ffmpeg={tools.origin}"
     )
+    if ctx.gpu is None:
+        log.write("encoder cpu (chosen)")
+    elif ctx.gpu.available:
+        log.write(f"encoder gpu {gpu.GPU_ENCODER} adapter={ctx.gpu.adapter}")
+    else:
+        log.write(f"encoder cpu (gpu unavailable: {ctx.gpu.reason}) adapter={ctx.gpu.adapter}")
     print("Your PC stays usable, but the fans may spin up. You can close this window any time;")
     print("run it again on the same folder to continue where it left off.\n")
     try:
@@ -427,6 +471,7 @@ def _main(args: argparse.Namespace) -> int:
     result = finalize(ctx, work, state, done, failed, log, budget_min, make_zip=not args.no_zip, zip_dir=zip_dir)
     skipped = sum(1 for it in items if it.status == "skipped")
     print(f"\nDone. {len(done)} clips OK, {len(failed)} failed, {skipped} skipped.")
+    print_encoder_note(ctx, done)
     if args.no_zip:
         print(f"Pack folder (not zipped): {result}")
         return EXIT_OK

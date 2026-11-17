@@ -14,6 +14,7 @@ X264_PRESETS = (
     "ultrafast", "superfast", "veryfast", "faster", "fast",
     "medium", "slow", "slower", "veryslow", "placebo",
 )
+ENCODERS = ("auto", "x264")
 FRAME_MODES = ("native", "compact")
 HDR_POLICIES = ("tonemap_hable_v1",)
 BUDGET_SELECTIONS = ("spread_days_v1",)
@@ -21,7 +22,7 @@ DERIVE_ASPECTS = ("pad_16x9",)
 SCALE_FLAGS = ("bicubic",)
 KNOWN_KEYS = frozenset({
     "schema", "recipe_id", "interval_s", "include_full", "crf_list", "x264_preset",
-    "jpeg_qscale", "frame_mode", "compact_size", "hdr_policy", "derive",
+    "encoder", "gpu_qp", "jpeg_qscale", "frame_mode", "compact_size", "hdr_policy", "derive",
     "video_extensions", "min_duration_s", "footage_budget_min", "budget_selection",
     "games", "questions",
 })
@@ -44,6 +45,8 @@ class Recipe:
     include_full: bool
     crf_list: tuple[int, ...]
     x264_preset: str
+    encoder: str
+    gpu_qp: dict[int, int]
     jpeg_qscale: int
     frame_mode: str
     compact_size: tuple[int, int]
@@ -72,6 +75,8 @@ class Recipe:
             "crf_list": list(self.crf_list),
             "tiers": list(self.tiers),
             "x264_preset": self.x264_preset,
+            "encoder": self.encoder,
+            "gpu_qp": {str(crf): qp for crf, qp in sorted(self.gpu_qp.items())},
             "jpeg_qscale": self.jpeg_qscale,
             "frame_mode": self.frame_mode,
             "compact_size": list(self.compact_size),
@@ -113,6 +118,23 @@ def parse_crf_list(value: Any) -> tuple[int, ...]:
             raise RecipeError(f"crf_list entry {crf} must be from 1 to 51")
         found.add(crf)
     return tuple(sorted(found))
+
+
+def _gpu_qp(value: Any, crf_list: tuple[int, ...], encoder: str) -> dict[int, int]:
+    """{"45": 51}: the constant GPU QP used in place of each x264 CRF tier."""
+    if not isinstance(value, dict):
+        raise RecipeError('gpu_qp must be an object like {"45": 51}')
+    out: dict[int, int] = {}
+    for key, qp in value.items():
+        if not isinstance(key, str) or not key.isdigit() or not 1 <= int(key) <= 51:
+            raise RecipeError(f"gpu_qp key {key!r} must be a CRF from 1 to 51")
+        if isinstance(qp, bool) or not isinstance(qp, int) or not 1 <= qp <= 51:
+            raise RecipeError(f"gpu_qp value for {key} must be a whole number from 1 to 51")
+        out[int(key)] = qp
+    missing = [crf for crf in crf_list if crf not in out]
+    if encoder == "auto" and missing:
+        raise RecipeError(f"gpu_qp has no entry for CRF {missing[0]} (needed when encoder is auto)")
+    return out
 
 
 def _number(d: dict[str, Any], key: str, lo: float, hi: float) -> float:
@@ -242,6 +264,8 @@ def recipe_from_dict(data: Any, overrides: dict[str, Any] | None = None) -> Reci
         include_full=d["include_full"],
         crf_list=crf_list,
         x264_preset=_choice(d, "x264_preset", X264_PRESETS),
+        encoder=_choice(d, "encoder", ENCODERS),
+        gpu_qp=_gpu_qp(d["gpu_qp"], crf_list, d["encoder"]),
         jpeg_qscale=_integer(d, "jpeg_qscale", 2, 31),
         frame_mode=_choice(d, "frame_mode", FRAME_MODES),
         compact_size=_compact_size(d["compact_size"]),

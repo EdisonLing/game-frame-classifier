@@ -1,10 +1,12 @@
 {
   "schema": "gfc.recipe/1",
-  "recipe_id": "2026-11-16a",
+  "recipe_id": "2026-11-17a",
   "interval_s": 5,
   "include_full": true,
   "crf_list": "45",
   "x264_preset": "veryfast",
+  "encoder": "auto",
+  "gpu_qp": { "45": 51 },
   "jpeg_qscale": 2,
   "frame_mode": "native",
   "compact_size": [256, 144],
