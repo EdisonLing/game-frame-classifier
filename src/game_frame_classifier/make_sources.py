@@ -62,6 +62,15 @@ def run_id_now() -> str:
     return datetime.now().strftime("%Y%m%d-%H%M%S")
 
 
+def unique_run_id(fs_root: Path, base: str) -> str:
+    """base, or base-2, base-3, ... when a run record with that id already exists."""
+    run_id, n = base, 1
+    while (fs_root / "_personal" / run_id).exists() or (fs_root / "_tmp" / run_id).exists():
+        n += 1
+        run_id = f"{base}-{n}"
+    return run_id
+
+
 def source_commit() -> str:
     try:
         proc = subprocess.run(
@@ -332,7 +341,7 @@ def main(argv: list[str] | None = None) -> int:
         return EXIT_USAGE
 
     fs_root = frame_sources_root(data_root)
-    run_id = run_id_now()
+    run_id = unique_run_id(fs_root, run_id_now())
     started = time.perf_counter()
     index = load_index(fs_root)
 
