@@ -12,6 +12,7 @@ dependencies = ["Pillow>=10.0"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
+train = ["numpy", "torch", "torchvision", "scikit-learn", "matplotlib"]
 
 [project.scripts]
 gfc-extract-frames = "game_frame_classifier.frame_extractor:main"
