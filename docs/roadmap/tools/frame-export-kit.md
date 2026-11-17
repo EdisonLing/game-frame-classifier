@@ -39,8 +39,8 @@ The frames they send are a **source of truth** in my pipeline (the masters are g
 2. **Start.** Either drag a folder of clips onto `START HERE.bat`, or double-click it and drag the folder into the window when asked.
 3. **First run only:** a short notice of what is collected, then three prompts, saved to `config/user.json`:
    - name / handle (becomes the source id)
-   - "OK to process your clips into frames for this project?" (must be yes)
-   - "OK if a few of your frames appear in my report or README?" (default no)
+   - "OK to process your clips into frames for this project?" (default yes)
+   - "OK if a few of your frames appear in my report or README?" (default yes)
 4. **Scan summary.** Clip count, total duration, resolutions, files skipped and why, estimated output size and time, free disk space. Over the footage budget (default 3 h per game), it picks clips spread across recording days and says to run again later for more (§5.2a).
 5. **Game prompt.** Numbered list of the six games plus *Other*. Pre-selected when folder/file names agree on one game; a warning (and confirmation) when names suggest a different game than the one picked.
 6. **Optional notes** (Enter skips each): colourblind mode, graphics preset, one game-specific question from the recipe (for example Minecraft shaders), free text.

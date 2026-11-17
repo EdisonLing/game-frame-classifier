@@ -166,14 +166,14 @@ def test_first_run_prompts(tmp_path, monkeypatch):
     home = make_home(tmp_path, monkeypatch, with_user=False)
     clips = tmp_path / "Overwatch clips"
     make_testsrc_video(clips / "x.mp4", duration_s=6, width=320, height=180)
-    answers = iter(["Alex Smith", "y", "", str(clips), "", "", "", "", ""])
+    answers = iter(["Alex Smith", "", "", str(clips), "", "", "", "", ""])
     monkeypatch.setattr("builtins.input", lambda prompt="": next(answers))
 
     assert cli.main(["--no-open"]) == 0
 
     user = json.loads((home / "config" / "user.json").read_text(encoding="utf-8"))
     assert user["handle"] == "alex_smith"
-    assert user["consent_public_examples"] is False
+    assert user["consent_public_examples"] is True
     assert user["last_game"] == "Overwatch_2"
     assert len(list((home / "output").glob("GFC_Overwatch_2_alex_smith_*.zip"))) == 1
     assert next(answers, None) is None

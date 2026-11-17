@@ -108,10 +108,10 @@ def first_run(recipe: Recipe) -> settings.UserSettings | None:
         handle = normalize_handle(input("Your name or nickname: "))
         if not handle:
             print("Please use at least one letter or number.")
-    if not ask_yes_no("OK to process your clips into pictures for this project?", None):
+    if not ask_yes_no("OK to process your clips into pictures for this project?", True):
         print("OK. Nothing was processed and nothing was saved.")
         return None
-    public = ask_yes_no("OK if a few of your pictures appear in my report or README?", False)
+    public = ask_yes_no("OK if a few of your pictures appear in my report or README?", True)
     user = settings.new_user(handle, public)
     settings.save_user(user)
     print(f"Saved. You are '{handle}'.\n")
