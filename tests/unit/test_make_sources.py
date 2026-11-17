@@ -31,12 +31,12 @@ def test_contributor_source_refused():
 
 
 def test_sanitize_strips_absolute_and_user(tmp_path, monkeypatch):
-    monkeypatch.setenv("USERNAME", "EdisonLocal")
+    monkeypatch.setenv("USERNAME", "TestUser")
     monkeypatch.setenv("COMPUTERNAME", "DESKTOPXYZ")
-    text = f"failed under {tmp_path / 'clip.mp4'} for EdisonLocal on DESKTOPXYZ"
+    text = f"failed under {tmp_path / 'clip.mp4'} for TestUser on DESKTOPXYZ"
     out = sanitize_text(text, tmp_path)
     assert str(tmp_path.resolve()) not in out
-    assert "EdisonLocal" not in out
+    assert "TestUser" not in out
     assert "DESKTOPXYZ" not in out
 
 
