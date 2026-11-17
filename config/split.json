@@ -1,0 +1,14 @@
+{
+  "schema": "gfc.split/1",
+  "split_id": "v1",
+  "seed": 360,
+  "targets": {
+    "train": 0.70,
+    "val": 0.15,
+    "test_session": 0.15
+  },
+  "session_gap_min": 30,
+  "holdout_sources": {},
+  "max_source_share": 1.0,
+  "test_design": ""
+}

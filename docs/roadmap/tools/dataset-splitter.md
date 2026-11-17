@@ -1,7 +1,7 @@
 # Dataset splitter (`gfc-split`)
 
 **Stage:** 2 — Dataset assembly  
-**Status:** planned  
+**Status:** implemented
 **Back to:** [ROADMAP.md](../ROADMAP.md) · [training pipeline](../../training-pipeline.md)
 
 ## What it does (high level)
@@ -199,13 +199,13 @@ The proposal promised 15 or more channels per game with each capped at 1/15. Cur
 
 ## Acceptance checks
 
-- [ ] No clip or session in more than one split
-- [ ] Rerun after adding footage changes no existing assignment
-- [ ] Held-out sources absent from `train` and `val`
-- [ ] Tier shares about half and half per game and split
-- [ ] `counts.csv` and `sources.csv` give frames, clips, sessions and sources per game
-- [ ] `--freeze` blocked until `test_design` is filled in
-- [ ] CLI entry `gfc-split` in `pyproject.toml`
+- [x] No clip or session in more than one split
+- [x] Rerun after adding footage changes no existing assignment
+- [x] Held-out sources absent from `train` and `val`
+- [x] Tier shares about half and half per game and split
+- [x] `counts.csv` and `sources.csv` give frames, clips, sessions and sources per game
+- [x] `--freeze` blocked until `test_design` is filled in
+- [x] CLI entry `gfc-split` in `pyproject.toml`
 
 ## Ties to proposal and decisions
 

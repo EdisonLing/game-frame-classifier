@@ -1,0 +1,406 @@
+"""Build stable session-aware split manifests from cleaned slots and clip metadata.
+
+Reads the stage-one manifests and writes split tables under ``data/manifests/splits``;
+the complete contract is in ``docs/roadmap/tools/dataset-splitter.md``.
+"""
+
+from __future__ import annotations
+
+import argparse
+import csv
+import datetime as dt
+import hashlib
+import json
+import subprocess
+import sys
+from collections import defaultdict
+from pathlib import Path
+from typing import Any, Iterable
+
+from game_frame_classifier.sourcing.labels import GAMES
+from game_frame_classifier.sourcing.manifests import write_json, write_table
+
+SPLITS = ("train", "val", "test_session", "test_source")
+ASSIGNABLE_SPLITS = SPLITS[:3]
+SPLIT_RANK = {name: index for index, name in enumerate(SPLITS)}
+SPLIT_COLUMNS = (
+    "slot_id", "clip_key", "bucket", "target_time_s", "game", "label", "source",
+    "source_kind", "session", "split", "tier", "path", "path_full", "path_low",
+    "public_examples_ok",
+)
+LEDGER_COLUMNS = ("clip_key", "split", "first_assigned_utc", "note")
+SESSION_COLUMNS = (
+    "clip_key", "game", "source", "session", "recorded_start_utc",
+    "recorded_start_source", "duration_s", "slots_kept", "split",
+)
+COUNT_COLUMNS = (
+    "game", "split", "slots", "slots_full", "slots_low", "slots_quick", "clips",
+    "sessions", "sources",
+)
+SOURCE_COLUMNS = ("game", "source", "source_kind", "split", "slots", "share")
+UNUSED_COLUMNS = ("slot_id", "clip_key", "game", "source", "session", "split", "reason")
+REASSIGNED_COLUMNS = ("clip_key", "from_split", "to_split", "run_utc", "reason")
+
+
+class SplitterError(RuntimeError):
+    """An expected policy or input error with a command exit code."""
+
+    def __init__(self, message: str, exit_code: int = 2) -> None:
+        super().__init__(message)
+        self.exit_code = exit_code
+
+
+def _now() -> str:
+    return dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _sha256_text(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _file_hash(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _parse_time(value: str) -> dt.datetime | None:
+    if not value:
+        return None
+    try:
+        return dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise SplitterError(f"invalid recorded_start_utc {value!r}", 2) from exc
+
+
+def _as_bool(value: str) -> bool:
+    return value.strip().lower() in {"1", "true", "yes"}
+
+
+def _load_csv(path: Path) -> list[dict[str, str]]:
+    if not path.is_file():
+        raise SplitterError(f"missing input: {path}", 2)
+    with path.open(encoding="utf-8", newline="") as file:
+        return list(csv.DictReader(file))
+
+
+def load_config(path: Path) -> dict[str, Any]:
+    """Load and minimally validate a split policy."""
+    if not path.is_file():
+        raise SplitterError(f"missing config: {path}", 2)
+    try:
+        config = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise SplitterError(f"invalid JSON config: {path}", 2) from exc
+    required = {"schema", "split_id", "seed", "targets", "session_gap_min", "holdout_sources", "max_source_share", "test_design"}
+    missing = required - set(config)
+    if missing or config.get("schema") != "gfc.split/1":
+        raise SplitterError(f"invalid split config; missing {sorted(missing)} or unsupported schema", 2)
+    if set(config["targets"]) != set(ASSIGNABLE_SPLITS):
+        raise SplitterError("targets must contain train, val and test_session", 2)
+    return config
+
+
+def build_sessions(clips: list[dict[str, str]], gap_min: float) -> list[dict[str, Any]]:
+    """Group clips by game/source and recording-time overlap or gap."""
+    grouped: dict[tuple[str, str], list[dict[str, str]]] = defaultdict(list)
+    for clip in clips:
+        grouped[(clip["game"], clip["source"])].append(clip)
+    sessions: list[dict[str, Any]] = []
+    for (game, source), group in sorted(grouped.items()):
+        timed = sorted((row for row in group if row.get("recorded_start_utc")), key=lambda row: (row["recorded_start_utc"], row["clip_key"]))
+        untimed = sorted((row for row in group if not row.get("recorded_start_utc")), key=lambda row: row["clip_key"])
+        batches: list[list[dict[str, str]]] = []
+        latest_end: dt.datetime | None = None
+        for clip in timed:
+            start = _parse_time(clip["recorded_start_utc"])
+            assert start is not None
+            duration = float(clip.get("duration_s") or 0)
+            if not batches or latest_end is None or start > latest_end + dt.timedelta(minutes=gap_min):
+                batches.append([clip])
+                latest_end = start + dt.timedelta(seconds=duration)
+            else:
+                batches[-1].append(clip)
+                latest_end = max(latest_end, start + dt.timedelta(seconds=duration))
+        batches.extend([[clip] for clip in untimed])
+        for index, batch in enumerate(batches, 1):
+            sessions.append({"game": game, "source": source, "session": f"{source}:{game}:s{index:03d}", "clips": batch})
+    return sessions
+
+
+def tier_for_slot(clip_key: str, bucket: int, path_low: str) -> str:
+    """Return the stable tier selected for a slot."""
+    if not path_low:
+        return "full"
+    offset = int(_sha256_text(clip_key)[:8], 16)
+    return "crf45" if (bucket + offset) % 2 == 1 else "full"
+
+
+def _load_ledger(path: Path) -> dict[str, dict[str, str]]:
+    if not path.is_file():
+        return {}
+    rows = _load_csv(path)
+    ledger = {row["clip_key"]: row for row in rows}
+    if len(ledger) != len(rows):
+        raise SplitterError("ledger contains duplicate clip_key entries", 1)
+    if any(row.get("split") not in SPLIT_RANK for row in rows):
+        raise SplitterError("ledger contains an invalid split", 1)
+    return ledger
+
+
+def _validate_ledger(ledger: dict[str, dict[str, str]], clips: dict[str, dict[str, str]], heldout: dict[str, set[str]]) -> None:
+    for clip_key, entry in ledger.items():
+        clip = clips.get(clip_key)
+        if clip is None:
+            continue
+        should_holdout = clip["source"] in heldout.get(clip["game"], set())
+        if (entry["split"] in {"train", "val"} and should_holdout) or (entry["split"] == "test_source" and not should_holdout):
+            raise SplitterError("ledger contradicts holdout_sources; use a new split_id", 1)
+
+
+def _choose_split(session: dict[str, Any], assigned_slots: list[dict[str, Any]], targets: dict[str, float]) -> str:
+    game = session["game"]
+    current = {split: 0 for split in ASSIGNABLE_SPLITS}
+    for slot in assigned_slots:
+        if slot["game"] == game and slot["split"] in current:
+            current[slot["split"]] += 1
+    total = sum(current.values())
+    deficits = {split: targets[split] - (current[split] / total if total else 0.0) for split in ASSIGNABLE_SPLITS}
+    return max(ASSIGNABLE_SPLITS, key=lambda split: (deficits[split], -ASSIGNABLE_SPLITS.index(split)))
+
+
+def _source_kind(source: str) -> str:
+    if source.startswith("contributor_"):
+        return "contributor"
+    if source.startswith("public_"):
+        return "public"
+    return "personal"
+
+
+def _write_counts(output: Path, used: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for game in (*GAMES, "ALL"):
+        for split in (*SPLITS, "ALL"):
+            subset = [slot for slot in used if (game == "ALL" or slot["game"] == game) and (split == "ALL" or slot["split"] == split)]
+            rows.append({
+                "game": game, "split": split, "slots": len(subset),
+                "slots_full": sum(slot["tier"] == "full" for slot in subset),
+                "slots_low": sum(slot["tier"] == "crf45" for slot in subset),
+                "slots_quick": sum(not slot["path_low"] for slot in subset),
+                "clips": len({slot["clip_key"] for slot in subset}),
+                "sessions": len({slot["session"] for slot in subset}),
+                "sources": len({slot["source"] for slot in subset}),
+            })
+    write_table(rows, COUNT_COLUMNS, output / "counts.csv", output / "counts.json")
+    return rows
+
+
+def _write_sources(output: Path, used: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for game, split in ((game, split) for game in GAMES for split in SPLITS):
+        subset = [slot for slot in used if slot["game"] == game and slot["split"] == split]
+        total = len(subset)
+        for source in sorted({slot["source"] for slot in subset}):
+            source_slots = [slot for slot in subset if slot["source"] == source]
+            rows.append({"game": game, "source": source, "source_kind": source_slots[0]["source_kind"], "split": split, "slots": len(source_slots), "share": len(source_slots) / total if total else 0})
+    write_table(rows, SOURCE_COLUMNS, output / "sources.csv", output / "sources.json")
+    return rows
+
+
+def _apply_source_cap(slots: list[dict[str, Any]], seed: int, requested_cap: float) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Thin only train slots whose source exceeds its feasible configured cap."""
+    dropped: list[dict[str, Any]] = []
+    kept = list(slots)
+    for game in GAMES:
+        while True:
+            train = [slot for slot in kept if slot["game"] == game and slot["split"] == "train"]
+            by_source: dict[str, list[dict[str, Any]]] = defaultdict(list)
+            for slot in train:
+                by_source[slot["source"]].append(slot)
+            if not by_source:
+                break
+            cap = max(float(requested_cap), 1 / len(by_source))
+            limit = cap * len(train)
+            offenders = [source for source, source_slots in by_source.items() if len(source_slots) > limit]
+            if not offenders:
+                break
+            source = max(offenders, key=lambda name: (len(by_source[name]), name))
+            candidate = max(by_source[source], key=lambda slot: _sha256_text(f"{seed}:{slot['slot_id']}"))
+            kept.remove(candidate)
+            dropped.append({
+                "slot_id": candidate["slot_id"], "clip_key": candidate["clip_key"],
+                "game": candidate["game"], "source": candidate["source"],
+                "session": candidate["session"], "split": "train", "reason": "source_cap",
+            })
+    return kept, dropped
+
+
+def run_split(data_root: Path, config_path: Path, *, plan: bool = False, reset: bool = False, freeze: bool = False) -> dict[str, Any]:
+    """Build or report a stable split according to a policy."""
+    config = load_config(config_path)
+    manifests = data_root / "manifests"
+    slots_path, clips_path = manifests / "slots_clean.csv", manifests / "clips_index.csv"
+    raw_slots, raw_clips = _load_csv(slots_path), _load_csv(clips_path)
+    clips = {row["clip_key"]: row for row in raw_clips}
+    slots = [dict(row) for row in raw_slots if _as_bool(row.get("keep", ""))]
+    for slot in slots:
+        clip = clips.get(slot.get("clip_key", ""))
+        if clip is None:
+            raise SplitterError(f"slot references absent clip: {slot.get('clip_key')}", 2)
+        slot.update({key: clip.get(key, "") for key in ("game", "source", "public_examples_ok")})
+        slot["source_kind"] = clip.get("source_kind") or _source_kind(slot["source"])
+        slot["bucket"] = int(slot["bucket"])
+    sessions = build_sessions(list(clips.values()), float(config["session_gap_min"]))
+    slot_by_clip: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for slot in slots:
+        slot_by_clip[slot["clip_key"]].append(slot)
+    output = manifests / "splits" / config["split_id"]
+    ledger_path, freeze_path = output / "ledger.csv", output / "freeze.json"
+    frozen = freeze_path.is_file()
+    if reset and frozen:
+        raise SplitterError("--reset is refused for a frozen split", 1)
+    if plan:
+        for session in sessions:
+            size = sum(len(slot_by_clip[clip["clip_key"]]) for clip in session["clips"])
+            print(f"{session['session']}: {size} kept slot(s)")
+        return {"sessions": sessions}
+    if reset and ledger_path.exists():
+        ledger_path.unlink()
+    ledger = _load_ledger(ledger_path)
+    heldout = {game: set(sources) for game, sources in config["holdout_sources"].items()}
+    _validate_ledger(ledger, clips, heldout)
+    now, reassigned, unused = _now(), [], []
+    assigned_slots: list[dict[str, Any]] = []
+    historical_sessions: dict[str, str] = {}
+    prior_sessions = output / "sessions.csv"
+    if frozen and prior_sessions.is_file():
+        historical_sessions = {row["clip_key"]: row["session"] for row in _load_csv(prior_sessions)}
+
+    visit = sorted(sessions, key=lambda item: (_sha256_text(f"{config['seed']}:{min(clip['clip_key'] for clip in item['clips'])}"), item["game"], item["source"]))
+    for session in visit:
+        session_clips = session["clips"]
+        known = [ledger[clip["clip_key"]] for clip in session_clips if clip["clip_key"] in ledger]
+        is_holdout = session["source"] in heldout.get(session["game"], set())
+        known_splits = {entry["split"] for entry in known}
+        bridge = len(known_splits) > 1
+        if is_holdout:
+            chosen = "test_source"
+        elif known:
+            chosen = max(known_splits, key=SPLIT_RANK.__getitem__)
+        else:
+            chosen = _choose_split(session, assigned_slots, config["targets"])
+        for clip in session_clips:
+            clip_key = clip["clip_key"]
+            old = ledger.get(clip_key)
+            if frozen and bridge and old is None:
+                for slot in slot_by_clip[clip_key]:
+                    unused.append({"slot_id": slot["slot_id"], "clip_key": clip_key, "game": session["game"], "source": session["source"], "session": session["session"], "split": "", "reason": "bridges_splits"})
+                continue
+            split = old["split"] if frozen and old else chosen
+            if old and not frozen and SPLIT_RANK[old["split"]] < SPLIT_RANK[chosen]:
+                reassigned.append({"clip_key": clip_key, "from_split": old["split"], "to_split": chosen, "run_utc": now, "reason": "bridges_splits"})
+                old["split"] = chosen
+                split = chosen
+            elif old and not frozen:
+                split = old["split"] if SPLIT_RANK[old["split"]] >= SPLIT_RANK[chosen] else chosen
+            if old is None:
+                ledger[clip_key] = {"clip_key": clip_key, "split": split, "first_assigned_utc": now, "note": ""}
+            assigned_session = historical_sessions.get(clip_key, session["session"]) if frozen else session["session"]
+            for slot in slot_by_clip[clip_key]:
+                row = dict(slot)
+                row.update({"session": assigned_session, "split": split})
+                row["tier"] = tier_for_slot(clip_key, int(row["bucket"]), row.get("path_low", ""))
+                row["path"] = row["path_low"] if row["tier"] == "crf45" else row["path_full"]
+                row["label"] = GAMES.index(row["game"])
+                assigned_slots.append(row)
+
+    assigned_slots, capped_unused = _apply_source_cap(assigned_slots, int(config["seed"]), float(config["max_source_share"]))
+    unused.extend(capped_unused)
+    output.mkdir(parents=True, exist_ok=True)
+    for split in SPLITS:
+        rows = [
+            {column: slot.get(column, "") for column in SPLIT_COLUMNS}
+            for slot in sorted((slot for slot in assigned_slots if slot["split"] == split), key=lambda row: row["slot_id"])
+        ]
+        write_table(rows, SPLIT_COLUMNS, output / f"{split}.csv", output / f"{split}.json")
+    ledger_rows = [ledger[key] for key in sorted(ledger)]
+    write_table(ledger_rows, LEDGER_COLUMNS, ledger_path, output / "ledger.json")
+    session_rows = []
+    for session in sessions:
+        for clip in session["clips"]:
+            clip_key = clip["clip_key"]
+            entry = ledger.get(clip_key)
+            session_rows.append({
+                "clip_key": clip_key, "game": session["game"], "source": session["source"],
+                "session": historical_sessions.get(clip_key, session["session"]) if frozen else session["session"],
+                "recorded_start_utc": clip.get("recorded_start_utc", ""),
+                "recorded_start_source": clip.get("recorded_start_source", ""),
+                "duration_s": clip.get("duration_s", ""),
+                "slots_kept": len(slot_by_clip[clip_key]), "split": entry["split"] if entry else "",
+            })
+    write_table(sorted(session_rows, key=lambda row: row["clip_key"]), SESSION_COLUMNS, output / "sessions.csv", output / "sessions.json")
+    counts = _write_counts(output, assigned_slots)
+    sources = _write_sources(output, assigned_slots)
+    write_table(unused, UNUSED_COLUMNS, output / "unused.csv", output / "unused.json")
+    write_table(reassigned, REASSIGNED_COLUMNS, output / "reassigned.csv", output / "reassigned.json")
+    warnings: list[str] = []
+    for game in GAMES:
+        normal_sessions = [item for item in sessions if item["game"] == game and item["source"] not in heldout.get(game, set())]
+        if len(normal_sessions) < 3:
+            warnings.append(f"{game}: fewer than three non-held-out sessions")
+        for split in SPLITS:
+            game_slots = [slot for slot in assigned_slots if slot["game"] == game and slot["split"] == split]
+            if not game_slots:
+                warnings.append(f"{game}: empty {split}")
+            elif len(game_slots) >= 200:
+                low_share = sum(slot["tier"] == "crf45" for slot in game_slots) / len(game_slots)
+                if not .45 <= low_share <= .55:
+                    warnings.append(f"{game}/{split}: crf45 share outside 45-55%")
+        train_slots = [slot for slot in assigned_slots if slot["game"] == game and slot["split"] == "train"]
+        if train_slots:
+            by_source = defaultdict(int)
+            for slot in train_slots:
+                by_source[slot["source"]] += 1
+            if max(by_source.values()) / len(train_slots) > 1 / 15:
+                warnings.append(f"{game}: a source exceeds 1/15 of train slots")
+    summary = {
+        "config": config, "input_hashes": {"slots_clean.csv": _file_hash(slots_path), "clips_index.csv": _file_hash(clips_path)},
+        "split_hashes": {split: _file_hash(output / f"{split}.csv") for split in SPLITS},
+        "counts": counts, "sources": sources, "warnings": warnings, "frozen": frozen,
+    }
+    if freeze:
+        if not config["test_design"].strip():
+            raise SplitterError("--freeze requires a non-empty test_design", 1)
+        commit = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=False).stdout.strip()
+        write_json({"time": now, "git_commit": commit, "test_design": config["test_design"]}, freeze_path)
+        summary["frozen"] = True
+    write_json(summary, output / "summary.json")
+    for warning in warnings:
+        print(f"warning: {warning}", file=sys.stderr)
+    return summary
+
+
+def build_arg_parser() -> argparse.ArgumentParser:
+    """Build the command-line parser."""
+    parser = argparse.ArgumentParser(description="Build stable, session-aware dataset split manifests.")
+    parser.add_argument("--data-root", type=Path, default=Path("data"))
+    parser.add_argument("--config", type=Path, default=Path("config/split.json"))
+    parser.add_argument("--plan", action="store_true")
+    parser.add_argument("--reset", action="store_true")
+    parser.add_argument("--freeze", action="store_true")
+    return parser
+
+
+def main(argv: Iterable[str] | None = None) -> int:
+    """Run the dataset splitter command."""
+    args = build_arg_parser().parse_args(list(argv) if argv is not None else None)
+    try:
+        summary = run_split(args.data_root, args.config, plan=args.plan, reset=args.reset, freeze=args.freeze)
+    except SplitterError as exc:
+        print(f"gfc-split: {exc}", file=sys.stderr)
+        return exc.exit_code
+    if not args.plan:
+        print(f"wrote split {summary['config']['split_id']}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
