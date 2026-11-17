@@ -1,7 +1,7 @@
 # Make sources (`gfc-make-sources`)
 
 **Stage:** 1 — Personal-clip data tools  
-**Status:** planned  
+**Status:** implemented  
 **Back to:** [ROADMAP.md](../ROADMAP.md) · [training pipeline](../../training-pipeline.md)  
 **Pairs with:** [ingest-pack.md](ingest-pack.md) (same output layout for contributor zips)
 
@@ -96,10 +96,10 @@ No absolute path, hostname or username appears in any file this tool writes.
 
 ## Acceptance checks
 
-- [ ] Layout under `frame_sources/<Game>/<source>/<clip_key>/` is identical to an ingested pack's
-- [ ] Rerun is a no-op; a clip already delivered in a contributor pack is skipped
-- [ ] Parity test green
-- [ ] CLI entry `gfc-make-sources` in `pyproject.toml`
+- [x] Layout under `frame_sources/<Game>/<source>/<clip_key>/` is identical to an ingested pack's
+- [x] Rerun is a no-op; a clip already delivered in a contributor pack is skipped
+- [x] Parity test green
+- [x] CLI entry `gfc-make-sources` in `pyproject.toml`
 
 ## Ties to decisions
 
