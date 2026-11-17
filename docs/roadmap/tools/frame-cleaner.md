@@ -1,7 +1,8 @@
 # Frame cleaner
 
 **Stage:** 1 — Personal-clip data tools  
-**Status:** implemented (manifest mode); slot mode planned  
+**Status:** implemented  
+
 **Back to:** [ROADMAP.md](../ROADMAP.md) · [training pipeline](../../training-pipeline.md)
 
 ## What it does (high level)
@@ -29,28 +30,35 @@ Loading screens, black frames, and near-identical samples waste capacity and can
 - **Non-game / lobby detector (D11):** **decided** — simple lobby/non-game score + threshold, validated on a hand-labelled sample (TA). Not coded yet; until then black/blur/dedupe + manual quarantine of lobby/desktop frames
 - Reasons always logged (`black` / `blur` / `duplicate` / `missing_file`)
 
-## CLI
+## Usage
+
+### Manifest mode (single extract)
 
 ```bash
 gfc-clean-frames data/frames/valorant_smoke/frames_manifest.csv -o data/frames/valorant_smoke_cleaned
+python -m game_frame_classifier.frame_cleaner MANIFEST -o OUTPUT_DIR
 ```
 
-Flags: `--no-copy`, `--debug`, `--black-mean-max`, `--black-std-max`, `--blur-variance-min`, `--phash-size`, `--phash-max-distance`, `--skip-missing`.
+Flags: `-o/--output-dir` (required), `--no-copy`, `--debug`, `--black-mean-max`, `--black-std-max`, `--blur-variance-min`, `--phash-size`, `--phash-max-distance`, `--skip-missing`.
 
-### `--debug`
+### `--debug` (manifest)
 
 - Copies rejected frames to `output_dir/rejected/<reason>/` (kept on disk for visual audit)
 - Duplicates named `…__dup_of_<matched_frame_id>…`
 - `rejects.csv` includes `matched_frame_id`, `matched_path`, `hamming_distance`, metrics, `debug_path`
 
-## Slot mode (planned; the mode the training pipeline uses)
+## Slot mode (training pipeline)
 
 Step 3 of the [training pipeline](../../training-pipeline.md). The single-manifest mode above stays for debugging one extract.
 
 ```bash
 gfc-clean-frames --slots data/manifests/slots.csv
 gfc-clean-frames --slots data/manifests/slots.csv --debug
+gfc-clean-frames --slots data/manifests/slots.csv --data-root data
+python -m game_frame_classifier.frame_cleaner --slots data/manifests/slots.csv
 ```
+
+Flags: `--slots` (required for this mode), `--data-root` (default: parent of the manifests directory that holds `slots.csv`), `--debug`, and the same black / blur / aHash threshold flags as manifest mode. Do not pass a positional manifest or `-o` with `--slots`.
 
 | | |
 |---|---|
@@ -91,7 +99,7 @@ gfc-clean-frames --slots data/manifests/slots.csv --debug
 
 ## Acceptance checks
 
-- [ ] Slot mode: `slots_clean.csv` written; every kept slot has both tier files; rerun identical
+- [x] Slot mode: `slots_clean.csv` written; every kept slot has both tier files; rerun identical
 - [x] Black synthetic → reject reason `black`
 - [x] Blurry synthetic → `blur`
 - [x] Near-duplicate pair → one kept, one `duplicate`
@@ -104,8 +112,8 @@ gfc-clean-frames --slots data/manifests/slots.csv --debug
 
 | Kind | Cases |
 |---|---|
-| **Unit** | Black/blur heuristics; aHash distance; full `clean_frames` drop set; copy-kept paths |
-| **System** | Synthetic folder + manifest → kept/reject counts + summary JSON |
+| **Unit** | Black/blur heuristics; aHash distance; full `clean_frames` drop set; copy-kept paths; slot verdict from `full`; cross-clip same-source dupe; different-source twins kept; quarantine `manual:<reason>`; visit order independent of CSV row order |
+| **System** | Synthetic folder + manifest → kept/reject counts + summary JSON; synthetic derived tree + `slots.csv` → `slots_clean` with expected reasons; slot rerun byte-identical; frames untouched without `--debug` |
 | **Personal** | If `data/frames/valorant_smoke` exists, clean it (auto-skip otherwise) |
 
 ```bash
