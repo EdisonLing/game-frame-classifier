@@ -194,6 +194,35 @@ def write_clip_catalog(
     return csv_path, json_path
 
 
+def _clip_from_mapping(row: dict) -> ClipRecord:
+    return ClipRecord(
+        clip_id=str(row["clip_id"]),
+        path=str(row["path"]),
+        game=str(row["game"]),
+        source=str(row["source"]),
+        filename=str(row["filename"]),
+        duration_s=float(row["duration_s"]),
+        width=int(row["width"]),
+        height=int(row["height"]),
+    )
+
+
+def load_clip_catalog(path: Path | str) -> list[ClipRecord]:
+    """Load clips.csv or clips.json into ClipRecord list."""
+    path = Path(path)
+    if not path.is_file():
+        raise FileNotFoundError(f"clip catalog not found: {path}")
+
+    if path.suffix.lower() == ".json":
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(data, list):
+            raise ValueError(f"expected a JSON list in {path}")
+        return [_clip_from_mapping(row) for row in data]
+
+    with path.open(newline="", encoding="utf-8") as f:
+        return [_clip_from_mapping(row) for row in csv.DictReader(f)]
+
+
 def build_catalog(
     raw_dir: Path | str,
     output_dir: Path | str,

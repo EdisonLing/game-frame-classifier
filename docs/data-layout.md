@@ -73,7 +73,7 @@ data/raw/
 
 A future script can walk `data/raw/**`, read game + source from the **filepath**, and **copy** videos into whatever tooling layout we want. Collection stays drag-and-drop; normalization is a separate step.
 
-Until that exists, extract manually with `--game` matching the game folder name.
+Batch extract reads game + source from the catalog (paths under `raw/`) and writes under `frames/<Game>/<source>/<stem>/`. Single-clip extract still accepts `--game` by hand.
 
 ## Derived frames (`data/frames/`)
 

@@ -26,7 +26,7 @@ Loading screens, black frames, and near-identical samples waste capacity and can
 - Drop **blur**: FIND_EDGES variance `< 400` (synthetic blur ~150; Valorant HUD frames ~2k+)
 - **Near-dupes:** 8×8 aHash, Hamming distance `≤ 6` → duplicate (first frame wins)
 - **Menus/HUDs kept** (D06) — no menu stripper
-- **Non-game / lobby detector:** not implemented yet — **D11 still open**
+- **Non-game / lobby detector (D11):** **decided** — simple lobby/non-game score + threshold, validated on a hand-labelled sample (TA). Not coded yet; until then black/blur/dedupe + manual quarantine of lobby/desktop frames
 - Reasons always logged (`black` / `blur` / `duplicate` / `missing_file`)
 
 ## CLI
@@ -50,7 +50,8 @@ Flags: `--no-copy`, `--debug`, `--black-mean-max`, `--black-std-max`, `--blur-va
 - [x] Near-duplicate pair → one kept, one `duplicate`
 - [x] Manifest + reject log + summary written
 - [x] Personal Valorant smoke: runs without mass-deleting gameplay frames
-- [ ] D11 non-game rule (deferred)
+- [x] D11 rule defined (detector planned; interim manual quarantine)
+- [ ] D11 detector implemented + validated on hand-labelled sample
 
 ## Testing
 
