@@ -113,7 +113,7 @@ offset = int(sha256(clip_key)[:8], 16)
 tier   = "crf45" if (bucket + offset) % 2 == 1 else "full"
 ```
 
-Consecutive samples of a clip alternate, so each clip is half and half to within one frame. The splitter writes the result into the `tier` column; nothing downstream picks a tier itself. The per-tier diagnostic (every held-out slot scored at both tiers) is part of evaluation.
+Consecutive samples of a clip alternate, so each clip is half and half to within one frame. The `crf45` tier is made by the GPU encoder at QP 51 where available and by libx264 CRF 45 otherwise; the encoder is recorded per frame and reported by evaluation (D28). The splitter writes the result into the `tier` column; nothing downstream picks a tier itself. The per-tier diagnostic (every held-out slot scored at both tiers) is part of evaluation.
 
 ### 3.4 Image contract
 
@@ -220,6 +220,7 @@ Options and a suggestion are in [dataset-splitter.md](roadmap/tools/dataset-spli
 | Proposal | Now | Why |
 |---|---|---|
 | Random CRF 28–40 on 30–50 % of train frames; test at CRF 0 / 28 / 38 | Two tiers on disk, full and CRF 45; every slot used once, half and half; per-tier diagnostic on held-out slots | D04, D22: at 256×144 only a harsh encode is visible; one degraded setting is enough |
+| Re-encode with libx264 | Low tier from the GPU encoder (QP 51) with libx264 fallback, encoder recorded per frame | D28: speed, and real streams use these hardware encoders; accuracy is reported by encoder |
 | Frames extracted straight to 256×144 | Native stills first, 256×144 derived from them | D26, D27: contributor packs and personal clips share one path |
 | Fixed-interval extract | One frame per 5 s bucket chosen on real timestamps | D26: variable-frame-rate captures |
 | Perceptual-hash dedupe per video | Average-hash dedupe per slot, across all clips of a source | Tiers stay paired; overlapping clips are caught |

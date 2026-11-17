@@ -29,7 +29,7 @@ optional (docs / reference only):
 
 **Not** CRF on already-downscaled JPEGs (that was the early proxy; rejected).
 
-**Encoder (D28):** default / friend / named eval low = **libx264**. Personal tooling may add an **AMF toggle** for faster degraded encodes on my AMD GPU; record encoder in the manifest. Do not make AMF (or NVENC) the Frame Export Kit default.
+**Encoder (D28):** this interim debugging tool stays on libx264. The training path (Frame Export Kit and `gfc-make-sources`) encodes the low tier on the GPU (`h264_d3d12va`, QP 51) with a libx264 fallback, and records the encoder per frame.
 
 ## Tier map (current)
 

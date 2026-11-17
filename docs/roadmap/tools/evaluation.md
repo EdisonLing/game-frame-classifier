@@ -71,6 +71,7 @@ Evaluation knows nothing else about a model. A new model type only has to provid
 | `confusion` | 6×6 counts, rows = true, columns = predicted, in label order |
 | `lookalike` | Overwatch 2 ↔ Marvel Rivals: each direction's confusion rate and the pair's mean F1 |
 | `by_tier` | Accuracy and macro-F1 for the rows assigned `full` and for those assigned `crf45` |
+| `by_encoder` | Accuracy and n for `crf45` rows per encoder (`h264_d3d12va`, `libx264`), joined from `clips_index.low_encoder`; also by encoder within each game where both occur. A large gap is the signal to revisit D28 |
 | `by_source` | Accuracy and n per source (and `source_kind`) |
 | `by_clip` | Accuracy and n per `clip_key`, worst first (per-video error breakdown) |
 | `provenance` | Run id, model type, split id, split hash, hash-changed flag, time |

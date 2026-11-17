@@ -68,6 +68,7 @@ Exit codes: `0` success, `1` at least one clip failed, `2` usage or missing inpu
 | `native_width`, `native_height`, `padded` | Native geometry (`width`, `height` in `clip.json`); `padded` = aspect pad applied |
 | `hdr`, `vfr`, `video_codec`, `encoder_tag` | From `clip.json`, for shortcut analysis |
 | `low_tier` | e.g. `crf45` |
+| `low_encoder` | From `clip.json`: `h264_d3d12va`, `libx264`, `mixed`, or empty for packs made before D28's revision (treated as `libx264`). Lets evaluation split results by encoder |
 | `slots` | Paired slots found on disk |
 | `derive_id` | `pad16x9_bicubic_256x144_q2` or `compact_passthrough` |
 
