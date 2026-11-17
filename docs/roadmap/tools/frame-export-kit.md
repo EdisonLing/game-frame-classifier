@@ -194,12 +194,14 @@ At least one tier must exist (`include_full` or a non-empty `crf_list`). The too
   "consent_public_examples": false,
   "consent_utc": "2026-11-20T03:10:02Z",
   "last_game": "Valorant",
-  "frame_mode_override": null
+  "frame_mode_override": null,
+  "quality_mode": "both"
 }
 ```
 
 - `handle` is normalised to `[a-z0-9_]{1,24}` (lowercase, spaces and dashes to `_`, other characters dropped); the prompt repeats until non-empty. It becomes the source id `contributor_<handle>` at ingest.
 - `contributor_id` is a random UUID created once; it ties packs to one person even if the handle changes, and lets me delete someone's data on request.
+- `quality_mode` is `both` (full and low tier, the default) or `quick` (full tier only, D04). It is asked on first run, and once on the next run for a `user.json` made before it existed. To change it: type `m` at the Start question, or run with `--change-mode`. With `--yes` and no saved answer, `both` is used. The prompt and the kit README tell the contributor that quick-mode pictures are less useful: they can't feed the low-quality half of training (D04), only the full-quality half and evaluation, so both qualities is the recommended answer. Quick mode sets the run's `crf_list` to empty, so no video is re-encoded: about 4× faster on the CPU (the CRF re-encode is 75–78 % of the time, see handoff-sizes). The pack records it in `output.quality_mode` and `output.tiers` (`["full"]`). A change of mode starts a separate pack, because the mode is part of the work-folder key, so one pack never mixes clips with and without the low tier.
 - **Precedence:** command-line flag > `user.json` override > `recipe.json`.
 
 ### 4.3 `config/history.json`

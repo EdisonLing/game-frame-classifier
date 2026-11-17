@@ -15,6 +15,8 @@ from game_frame_classifier.sourcing.labels import normalize_handle
 
 from . import paths
 
+QUALITY_MODES = ("both", "quick")
+
 
 @dataclass
 class UserSettings:
@@ -25,6 +27,8 @@ class UserSettings:
     consent_utc: str
     last_game: str = ""
     frame_mode_override: str | None = None
+    # "both" = full + low-quality copy; "quick" = full only (D04). None = not asked yet.
+    quality_mode: str | None = None
 
 
 def utc_now_iso() -> str:
@@ -75,6 +79,7 @@ def load_user() -> UserSettings | None:
         consent_utc=str(data.get("consent_utc") or ""),
         last_game=str(data.get("last_game") or ""),
         frame_mode_override=override if override in ("native", "compact") else None,
+        quality_mode=data.get("quality_mode") if data.get("quality_mode") in QUALITY_MODES else None,
     )
 
 

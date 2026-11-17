@@ -143,7 +143,7 @@ def estimate_seconds(items: list[ScanItem], recipe: Recipe, gpu: bool = False) -
 def run_key(ctx: RunContext) -> str:
     text = "|".join([
         str(ctx.root.resolve()).casefold(), ctx.game, ctx.other_name,
-        ctx.recipe.recipe_id, ctx.recipe.frame_mode,
+        ctx.recipe.recipe_id, ctx.recipe.frame_mode, ",".join(ctx.recipe.tiers),
     ])
     return hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
 
@@ -492,6 +492,7 @@ def finalize(
         },
         "output": {
             "tiers": list(ctx.recipe.tiers),
+            "quality_mode": "both" if ctx.recipe.crf_list else "quick",
             "frame_mode": ctx.recipe.frame_mode,
             "slots": sum(d["result"]["slots"] for d in done.values()),
             "images": len(images),

@@ -80,6 +80,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--output", help="existing folder to save the finished zip in (default: the tool's output folder)")
     p.add_argument("--no-open", action="store_true", help="do not open Explorer when done")
     p.add_argument("--cpu", action="store_true", help="decode and encode on the CPU even if the graphics card works")
+    p.add_argument("--change-mode", action="store_true", help="choose again between quick mode and both qualities")
     p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     return p
 
@@ -102,6 +103,43 @@ def ask_yes_no(prompt: str, default: bool | None) -> bool:
         print("Please type y or n.")
 
 
+QUICK_NOTE = """
+Quality mode. By default the tool saves each picture twice: once at full quality,
+and once from a deliberately low-quality copy of the video, which is most of the work.
+The low-quality copy teaches the model to handle blurry, stream-like video, and it can
+only be made from your original videos, not from the pictures afterwards.
+Quick mode skips it: about 4 times faster, but your pictures are less useful (they
+still help the rest of the training). If you have the time, please keep both.
+You can change this later: at the Start question, type m.
+"""
+
+
+def ask_quality_mode() -> str:
+    print(QUICK_NOTE)
+    return "quick" if ask_yes_no("Use quick mode (faster, but less useful pictures)?", False) else "both"
+
+
+def mode_label(mode: str) -> str:
+    return "quick (full quality only)" if mode == "quick" else "both qualities (full and low)"
+
+
+def mode_overrides(mode: str) -> dict[str, Any]:
+    return {"crf_list": []} if mode == "quick" else {}
+
+
+def ask_start() -> str:
+    """"yes", "no" or "mode" (change the quality mode first)."""
+    while True:
+        answer = input("Start? [Y/n, or m to change the quality mode]: ").strip().lower()
+        if answer in ("", "y", "yes"):
+            return "yes"
+        if answer in ("n", "no"):
+            return "no"
+        if answer in ("m", "mode"):
+            return "mode"
+        print("Please type y, n or m.")
+
+
 def first_run(recipe: Recipe) -> settings.UserSettings | None:
     print(NOTICE.format(interval=f"{recipe.interval_s:g}"))
     handle = ""
@@ -114,6 +152,7 @@ def first_run(recipe: Recipe) -> settings.UserSettings | None:
         return None
     public = ask_yes_no("OK if a few of your pictures appear in my report or README?", True)
     user = settings.new_user(handle, public)
+    user.quality_mode = ask_quality_mode()
     settings.save_user(user)
     print(f"Saved. You are '{handle}'.\n")
     return user
@@ -279,7 +318,10 @@ def choose_encoder(
     if args.cpu:
         print("Video encoding: CPU (--cpu).")
         return None
-    if recipe.encoder != "auto" or not recipe.crf_list:
+    if not recipe.crf_list:
+        print("Video encoding: none needed (quick mode).")
+        return None
+    if recipe.encoder != "auto":
         print("Video encoding: CPU (set in config/recipe.json).")
         return None
     status = gpu.detect_gpu(tools, paths.ensure_inside_home(probe_dir))
@@ -347,6 +389,14 @@ def _main(args: argparse.Namespace) -> int:
         user = first_run(base)
         if user is None:
             return EXIT_OK
+    if args.change_mode and not interactive:
+        print("--change-mode asks a question, so it can't be used with --yes.")
+        return EXIT_USAGE
+    if interactive and (user.quality_mode is None or args.change_mode):
+        user.quality_mode = ask_quality_mode()
+        settings.save_user(user)
+        print(f"Saved: {mode_label(user.quality_mode)}.\n")
+    mode = user.quality_mode or "both"
 
     root = Path(args.folder) if args.folder else (ask_folder() if interactive else None)
     if root is None:
@@ -362,7 +412,9 @@ def _main(args: argparse.Namespace) -> int:
 
     frame_mode = "compact" if args.compact else (user.frame_mode_override or base.frame_mode)
     budget_min = base.footage_budget_min if args.budget_hours is None else int(round(args.budget_hours * 60))
-    recipe = load_recipe(recipe_path, {"frame_mode": frame_mode, "footage_budget_min": budget_min})
+    recipe = load_recipe(
+        recipe_path, {"frame_mode": frame_mode, "footage_budget_min": budget_min, **mode_overrides(mode)},
+    )
 
     print(f"Scanning {root.name} ...")
     items = discover(root, recipe, exclude=home)
@@ -403,7 +455,9 @@ def _main(args: argparse.Namespace) -> int:
         new_min = ask_budget(budget_min)
         if new_min != budget_min:
             budget_min = new_min
-            recipe = load_recipe(recipe_path, {"frame_mode": frame_mode, "footage_budget_min": budget_min})
+            recipe = load_recipe(
+                recipe_path, {"frame_mode": frame_mode, "footage_budget_min": budget_min, **mode_overrides(mode)},
+            )
             apply_budget(items, budget_min * 60)
             over_budget = any(it.detail == "over_budget" for it in items)
             print_selection(items, over_budget)
@@ -433,6 +487,7 @@ def _main(args: argparse.Namespace) -> int:
         f"Estimated time: about {fmt_duration(secs)} to {fmt_duration(secs * 2)}. "
         f"Estimated output: about {fmt_bytes(est)}. Free space: {fmt_bytes(free)}."
     )
+    print(f"Quality mode: {mode_label(mode)}.")
     if zip_dir != out_dir:
         print(f"The finished zip will be saved in: {zip_dir}")
     if free < est * DISK_FACTOR:
@@ -441,9 +496,17 @@ def _main(args: argparse.Namespace) -> int:
     if zip_dir != out_dir and shutil.disk_usage(zip_dir).free < est:
         print(f"Not enough free disk space in {zip_dir}: the zip needs about {fmt_bytes(est)}.")
         return EXIT_DISK
-    if interactive and not ask_yes_no("Start?", True):
-        print("OK, nothing was processed.")
-        return EXIT_OK
+    if interactive:
+        answer = ask_start()
+        if answer == "mode":
+            user.quality_mode = ask_quality_mode()
+            settings.save_user(user)
+            print(f"Saved: {mode_label(user.quality_mode)}.\n")
+            args.change_mode = False
+            return _main(args)
+        if answer == "no":
+            print("OK, nothing was processed.")
+            return EXIT_OK
 
     user.last_game = game
     settings.save_user(user)

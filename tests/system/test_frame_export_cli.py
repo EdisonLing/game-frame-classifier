@@ -20,6 +20,7 @@ USER = {
     "consent_utc": "2026-01-01T00:00:00Z",
     "last_game": "",
     "frame_mode_override": None,
+    "quality_mode": "both",
 }
 
 
@@ -166,7 +167,7 @@ def test_first_run_prompts(tmp_path, monkeypatch):
     home = make_home(tmp_path, monkeypatch, with_user=False)
     clips = tmp_path / "Overwatch clips"
     make_testsrc_video(clips / "x.mp4", duration_s=6, width=320, height=180)
-    answers = iter(["Alex Smith", "", "", str(clips), "", "", "", "", ""])
+    answers = iter(["Alex Smith", "", "", "", str(clips), "", "", "", "", ""])
     monkeypatch.setattr("builtins.input", lambda prompt="": next(answers))
 
     assert cli.main(["--no-open"]) == 0
@@ -175,6 +176,7 @@ def test_first_run_prompts(tmp_path, monkeypatch):
     assert user["handle"] == "alex_smith"
     assert user["consent_public_examples"] is True
     assert user["last_game"] == "Overwatch_2"
+    assert user["quality_mode"] == "both"
     assert len(list((home / "output").glob("GFC_Overwatch_2_alex_smith_*.zip"))) == 1
     assert next(answers, None) is None
 
@@ -281,3 +283,46 @@ def test_clip_level_fallback_warns_then_stops_trying_the_gpu(tmp_path, monkeypat
     with zipfile.ZipFile(zip_path) as zf:
         log = next(zf.read(n) for n in zf.namelist() if n.endswith("run_log.txt")).decode("utf-8")
     assert "gpu fallback" in log and "gpu stopped after 3 failed clips in a row" in log
+
+
+def _write_user(home, **changes):
+    (home / "config" / "user.json").write_text(json.dumps({**USER, **changes}), encoding="utf-8")
+
+
+@requires_ffmpeg
+def test_quick_mode_packs_full_quality_only_and_ingests(tmp_path, monkeypatch, capsys):
+    home = make_home(tmp_path, monkeypatch)
+    _write_user(home, quality_mode="quick")
+    clips = tmp_path / "clips"
+    make_testsrc_video(clips / "a.mp4", duration_s=12, width=320, height=180)
+    assert cli.main([str(clips), "--yes", "--game", "Valorant", "--no-open", "--budget-hours", "0"]) == 0
+    assert "quick mode" in capsys.readouterr().out
+    (zip_path,) = sorted((home / "output").glob("GFC_Valorant_tester_*.zip"))
+    manifest = pack_table(zip_path, "pack_manifest.json")
+    assert manifest["output"]["tiers"] == ["full"]
+    assert manifest["output"]["quality_mode"] == "quick"
+    assert {f["tier"] for f in pack_table(zip_path, "frames.json")} == {"full"}
+    from game_frame_classifier.ingest_pack import main as ingest_main
+    assert ingest_main([str(zip_path), "--data-root", str(tmp_path / "data"), "--recipe", str(ROOT / "config" / "recipe.json")]) == 0
+    (clip_dir,) = (tmp_path / "data" / "frame_sources" / "Valorant" / "contributor_tester").glob("c*")
+    assert sorted(p.name for p in clip_dir.iterdir() if p.is_dir()) == ["full"]
+
+
+@requires_ffmpeg
+def test_existing_user_is_asked_once_then_can_change_mode(tmp_path, monkeypatch):
+    home = make_home(tmp_path, monkeypatch)
+    _write_user(home, quality_mode=None)
+    clips = tmp_path / "clips"
+    make_testsrc_video(clips / "a.mp4", duration_s=6, width=320, height=180)
+    # Asked about quick mode (yes), then at Start: m (change mode) -> no, then Start -> n.
+    answers = iter(["y", "Valorant", "", "", "", "", "m", "n", "Valorant", "", "", "", "", "n"])
+    monkeypatch.setattr("builtins.input", lambda prompt="": next(answers))
+    assert cli.main([str(clips), "--no-open"]) == 0
+    assert next(answers, None) is None
+    user = json.loads((home / "config" / "user.json").read_text(encoding="utf-8"))
+    assert user["quality_mode"] == "both"
+
+
+def test_change_mode_needs_a_terminal(tmp_path, monkeypatch):
+    make_home(tmp_path, monkeypatch)
+    assert cli.main([str(tmp_path), "--yes", "--change-mode"]) == cli.EXIT_USAGE
