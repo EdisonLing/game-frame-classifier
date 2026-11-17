@@ -35,7 +35,7 @@ The frames they send are a **source of truth** in my pipeline (the masters are g
 
 ## 2. Friend user flow
 
-1. **Get the pack.** I send `GFC-FrameExportKit-v1.zip` (about 120 MB, mostly ffmpeg). They right-click → *Extract All*. Running from inside the zip is detected and explained.
+1. **Get the pack.** I send `GFC-FrameExportKit-v2.0.0.zip` (about 130 MB, mostly ffmpeg). They right-click → *Extract All*. Running from inside the zip is detected and explained.
 2. **Start.** Either drag a folder of clips onto `START HERE.bat`, or double-click it and drag the folder into the window when asked.
 3. **First run only:** a short notice of what is collected, then four prompts, saved to `config/user.json`:
    - name / handle (becomes the source id)
@@ -51,7 +51,7 @@ The frames they send are a **source of truth** in my pipeline (the masters are g
 Example session (abridged):
 
 ```text
-GFC Frame Export Kit v1.0.0
+GFC Frame Export Kit v2.0.0
 Drag the folder with your clips into this window, then press Enter:
 > "D:\Videos\NVIDIA\VALORANT"
 
@@ -86,7 +86,7 @@ START HERE.bat <folder> [--game Valorant] [--other-name Apex_Legends] [--compact
 ## 3. What I ship (package layout)
 
 ```text
-GFC-FrameExportKit-v1/
+GFC-FrameExportKit-v2.0.0/
   START HERE.bat                 # launcher (drag a folder onto it)
   README.txt                     # one page, plain language (template in §14)
   app/                           # pure-stdlib Python source (readable)
@@ -414,7 +414,7 @@ CSV + JSON side by side (D20). All paths inside manifests are relative to the pa
   "schema": "gfc.pack/1",
   "pack_id": "6f1c0e5e-2b7d-4c55-8a1e-0d9b3c7a5f10",
   "created_utc": "2026-11-20T03:44:12Z",
-  "tool": { "name": "gfc-frame-export", "version": "1.0.0", "source_commit": "abc1234" },
+  "tool": { "name": "gfc-frame-export", "version": "2.0.0", "source_commit": "abc1234" },
   "recipe": { "...": "resolved recipe.json with crf_list as a list, plus sampler: bucket_v1" },
   "ffmpeg": { "ffmpeg_version": "n8.1.x-...", "ffprobe_version": "n8.1.x-...", "build": "bundled", "x264_core": "x264 - core 165 r3222 ..." },
   "host": { "os": "Windows-10.0.26100", "cpu_count": 16, "python": "3.13.x", "tz_name": "Eastern Standard Time", "utc_offset_min": -300 },

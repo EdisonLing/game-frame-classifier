@@ -66,7 +66,7 @@ One failed clip does not stop the run. Its staging folder is removed and it is r
   "schema": "gfc.personal_run/1",
   "run_id": "20261118-101500",
   "created_utc": "2026-11-18T15:15:00Z",
-  "tool": { "name": "gfc-make-sources", "version": "1.0.0", "source_commit": "abc1234" },
+  "tool": { "name": "gfc-make-sources", "version": "2.0.0", "source_commit": "abc1234" },
   "recipe": { "...": "resolved recipe, as in a pack manifest" },
   "ffmpeg": { "ffmpeg_version": "...", "ffprobe_version": "...", "build": "env", "x264_core": "..." },
   "encoder": { "requested": "gpu", "gpu_encoder": "h264_d3d12va", "gpu_available": true, "gpu_adapter": "...", "gpu_unavailable_reason": "", "gpu_stopped_reason": "", "clips_gpu": 10, "clips_cpu": 0, "clips_mixed": 0, "clips_gpu_fallback": 0 },

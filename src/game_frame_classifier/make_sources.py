@@ -40,7 +40,7 @@ from game_frame_classifier.sourcing.probe import ProbeError, ProbeInfo, probe_fi
 from game_frame_classifier.sourcing.recipe import Recipe, RecipeError, load_recipe
 from game_frame_classifier.sourcing.timeinfo import RecordingTimes, recording_times
 
-__version__ = "1.0.0"
+__version__ = "2.0.0"
 SCHEMA_PERSONAL_RUN = "gfc.personal_run/1"
 SOURCE_COMMIT = "dev"
 
