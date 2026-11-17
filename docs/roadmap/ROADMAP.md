@@ -122,7 +122,7 @@ Prove every data step on clips you already have before caring about volume.
 | Frame cleaner | **implemented** | Manifest in → kept/reject manifests; black + blur + aHash dedupe; reasons logged. **Gaps:** D11 detector not coded yet (rule decided); thresholds are v1 defaults (tunable via CLI) | [tools/frame-cleaner.md](tools/frame-cleaner.md) |
 | Quality encoder | **implemented** | Video CRF then extract; ops **full + low(45)**; medium=38 optional/docs (D04) | [tools/quality-encoder.md](tools/quality-encoder.md) |
 | Frame Export Kit | **implemented** | `gfc-frame-export` + `scripts/build_frame_export.py`; release checklist (sandbox run, friend canary) pending. Plug-and-play toolset for friends: clips → native-res stills (full + crf45) zip with full metadata; same `sourcing` code as my clips (D25–D27) | [tools/frame-export-kit.md](tools/frame-export-kit.md) |
-| Ingest pack | **spec locked** | `gfc-ingest-pack`: validate contributor zip → `data/frame_sources/` (D26); not built yet | [tools/ingest-pack.md](tools/ingest-pack.md) |
+| Ingest pack | **implemented** | `gfc-ingest-pack`: validate contributor zip → `data/frame_sources/` (D26); optional extra tests (zip-of-packs, Other, consent refuse) still open | [tools/ingest-pack.md](tools/ingest-pack.md) |
 
 **Stage 1 exit (almost):** catalog + batch extract + clean + quality tiers work. Remaining Stage 1 polish: **D11 lobby detector** (after first multi-game volume). Frame Export Kit is optional volume help, not a Stage 1 blocker.
 

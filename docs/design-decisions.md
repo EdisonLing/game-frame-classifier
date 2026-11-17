@@ -248,7 +248,7 @@ Related open fork from proposal: **flatten vs global average pooling** — decid
 
 | | |
 |---|---|
-| **Status** | decided (export kit implemented; ingest + make-sources still to build) |
+| **Status** | decided (export kit + ingest implemented; make-sources still to build) |
 | **Prompt** | Friends convert clips → frames and zip to me; plug-and-play; what to keep without masters |
 | **Options** | (A) 256×144 only (B) resolution-capped stills (C) **native res, no cap** + optional compact 256 |
 | **Decision** | **(C) No resolution cap.** After video CRF (D22), extract stills at the **source video resolution**. Default tiers: **full + crf45** (D04), set in a shipped `recipe.json` (`crf_list`, `include_full`, `interval_s` = 5), not hardcoded. **Footage budget** `footage_budget_min` = 180 per game per run (editable; `0` = all), clips spread across recording days; rerun sends more. Optional **compact** = 256×144 via the same derive step as my pipeline (D27). **Packaging:** Python embeddable + `.bat` launcher (drag a folder), pinned static ffmpeg (x264 + dav1d + zimg), stdlib-only app; Windows-first. Name and consent asked once (`user.json`), game per run, auto-zip per run (`ZIP_STORED`, verified). Friends do **not** clean. Manifests keep clip SHA-256, file timing, sanitised probe, actual frame timestamps, slot pairing, recipe, tool/ffmpeg/x264 versions, sizes and hashes; uncompressed size + file count for ingest-side bomb checks. **Track** handoff size vs source by resolution. |
@@ -260,7 +260,7 @@ Related open fork from proposal: **flatten vs global average pooling** — decid
 
 | | |
 |---|---|
-| **Status** | decided (not built yet) |
+| **Status** | decided (ingest implemented; make-sources / derive still to build) |
 | **Prompt** | Friend frames replace masters, so stills must be usable as sources alongside my own clips |
 | **Options** | (A) Keep extracting personal clips straight to 256×144; treat contributor packs as a side format (B) **Every clip, mine or a friend's, goes through the same `sourcing` code into native-res frame sources; train frames are derived from those** |
 | **Decision** | **(B).** `data/frame_sources/<Game>/<source>/<clip_key>/<tier>/` holds native-res stills for every source (`gfc-make-sources` for my clips, `gfc-ingest-pack` for friend zips). One stdlib-only package does probe, sampling and CRF for both. **Sampler `bucket_v1`:** one frame per `interval_s` bucket on the clip timeline, chosen by ffmpeg `select` on real timestamps (VFR-safe), actual `pts_time` recorded; tiers paired by bucket into **slots** (`<clip_key>:b<bucket>`). `clip_key` = `c` + first 12 hex of the clip SHA-256. Tier ids `full` / `crf<N>`. |

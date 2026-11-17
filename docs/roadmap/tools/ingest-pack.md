@@ -1,7 +1,7 @@
 # Ingest pack (`gfc-ingest-pack`)
 
 **Stage:** 1 — Personal-clip data tools  
-**Status:** planned (spec v1 locked; not built)  
+**Status:** implemented (`gfc-ingest-pack`; some spec test-table cases still optional)  
 **Back to:** [ROADMAP.md](../ROADMAP.md)  
 **Pairs with:** [frame-export-kit.md](frame-export-kit.md) §11 (zip contract this tool consumes)
 
@@ -236,12 +236,12 @@ No ffmpeg required for ingest v1 (frames are already JPEG).
 
 ## Acceptance checks
 
-- [ ] Safe zip fails closed (no files under `frame_sources/` after a bad zip)
-- [ ] Good pack places frames + `_packs/<id>/` + index + stats line
-- [ ] Duplicate `clip_sha256` skipped
+- [x] Safe zip fails closed (no files under `frame_sources/` after a bad zip)
+- [x] Good pack places frames + `_packs/<id>/` + index + stats line
+- [ ] Duplicate `clip_sha256` skipped (code path present; dedicated cross-pack test still optional)
 - [ ] `Other` lands under `_other/<other_name>/`
-- [ ] `--dry-run` is bit-identical tree before/after
-- [ ] CLI entry `gfc-ingest-pack` in `pyproject.toml`
+- [x] `--dry-run` is bit-identical tree before/after
+- [x] CLI entry `gfc-ingest-pack` in `pyproject.toml`
 
 ## Ties to decisions
 
