@@ -135,6 +135,31 @@ The only measurement on the project's own frames so far, and the best estimate o
 - At this size 2 workers are slower than 0: Windows starts the workers anew for each epoch (about 3–4 s), and the val loader paid that too (3.4 s of the 9.6 s, for 0.08 s of real work). Use workers for the train loader only, give the val loader 0 workers (no augmentation), or try `persistent_workers=True` (not measured). Workers should pay off from roughly 5,000 train frames upward.
 - The 0-worker GPU epoch (6.4 s) is faster than the table's 9 s because augmentation on these frames cost about 0.12 s per batch, against 0.21 s on the synthetic benchmark.
 
+#### Full-run estimate
+
+`num_workers` is the number of background processes that load and augment batches. With **0**, the main process builds each batch (augmentation, about 0.12–0.2 s) and then the GPU trains on it, one after the other, so the GPU idles during augmentation. With **2**, two extra processes prepare the next batches while the GPU trains, so the GPU step (0.078 s) sets the pace; the price is about 3–4 s per epoch to start the workers on Windows. The CPU rows always use 0.
+
+Epoch time is linear in frame count; per-frame cost taken from the reference measurement above: about 22 ms on the CPU and 3.1 ms on the GPU with 0 workers. The 2-worker column uses 0.078 s per batch plus the worker start-up.
+
+| Train frames | CPU epoch | GPU epoch, 0 workers | GPU epoch, 2 workers |
+|---:|---:|---:|---:|
+| 2,065 (measured) | 45–50 s | 6.4 s | 9.6 s (start-up dominates) |
+| 10,000 | ~3.7 min | ~31 s | ~17 s |
+| 30,000 | ~11 min | ~93 s | ~42 s |
+
+Epochs per full run are **not measured yet** (no labelled split has been trained). The config allows up to 30 and stops after 6 epochs without improvement in val macro-F1; for a small from-scratch CNN with Adam at lr 1e-3, assume val plateaus around epoch 10–25, so a run ends at roughly 15–30 epochs. That is a rule of thumb, to be replaced by the first real run. Totals below add about 20 s of one-time GPU warm-up:
+
+| Train frames | Epochs | CPU | GPU, 2 workers | GPU, 0 workers |
+|---:|---:|---:|---:|---:|
+| 10,000 | 15 | ~55 min | ~4.5 min | ~8 min |
+| 10,000 | 20 | ~1.2 h | ~6 min | ~11 min |
+| 10,000 | 30 | ~1.9 h | ~9 min | ~16 min |
+| 30,000 | 15 | ~2.8 h | ~11 min | ~23 min |
+| 30,000 | 20 | ~3.7 h | ~14 min | ~31 min |
+| 30,000 | 30 | ~5.6 h | ~21 min | ~47 min |
+
+These are single runs; a sweep or the flatten-versus-GAP comparison multiplies them. The reference frames are mostly benchmark extractions from one game, so augmentation cost on the real dataset may differ. Repeat the measurement once the real split exists.
+
 ### Hardware
 
 The code is the same on every device; only the installed PyTorch build changes.
