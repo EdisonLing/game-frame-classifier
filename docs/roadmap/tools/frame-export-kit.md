@@ -37,10 +37,11 @@ The frames they send are a **source of truth** in my pipeline (the masters are g
 
 1. **Get the pack.** I send `GFC-FrameExportKit-v1.zip` (about 120 MB, mostly ffmpeg). They right-click → *Extract All*. Running from inside the zip is detected and explained.
 2. **Start.** Either drag a folder of clips onto `START HERE.bat`, or double-click it and drag the folder into the window when asked.
-3. **First run only:** a short notice of what is collected, then three prompts, saved to `config/user.json`:
+3. **First run only:** a short notice of what is collected, then four prompts, saved to `config/user.json`:
    - name / handle (becomes the source id)
    - "OK to process your clips into frames for this project?" (default yes)
    - "OK if a few of your frames appear in my report or README?" (default yes)
+   - quick mode: full quality only, about 4× faster, less useful pictures (default no; §4.2)
 4. **Scan summary.** Clip count, total duration, resolutions, files skipped and why, estimated output size and time, free disk space. Over the footage budget (default 3 h per game), it picks clips spread across recording days and says to run again later for more (§5.2a).
 5. **Game prompt.** Numbered list of the six games plus *Other*. Pre-selected when folder/file names agree on one game; a warning (and confirmation) when names suggest a different game than the one picked.
 6. **Optional notes** (Enter skips each): colourblind mode, graphics preset, one game-specific question from the recipe (for example Minecraft shaders), free text.
@@ -533,9 +534,9 @@ Zip ≈ unzipped (stored JPEGs).
 - **No network access** anywhere in the code (tested by a static check that no networking module is imported). The bundled Python has its socket and SSL modules removed, and every ffmpeg/ffprobe input is limited to the `file` protocol.
 - **Writes only inside the tool folder.** Everything goes under the pack's `config/` and `output/`; every write path is resolved (junctions and symlinks followed) and refused if it lands outside the tool folder. No temp folder, registry or shortcuts. The one exception is `--output <dir>`, which the friend has to type themselves: the finished zip (written as a `.part` file, then renamed) goes into that folder, which must already exist. Nothing else goes there and existing files are never overwritten. The end-to-end tests check that the clips folder is unchanged, that nothing appears outside the tool folder, and that `--output` adds only the zip.
 - **Runs only what it ships.** In a pack, only `bin\ffmpeg.exe`, `bin\ffprobe.exe` and `%SystemRoot%\explorer.exe` (to show the zip) are started, with argument lists and no shell. The Python code is stdlib-only (static test), and both bundled downloads are pinned by SHA-256 at build time.
-- **No machine details:** no hostname, username, absolute paths or hardware serials. OS version, CPU count and timezone only.
+- **No machine details:** no hostname, username, absolute paths or hardware serials. OS version, CPU count, timezone and the graphics card model (from the GPU self-test) only.
 - **Consent recorded per pack:** data use (required) and public examples (optional, default no). Without public-example consent, that friend's frames never appear in published docs or report figures.
-- **What the notice says:** frames (no audio, no video) are sampled every 5 s; filenames, recording dates and video metadata are included; data stays on my machine for this project's training and evaluation; nothing is redistributed; ask and I delete it.
+- **What the notice says:** frames (no audio, no video) are sampled every 5 s, with a lower-quality copy unless quick mode is chosen; filenames, recording dates and video metadata are included, plus Windows version, CPU core count, graphics card model and time zone; data stays on my machine for this project's training and evaluation; nothing is redistributed; ask and I delete it.
 - Packs are stored only under gitignored `data/`. Handles never appear in tracked files.
 
 ---
@@ -621,18 +622,22 @@ scripts/build_frame_export.py
 ## 14. Appendix: friend `README.txt` (template)
 
 ```text
-GFC Frame Export Kit — for {collector_name}'s school ML project
+GFC Frame Export Kit, for {collector_name}'s school ML project
 
-1. Right-click the zip → Extract All. Open the extracted folder.
+1. Right-click the zip, choose Extract All, and open the extracted folder.
 2. Drag ONE game's clip folder onto START HERE.bat.
-3. First time only: type a name, answer two yes/no questions.
+3. First time only: type a name and answer three yes/no questions. The third is quick mode:
+   about 4x faster, but it skips the low-quality copy, which can only be made from your videos.
+   Your pictures are then less useful. To change it later, type m at the Start question.
 4. Pick the game, press Enter through the optional questions, confirm Start.
 5. Wait. Fans may spin up; you can close the window and rerun the same folder later.
-6. Send the zip from the output folder via Drive / OneDrive / WeTransfer
-   (not Discord — the free limit is too small).
+   If a WARNING says the graphics card can't be used, the run uses the CPU instead:
+   still fine to send, just slower.
+6. Send the zip from the output folder via Drive, OneDrive or WeTransfer
+   (not Discord: the free limit is too small).
 
-Repeat step 2–6 for each game. Clips are only read. Nothing is uploaded.
-If Windows blocks it: More info → Run anyway. Steam clips: export to MP4 first.
+Repeat steps 2 to 6 for each game. Clips are only read. Nothing is uploaded.
+If Windows blocks it: More info, then Run anyway. Steam clips: export to MP4 first.
 Problems? Send {collector_contact} output\...\run_log.txt.
 ```
 

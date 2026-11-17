@@ -59,9 +59,11 @@ NOTICE = """\
 This tool turns your game clips into still pictures for a school machine-learning project.
 
 What it saves: one picture every {interval} seconds from each clip (plus a lower-quality
-copy of the same picture), the clip file names, recording dates and basic video info
-(resolution, length, frame rate). No audio and no video. Nothing is uploaded: you send
-the zip yourself. Your clips are only read, never changed.
+copy of the same picture, unless you pick quick mode), the clip file names, recording
+dates and basic video info (resolution, length, frame rate). It also notes your Windows
+version, number of CPU cores, graphics card model and time zone, to explain differences
+between packs. No audio and no video. Nothing is uploaded: you send the zip yourself.
+Your clips are only read, never changed.
 
 The data stays on my PC for this project. Ask me any time and I will delete it.
 """
