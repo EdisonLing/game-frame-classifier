@@ -73,7 +73,7 @@ Within one `(game, source)`:
 1. Clips with a `recorded_start_utc` are sorted by it. A clip's end is start + `duration_s`.
 2. A clip joins the current session when its start is no later than the session's latest end + `session_gap_min`. Overlapping clips always share a session.
 3. A clip with no recorded start is its own session.
-4. Sessions are labelled `<source>:<game>:s<NNN>` in time order, untimed ones last by `clip_key`. The label is for reports; the ledger is keyed by clip.
+4. Sessions are labelled `<source>:<game>:s<NNN>` in time order, untimed ones last by `clip_key`. The label is for reports and can renumber when earlier footage arrives; the ledger is keyed by clip, and nothing should key on a session label across runs.
 
 Clips whose start time comes only from file modification time (`recorded_start_source = mtime`) are used but counted in the report as low-trust.
 
@@ -84,21 +84,24 @@ Splits, from least to most held out: `train` < `val` < `test_session` < `test_so
 For each session:
 
 1. **Held-out source.** If the source is listed in `holdout_sources` for that game, the session is `test_source`.
-2. **Known clips.** Otherwise, if any of its clips is already in the ledger, the session takes the most held-out split among them. Clips that were in a less held-out split move up and are listed in `reassigned.csv`. This happens when a new clip bridges two sessions.
+2. **Known clips.** Otherwise, if any of its clips is already in the ledger, the session takes the most held-out split among them. This matters when a new clip bridges two sessions that were assigned to different splits:
+   - **Draft:** clips that were in a less held-out split move up and are listed in `reassigned.csv`.
+   - **Frozen:** no assigned clip moves, because a model trained earlier may already have seen it. The bridging clip is left out (`unused.csv`, reason `bridges_splits`) and the two old sessions stay as they were.
 3. **New session.** Otherwise it is placed by greedy fill. Per game, new sessions are visited in order of `sha256("<seed>:<smallest clip_key in session>")`. Each goes to the split with the largest deficit `target − current share`, where shares count kept slots of that game already assigned to `train`, `val` and `test_session`. Ties go to `train`, then `val`, then `test_session`.
 
 Every clip of the session is then written to the ledger.
 
 **Ledger rules**
 
-- A clip never moves to a less held-out split.
+- A clip never moves to a less held-out split. After freezing, it never moves at all.
+- Freezing locks the policy and every existing assignment, not the contents: new footage still lands in all splits, so the test sets grow. Every result records the split hashes, and [`--compare`](evaluation.md#comparison---compare) only pairs runs scored on the same snapshot. For the final report, all models are scored on one snapshot.
 - A ledger entry that contradicts the config (a clip in `train` or `val` whose source is now in `holdout_sources`, or a `test_source` clip whose source is no longer listed) is a policy change: the run stops with exit code `1` and asks for a new `split_id`.
 - A source with no ledger entries yet can be added to `holdout_sources` at any time, including after freezing.
 - `--reset` exists only for drafts.
 
 ### 3. Source cap (D33)
 
-Applied to `train` only, after assignment. While any source holds more than `max_source_share` of a game's used train slots, that source's slots are thinned by dropping those with the highest `sha256("<seed>:<slot_id>")` until it fits. Dropped slots are listed in `unused.csv` with reason `source_cap`. `val` and the test splits are never thinned. With the default `1.0` nothing is dropped and shares are only reported.
+Applied to `train` only, after assignment. The effective cap for a game is `max(max_source_share, 1 / k)`, where `k` is the number of sources with train slots in that game; a tighter cap cannot be met and would drop everything. While any source holds more than the effective cap of a game's used train slots, that source's slots are thinned by dropping those with the highest `sha256("<seed>:<slot_id>")` until it fits. Dropped slots are listed in `unused.csv` with reason `source_cap`. `val` and the test splits are never thinned. With the default `1.0` nothing is dropped and shares are only reported.
 
 ### 4. Quality tier (D04)
 
@@ -122,7 +125,7 @@ No downsampling. All kept slots are used (subject to the source cap); the traine
 | `sessions.csv` | `clip_key, game, source, session, recorded_start_utc, recorded_start_source, duration_s, slots_kept, split` |
 | `counts.csv` | `game, split, slots, slots_full, slots_low, clips, sessions, sources`, with `ALL` rows per game and per split |
 | `sources.csv` | `game, source, source_kind, split, slots, share` (share of that game's slots in that split) |
-| `unused.csv` | Kept slots not used, with reason |
+| `unused.csv` | Kept slots not used, with reason (`source_cap`, `bridges_splits`) |
 | `reassigned.csv` | Clips moved to a more held-out split, with the run time and reason |
 | `summary.json` | Resolved config, input file hashes, SHA-256 of each split file, counts, warnings, `frozen` |
 | `freeze.json` | Written by `--freeze`: time, git commit, `test_design` text |
@@ -185,8 +188,8 @@ The proposal promised 15 or more channels per game with each capped at 1/15. Cur
 |---|---|
 | **Unit: sessions** | Overlapping clips share a session; gap just under / just over the limit; untimed clips are singletons; grouping never crosses game or source |
 | **Unit: assignment** | No session in two splits; shares approach targets on a synthetic set of 40 sessions; first three sessions of a game land in three different splits; same seed gives the same result, another seed a different order |
-| **Unit: ledger** | Rerun with added clips leaves every earlier clip's split unchanged; a bridging clip moves the less held-out side up and writes `reassigned.csv`; config contradicting the ledger exits `1`; `--reset` refused after freeze |
-| **Unit: holdout and cap** | Held-out source appears only in `test_source`; cap thins train only and deterministically; `1.0` drops nothing |
+| **Unit: ledger** | Rerun with added clips leaves every earlier clip's split unchanged; in a draft a bridging clip moves the less held-out side up and writes `reassigned.csv`; after freeze the bridging clip is unused with `bridges_splits` and nothing moves; config contradicting the ledger exits `1`; `--reset` refused after freeze |
+| **Unit: holdout and cap** | Held-out source appears only in `test_source`; cap thins train only and deterministically; `1.0` drops nothing; a cap below `1 / k` is raised to `1 / k` |
 | **Unit: tier** | Rule matches the formula; each clip is half and half to within one slot; unchanged by adding clips |
 | **System** | Temp manifests → CLI → reload every split file: disjoint clip sets, disjoint sessions, every `path` equals the path of its tier, counts in `counts.csv` match the files; `--freeze` refused with empty `test_design`, accepted when set |
 

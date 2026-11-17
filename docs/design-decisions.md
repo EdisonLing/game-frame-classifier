@@ -230,9 +230,9 @@ Related open fork from proposal: **flatten vs global average pooling** — decid
 | | |
 |---|---|
 | **Status** | provisional |
-| **Options** | Local PyTorch · Colab · both |
-| **Decision** | **Stack (decided):** PyTorch + torchvision for the CNN, scikit-learn for the baseline, matplotlib for figures, as an optional `train` dependency group. **Hardware (provisional):** local CPU; the device is auto-detected (CUDA, MPS, CPU), so the same command runs on Colab with the derived frames uploaded. |
-| **Rationale** | Measured about 1 s per batch of 64 on an 8-thread CPU, a few minutes per epoch at the target dataset size. No CUDA device locally. |
+| **Options** | Local CPU · local AMD GPU (ROCm build of PyTorch) · Colab |
+| **Decision** | **Stack (decided):** PyTorch + torchvision for the CNN, scikit-learn for the baseline, matplotlib for figures, as an optional `train` dependency group. **Hardware (provisional):** local CPU; the device is auto-detected (CUDA, MPS, CPU), and ROCm builds report as CUDA, so the same command runs on a local AMD GPU or on Colab. |
+| **Rationale** | Measured 1.0 s per training batch of 64 on an 8-thread CPU: about 3 min per epoch and under 2 h for 30 epochs at 10,000 train frames. A local AMD GPU needs a separate environment with AMD's PyTorch wheels (pre-release on Windows); worth it for sweeps or a much larger dataset. Estimates in [cnn-trainer.md](roadmap/tools/cnn-trainer.md#training-time). |
 | **Date** | 2026-11-17 |
 | **Links** | [tools/cnn-trainer.md](roadmap/tools/cnn-trainer.md) |
 

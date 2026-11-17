@@ -78,14 +78,37 @@ Weights use PyTorch's default initialisation. No pretrained weights.
 | Selection | Best `val` macro-F1; that epoch's weights are saved as `best.pt` |
 | Early stop | No improvement in `val` macro-F1 for 6 epochs |
 | Data | `FrameDataset(train, transform=train_transform)`, shuffled; `FrameDataset(val, transform=eval_transform)` |
-| Device | `auto`: CUDA, then MPS, then CPU |
+| Device | `auto`: `cuda`, then `mps`, then CPU. PyTorch's ROCm builds for AMD GPUs report through the `cuda` device, so no AMD-specific code is needed |
 | Seed | Python, NumPy and PyTorch seeded from `seed` before the model is built |
 
 Per epoch: train loss and accuracy (running, in train mode), then val loss, accuracy and macro-F1 in eval mode. One line is printed and appended to `history.csv`.
 
 Training never opens a test split. The unknown threshold (D24) is not part of training; the model is always six-way.
 
-Measured on an 8-thread CPU: about 1 s per batch of 64, so about 3 min per epoch at 10,000 train frames. A full run fits in an evening without a GPU.
+### Training time
+
+Measured with the default model on an 8-thread CPU (PyTorch CPU build): 1.0 s per training batch of 64 (0.93 s with `head="gap"`, since nearly all compute is in the convolutions), 0.39 s per evaluation batch, and 0.11–0.15 s per batch for augmentation in the main process. One forward and backward pass is about 3.3 GFLOP per frame.
+
+| Train frames | Batches per epoch | CPU epoch (incl. val) | 30 epochs on CPU | Discrete GPU, estimated per epoch |
+|---:|---:|---:|---:|---:|
+| 2,000 (smoke) | 32 | ~40 s | ~20 min | ~5–10 s |
+| 10,000 (proposal scale) | 157 | ~3.2 min | ~1.6 h | ~10–30 s |
+| 30,000 | 469 | ~9.5 min | ~4.7 h | ~25–90 s |
+
+Val is taken as about a fifth of train. Early stopping usually ends a run before 30 epochs. The GPU column assumes an effective 5–10 TFLOPS on these small convolutions; on a GPU the augmentation, not the model, sets the pace unless `num_workers` is raised (the low end of each GPU range) (see the [loader](dataset-loader.md#working-defaults-d35)).
+
+### Hardware
+
+The code is the same on every device; only the installed PyTorch build changes.
+
+| Option | Setup | Notes |
+|---|---|---|
+| CPU (default) | `pip install -e ".[dev,train]"` | Enough for the progress report: one run in an evening |
+| AMD Radeon on Windows (RX 7000 / 9000) | Separate virtual environment; current AMD graphics driver; AMD's ROCm SDK wheels and its matching `torch` / `torchvision` wheels from AMD's package index, following AMD's "PyTorch on Windows" guide; then `pip install -e ".[dev]"` plus `numpy scikit-learn matplotlib` without reinstalling `torch` | Python 3.12 required by AMD's wheels. Check with `torch.cuda.is_available()` and `torch.version.hip`. Pre-release quality on Windows; expect the first epoch to be slower while kernels are tuned. Keep the CPU environment as the fallback |
+| AMD Radeon on Linux or WSL2 | ROCm build of PyTorch | Most mature AMD path |
+| Colab GPU | Upload `data/frames/` and the split folder as a zip | Same command; mind session limits |
+
+Before trusting a GPU environment, run the system overfit test and one smoke run (`--epochs 2 --limit 256`) on it and compare the loss curve with the CPU run. Results are not bit-identical across devices.
 
 ## Config (`config/train_cnn.json`)
 
@@ -133,7 +156,7 @@ Checkpoints are loaded with `weights_only=True` plus the config stored beside th
 | D15 | Single stream | Second stream on HUD crops cut from native stills, fused before the classifier | Look-alike pair still confused after tuning |
 | D37 | lr 1e-3, weight decay 1e-4, batch 64, 30 epochs, patience 6 | Cosine or plateau LR schedule; batch 32 / 128; no weight decay | Noisy or plateaued val curve |
 | D34 | Class-weighted loss | Unweighted loss on a downsampled balanced set | Per-class recall is uneven |
-| D23 | Local CPU | Colab GPU: zip `data/frames/` and the split folder, same command | An epoch takes more than about 10 min |
+| D23 | Local CPU | Local AMD GPU through a ROCm build of PyTorch; Colab GPU (see Hardware) | An epoch takes more than about 10 min, or a hyperparameter sweep is planned |
 | — | Logging to `history.csv` + `curves.png` | TensorBoard | Never needed for the reports |
 
 ## Testing

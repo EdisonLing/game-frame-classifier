@@ -51,7 +51,7 @@ Exit codes: `0` success, `1` at least one clip failed, `2` usage or missing inpu
 6. **Check.** Every derived image is read back with `sourcing.hashing.jpeg_size` and must be exactly 256×144.
 7. **Tables.** Rewritten in full on every run from the files on disk, sorted by game, source, `clip_key`, bucket.
 
-`sourcing.derive.derive_dir` batches a folder as an image sequence only when files are named `%06d.jpg`. This tool keeps the pack file names, so it stages each tier folder as a numbered sequence (hard links or copies in a temp folder under `data/frames/_tmp/`), derives, and renames the outputs back. Per-file ffmpeg calls are the fallback for mixed sizes.
+`sourcing.derive.derive_dir` runs one ffmpeg call per folder only when the files are named `%06d.jpg` and share one size; otherwise it falls back to one call per file, which is much slower. It also deletes its destination folder before writing. This tool keeps the pack file names, so it stages each tier folder as a numbered sequence (hard links, or copies when links are not possible, in a temp folder under `data/frames/_tmp/`), derives into a second temp folder, renames the outputs back to the pack names, and only then moves them into place. A failed clip leaves its earlier output untouched.
 
 ## Output tables
 
@@ -65,7 +65,7 @@ Exit codes: `0` success, `1` at least one clip failed, `2` usage or missing inpu
 | `origin` | `pack_id` from the index (`personal:<run_id>` for make-sources) |
 | `public_examples_ok` | `true` for personal sources; for contributor sources the pack's `consent.public_examples`; `false` when unknown |
 | `recorded_start_utc`, `recorded_start_source`, `duration_s` | From `clip.json`; input to sessions |
-| `native_width`, `native_height`, `padded` | Native geometry; `padded` = aspect pad applied |
+| `native_width`, `native_height`, `padded` | Native geometry (`width`, `height` in `clip.json`); `padded` = aspect pad applied |
 | `hdr`, `vfr`, `video_codec`, `encoder_tag` | From `clip.json`, for shortcut analysis |
 | `low_tier` | e.g. `crf45` |
 | `slots` | Paired slots found on disk |

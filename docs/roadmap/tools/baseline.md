@@ -65,7 +65,7 @@ Features for a split are computed once and cached in the run folder as `features
 
 `sklearn.pipeline.Pipeline([StandardScaler(), LogisticRegression(C=c, max_iter=..., class_weight="balanced", random_state=seed)])` with the default lbfgs solver (multinomial).
 
-One model is fitted on `train` for each value in `c_grid`. The one with the best macro-F1 on `val` is kept; ties go to the smaller `C`. No test split is read.
+One model is fitted on `train` for each value in `c_grid`. The one with the best macro-F1 on `val` is kept; ties go to the smaller `C`. No test split is read. Because `val` both picks `C` and reports the score, the val number is slightly optimistic; the CNN's best-epoch selection has the same bias, so the comparison stays fair.
 
 ### Prediction interface
 
@@ -117,7 +117,7 @@ data/runs/baseline/<run_id>/
 
 ## Acceptance checks
 
-- [ ] Beats chance (16.7 % for six classes) on val
+- [ ] Beats chance on val: accuracy above the largest class's share of val, and macro-F1 above 1/6
 - [ ] Confusion matrix saved; look-alike pair visible
 - [ ] One quantitative metric and one qualitative example for the progress report
 - [ ] Reads frames only through `split_manifest`

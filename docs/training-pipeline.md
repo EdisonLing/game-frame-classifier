@@ -124,8 +124,8 @@ Model input is a 256×144 RGB JPEG made by `gfc-derive-frames` (D27). The loader
 Clips arrive over time, so every assignment must survive a rerun:
 
 - Tier: function of `clip_key` and `bucket` (3.3).
-- Split: stored per clip in `ledger.csv`. A clip keeps its split forever; new sessions are placed where a game is furthest below its target share (D31).
-- Cleaning: recomputed each run; the only cross-clip effect is near-duplicate removal inside one source.
+- Split: stored per clip in `ledger.csv`. A clip never moves to a less held-out split, and after freezing it never moves at all; new sessions are placed where a game is furthest below its target share (D31). New footage keeps growing every split, including the test splits.
+- Cleaning: recomputed each run; the only cross-clip effect is near-duplicate removal inside one source, so which twin of a duplicate pair is kept can change when older footage arrives.
 
 Each run folder records `split_id` and the SHA-256 of the split files it read, so a result can always be tied to the data snapshot it used.
 
@@ -165,7 +165,7 @@ train = ["numpy", "torch", "torchvision", "scikit-learn", "matplotlib"]
 
 ### 3.8 Held-out data discipline (D13)
 
-Training and tuning read `train` and `val` only. The two test splits are opened by one code path, `gfc-evaluate --split test_session|test_source`, which appends a line to `data/runs/holdout_access.jsonl` each time. Model selection, thresholds and hyperparameters are chosen on `val`.
+Training and tuning read `train` and `val` only. The two test splits are opened by one code path, `gfc-evaluate --split test_session|test_source`, which appends a line to `data/runs/holdout_access.jsonl` each time. Model selection, thresholds and hyperparameters are chosen on `val`. Because `val` both selects and reports, val numbers are slightly optimistic for both models alike; the test splits give the unbiased number.
 
 ---
 
@@ -195,7 +195,7 @@ Each is a config value or a small code switch. Changing one means rerunning a st
 | D13 | Strict: test splits untouched until the final evaluation; report development numbers on `val` | Allow one logged look at `test_session` for the progress report | Writing the progress report |
 | D15 | Single-stream CNN | Two-stream with HUD crops from native stills, as primary or as an ablation | After first CNN results on the look-alike pair |
 | D16 | Conv 32-64-128-256, one FC of 256, dropout 0.5; 9,827,878 parameters | FC 128 (5,108,390), FC 512 (19,266,854), two FC layers, or GAP head (390,438) | Train vs val gap is known |
-| D23 | Local CPU (about 1 s per batch of 64, a few minutes per epoch); device auto-detected | Colab GPU with the derived frames uploaded as a zip | Epochs become too slow to iterate |
+| D23 | Local CPU (1 s per batch of 64, about 3 min per epoch at 10,000 train frames); device auto-detected | Local AMD GPU through a ROCm build of PyTorch, or Colab; see [CNN trainer](roadmap/tools/cnn-trainer.md#hardware) | Epochs become too slow to iterate, or a sweep is planned |
 | D33 | No source cap; each source's share is reported and a warning is raised above 1/15 | Enforce the proposal's 1/15 cap, or a relaxed one; it only thins `train`, so it can be tightened later | Before writing a report's data section; again when public sources are added (D12) |
 | D30 | Session = clips of one source and game whose start is within 30 min of the previous clip's end | Different gap, or one session per recording day | Session report on real data looks wrong |
 | D34 | Keep every kept slot; correct imbalance with class weights | Downsample every game to the smallest class | Class counts are known |

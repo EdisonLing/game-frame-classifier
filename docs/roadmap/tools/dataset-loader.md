@@ -36,7 +36,7 @@ class SlotRow:
     bucket: int; target_time_s: float
     public_examples_ok: bool
 
-def load_split(split_dir: Path, name: str) -> list[SlotRow]
+def load_split(split_dir: Path, name: str, *, allow_test: bool = False) -> list[SlotRow]
 def split_hashes(split_dir: Path) -> dict[str, str]          # sha256 per split file, from summary.json
 def image_path(row: SlotRow, data_root: Path, tier_mode: str = "assigned") -> Path
 def load_image_u8(path: Path) -> np.ndarray                   # uint8, shape (144, 256, 3), RGB
@@ -90,7 +90,7 @@ Quality tier is **not** an augmentation. It is fixed per slot by the splitter (D
 | Colour | Mild jitter as above | Stronger jitter; per-game gamma shifts |
 | Normalisation | Fixed 0.5 / 0.5 | Train-set mean and standard deviation |
 | Cache | RAM | None; or a single `.npy` memmap |
-| Workers | 0 (decode is cached, so workers add little on Windows) | 2–4 with `cache="none"` |
+| Workers | 0: decode is cached, and on CPU the model step (about 1 s per batch) dwarfs augmentation (about 0.1–0.15 s per batch of 64, measured) | On a GPU the step drops below the augmentation time, so the main process becomes the bottleneck. Then use 2–4 workers with `cache="none"` (each Windows worker would hold its own RAM cache), or a shared `.npy` memmap cache |
 
 ## Testing
 
@@ -100,7 +100,7 @@ Quality tier is **not** an augmentation. It is fixed per slot by the splitter (D
 | **Unit: decode** | 256×144 JPEG → `(144, 256, 3)` uint8; other sizes raise; greyscale file comes back as three channels |
 | **Unit: transforms** | Eval transform is deterministic and equals `(x/255 − 0.5)/0.5`; train transform keeps shape and dtype; no flip class anywhere in the pipeline; with all probabilities 0 the train transform equals the eval transform; an asymmetric test image is never mirrored over 200 draws |
 | **System** | Synthetic split dir + frames → one batch from `make_loader` has shape `[B, 3, 144, 256]`, dtype float32, values in `[-1, 1]`, labels in `0..5`; same seed gives the same batch order; `cache="ram"` and `cache="none"` return identical eval tensors |
-| **Manual** | Save a grid of augmented train samples next to their originals; HUD orientation unchanged, edges not cropped beyond a few pixels |
+| **Manual** | Save a grid of augmented train samples next to their originals; HUD orientation unchanged; at the largest zoom (1.15) about 7 % of each edge is cropped, so check that corner HUD elements are still mostly visible |
 
 **How to run:** `pytest tests/unit/test_split_manifest.py tests/unit/test_dataset.py tests/system/test_dataset.py` (PyTorch tests skip when it is not installed)
 

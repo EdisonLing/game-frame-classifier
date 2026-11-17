@@ -1,8 +1,8 @@
 # Frame cleaner
 
 **Stage:** 1 — Personal-clip data tools  
-**Status:** implemented  
-**Back to:** [ROADMAP.md](../ROADMAP.md)
+**Status:** implemented (manifest mode); slot mode planned  
+**Back to:** [ROADMAP.md](../ROADMAP.md) · [training pipeline](../../training-pipeline.md)
 
 ## What it does (high level)
 
@@ -64,7 +64,9 @@ gfc-clean-frames --slots data/manifests/slots.csv --debug
 2. **Near-duplicates across a whole source.** Within one `(game, source)`, slots are visited in order of the clip's `recorded_start_utc` (empty last), then `clip_key`, then `bucket`. A slot whose aHash is within the Hamming limit of an already kept slot of that source is a `duplicate` of it. This catches overlapping instant-replay clips, not only repeats inside one clip. Different sources are never compared.
 3. **Quarantine list.** `quarantine.csv` has columns `slot_id, reason, note`. Listed slots are rejected with reason `manual:<reason>` (for example `manual:lobby`, `manual:desktop`). This is the hand quarantine D11 calls for until the detector exists, kept as a file so it is repeatable.
 4. **Nothing is deleted or copied.** Rejected slots stay on disk and in the table; they are candidate material for the unknown class later (D24).
-5. Every run recomputes the whole table. Order is deterministic, so the same inputs give the same output.
+5. Every run recomputes the whole table. Order is deterministic, so the same inputs give the same output. When footage recorded earlier than existing clips arrives later, which twin of a duplicate pair is kept can change; split assignment is per clip, so this only changes which slots of an already assigned clip are used.
+
+**Working default (dedupe scope).** Comparing across a whole source is the safe choice for overlapping clips, but in games with static views (League of Legends, Minecraft) an 8×8 hash at distance 6 may also catch frames that are genuinely different. Alternative: compare within a clip plus only clips whose recording times overlap or are within the session gap. Revisit when `clean_summary.json` shows a duplicate rate far above the other games. The comparison is quadratic in the slots of one source, which is well under a minute at 10,000 slots in pure Python.
 
 **`slots_clean.csv`** = every column of `slots.csv` plus:
 
