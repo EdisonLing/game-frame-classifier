@@ -23,6 +23,7 @@ gfc-batch-extract = "game_frame_classifier.batch_extract:main"
 gfc-frame-export = "game_frame_classifier.frame_export.cli:main"
 gfc-ingest-pack = "game_frame_classifier.ingest_pack:main"
 gfc-make-sources = "game_frame_classifier.make_sources:main"
+gfc-derive-frames = "game_frame_classifier.derive_frames:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
