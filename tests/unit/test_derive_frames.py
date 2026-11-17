@@ -26,7 +26,6 @@ from game_frame_classifier.sourcing.recipe import load_recipe
 from tests.helpers.derive_frames_fixtures import (
     ROOT,
     clip_key_for,
-    copy_recipe,
     write_clip_tree,
     write_index_entry,
     write_pack_manifest,

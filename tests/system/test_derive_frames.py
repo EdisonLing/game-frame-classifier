@@ -3,11 +3,7 @@
 from __future__ import annotations
 
 import csv
-import json
-import shutil
 from pathlib import Path
-
-import pytest
 
 from game_frame_classifier.derive_frames import main
 from game_frame_classifier.sourcing.hashing import jpeg_size, sha256_file
@@ -19,8 +15,6 @@ from tests.helpers.derive_frames_fixtures import (
     write_pack_manifest,
 )
 from tests.helpers.ffmpeg_fixtures import requires_ffmpeg
-
-ROOT = Path(__file__).resolve().parents[2]
 
 
 def _read_csv(path: Path) -> list[dict[str, str]]:
