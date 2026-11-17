@@ -266,7 +266,28 @@ def smoke_test(stage: Path, commit: str) -> None:
         bad = [name for name, ok in checks.items() if not ok]
         if bad:
             fail(f"smoke manifest check failed: {bad}")
-        print("smoke test OK: 5 slots, bundled ffmpeg, commit stamped")
+        print(f"smoke test OK: 5 slots, bundled ffmpeg, commit stamped, encoder {manifest['encoder']['requested']}")
+
+        # Quick mode: full tier only, on a fresh copy of the clip so it is not skipped as already sent.
+        for name in ("history.json",):
+            (stage / "config" / name).unlink(missing_ok=True)
+        shutil.rmtree(stage / "output")
+        (stage / "config" / "user.json").write_text(json.dumps({**SMOKE_USER, "quality_mode": "quick"}), encoding="utf-8")
+        run = subprocess.run(
+            [str(py), "-B", "-X", "utf8", str(stage / "app" / "gfc_frame_export.py"), str(clips),
+             "--yes", "--game", "Valorant", "--no-open"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=stage,
+        )
+        if run.returncode != 0:
+            fail(f"quick-mode smoke run exited with {run.returncode}: {run.stderr}")
+        zips = sorted((stage / "output").glob("GFC_Valorant_smoke_*.zip"))
+        if len(zips) != 1:
+            fail(f"expected 1 quick-mode smoke zip, found {len(zips)}")
+        shutil.rmtree(STAGE_ROOT / "smoke_scratch", ignore_errors=True)
+        (manifest,) = validate_pack_zip(zips[0], STAGE_ROOT / "smoke_scratch")
+        if manifest["output"]["tiers"] != ["full"] or manifest["output"]["quality_mode"] != "quick":
+            fail(f"quick-mode smoke manifest wrong: {manifest['output']}")
+        print("quick-mode smoke test OK: full tier only")
     finally:
         for folder in (stage / "output", STAGE_ROOT / "smoke_clips", STAGE_ROOT / "smoke_scratch"):
             if folder.exists():
