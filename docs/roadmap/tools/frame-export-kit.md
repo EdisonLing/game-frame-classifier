@@ -633,12 +633,12 @@ GFC Frame Export Kit, for {collector_name}'s school ML project
 5. Wait. Fans may spin up; you can close the window and rerun the same folder later.
    If a WARNING says the graphics card can't be used, the run uses the CPU instead:
    still fine to send, just slower.
-6. Send the zip from the output folder via Drive, OneDrive or WeTransfer
+6. Send the zip from the output folder to {collector_contact} via Drive, OneDrive or WeTransfer
    (not Discord: the free limit is too small).
 
 Repeat steps 2 to 6 for each game. Clips are only read. Nothing is uploaded.
 If Windows blocks it: More info, then Run anyway. Steam clips: export to MP4 first.
-Problems? Send {collector_contact} output\...\run_log.txt.
+Problems? Send output\...\run_log.txt to {collector_contact}.
 ```
 
 ## Related
