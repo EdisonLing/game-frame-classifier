@@ -148,7 +148,7 @@ def test_parity_with_frame_export_and_ingest(tmp_path, monkeypatch):
     export_clips.mkdir()
     shutil.copyfile(video_src / "match.mp4", export_clips / "match.mp4")
     assert frame_export_cli.main([
-        str(export_clips), "--yes", "--game", "Valorant", "--no-open", "--budget-hours", "0",
+        str(export_clips), "--yes", "--game", "Valorant", "--no-open", "--budget-hours", "0", "--cpu",
     ]) == 0
     zips = sorted((home / "output").glob("GFC_Valorant_tester_*.zip"))
     assert len(zips) == 1
@@ -164,10 +164,29 @@ def test_parity_with_frame_export_and_ingest(tmp_path, monkeypatch):
     # Path B: make-sources
     personal_root, source_dir = data_tree(tmp_path / "personal")
     shutil.copyfile(video_src / "match.mp4", source_dir / "match.mp4")
-    assert main(["--data-root", str(personal_root), "--recipe", str(RECIPE)]) == 0
+    assert main(["--data-root", str(personal_root), "--recipe", str(RECIPE), "--cpu"]) == 0
     personal_clips = list((personal_root / "frame_sources" / "Valorant" / "tester").glob("c*"))
     assert len(personal_clips) == 1
     personal_hashes = _image_sha_list(personal_clips[0])
 
     assert personal_clips[0].name == ingest_clips[0].name
     assert personal_hashes == ingest_hashes
+
+
+@requires_ffmpeg
+def test_cpu_run_records_encoder_per_frame_and_clip(tmp_path):
+    data_root, source_dir = data_tree(tmp_path)
+    make_raw_clip(source_dir, "one.mp4", duration_s=12.0, width=320, height=180)
+    assert main(["--data-root", str(data_root), "--recipe", str(RECIPE), "--cpu"]) == 0
+    fs = data_root / "frame_sources"
+    run_dir = next((fs / "_personal").iterdir())
+    frames = json.loads((run_dir / "frames.json").read_text(encoding="utf-8"))
+    low = [f for f in frames if f["tier"] != "full"]
+    full = [f for f in frames if f["tier"] == "full"]
+    assert low and all(f["encoder"] == "libx264" and f["encoder_rc"] == "crf45" for f in low)
+    assert full and all(f["encoder"] == "" and f["encoder_rc"] == "" for f in full)
+    clip = json.loads(next((fs / "Valorant" / "tester").glob("c*/clip.json")).read_text(encoding="utf-8"))
+    assert clip["low_encoder"] == "libx264" and clip["gpu_fallback"] == ""
+    manifest = json.loads((run_dir / "run_manifest.json").read_text(encoding="utf-8"))
+    assert manifest["encoder"]["requested"] == "cpu"
+    assert manifest["encoder"]["clips_cpu"] == 1

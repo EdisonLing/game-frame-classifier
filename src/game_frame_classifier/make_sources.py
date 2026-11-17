@@ -25,6 +25,7 @@ from game_frame_classifier.ingest_pack import (
     load_index,
     save_index,
 )
+from game_frame_classifier.sourcing import gpu
 from game_frame_classifier.sourcing.extract import ClipResult, ExtractError, extract_clip
 from game_frame_classifier.sourcing.ffbin import FFmpegNotFoundError, find_tools, version_line
 from game_frame_classifier.sourcing.hashing import quick_id, sha256_file
@@ -48,6 +49,7 @@ EXIT_FAIL = 1
 EXIT_USAGE = 2
 
 CONTRIBUTOR_PREFIX = "contributor_"
+GPU_MAX_FAILURES = 3  # clips in a row whose GPU encode failed before the run stops trying the GPU
 
 
 class MakeSourcesError(ValueError):
@@ -242,6 +244,8 @@ def build_clip_row(
             unpaired_dropped=result.unpaired_dropped,
             max_align_err_s=result.max_align_err_s,
             x264_core=result.x264_core,
+            low_encoder=result.low_encoder,
+            gpu_fallback=sanitize_text(result.gpu_fallback, source_root)[:300],
         )
     if wall_s is not None:
         row["wall_s"] = round(wall_s, 1)
@@ -259,6 +263,8 @@ def frame_rows_for_clip(result: ClipResult, rel_dir: str) -> list[dict[str, Any]
             "clip_key": img.clip_key,
             "tier": img.tier,
             "crf": img.crf,
+            "encoder": img.encoder,
+            "encoder_rc": img.encoder_rc,
             "bucket": img.bucket,
             "target_time_s": img.target_time_s,
             "pts_time_s": img.pts_time_s,
@@ -286,6 +292,40 @@ def write_clip_json(dest: Path, row: dict[str, Any]) -> None:
     atomic_write_json(dest / "clip.json", payload)
 
 
+def choose_encoder(args: argparse.Namespace, recipe: Recipe, tools: Any, probe_dir: Path) -> gpu.GpuStatus | None:
+    """Self-test the GPU encoder (D28); None means the CPU was chosen (--cpu or recipe encoder x264)."""
+    if args.cpu:
+        print("Video encoding: libx264 (--cpu)")
+        return None
+    if recipe.encoder != "auto" or not recipe.crf_list:
+        print("Video encoding: libx264 (recipe encoder)")
+        return None
+    status = gpu.detect_gpu(tools, probe_dir)
+    if status.available:
+        print(f"Video encoding: {gpu.GPU_ENCODER} on {status.adapter or 'the graphics card'}")
+    else:
+        print(f"warning: GPU encoder unavailable, using libx264: {status.reason or 'unknown'}")
+    return status
+
+
+def encoder_summary(status: gpu.GpuStatus | None, stopped: str, clip_rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Same keys as the Frame Export Kit's pack_manifest encoder block."""
+    ok = [r for r in clip_rows if r.get("status") == "ok" and r.get("status_detail") != "dry_run"]
+    encoders = [r.get("low_encoder", "") for r in ok]
+    return {
+        "requested": "cpu" if status is None else "gpu",
+        "gpu_encoder": gpu.GPU_ENCODER,
+        "gpu_available": bool(status and status.available),
+        "gpu_adapter": status.adapter if status else "",
+        "gpu_unavailable_reason": status.reason if status else "",
+        "gpu_stopped_reason": stopped,
+        "clips_gpu": encoders.count(gpu.GPU_ENCODER),
+        "clips_cpu": encoders.count("libx264"),
+        "clips_mixed": encoders.count("mixed"),
+        "clips_gpu_fallback": sum(1 for r in ok if r.get("gpu_fallback")),
+    }
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="gfc-make-sources",
@@ -304,6 +344,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="delete that clip folder and index entry, then extract again (repeatable)",
     )
     p.add_argument("--dry-run", action="store_true", help="probe and hash only; write nothing")
+    p.add_argument("--cpu", action="store_true", help="decode and encode on the CPU (libx264) even if the GPU works")
     p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     return p
 
@@ -342,6 +383,10 @@ def main(argv: list[str] | None = None) -> int:
 
     fs_root = frame_sources_root(data_root)
     run_id = unique_run_id(fs_root, run_id_now())
+    gpu_status = None if args.dry_run else choose_encoder(args, recipe, tools, fs_root / "_tmp" / f"gpu_probe_{run_id}")
+    decode = None if args.cpu else gpu.DecodeCheck()
+    gpu_stopped = ""
+    gpu_streak = 0
     started = time.perf_counter()
     index = load_index(fs_root)
 
@@ -471,6 +516,8 @@ def main(argv: list[str] | None = None) -> int:
                         result = extract_clip(
                             tools, path, info, recipe, clip_key,
                             stage, frames_root, fs_root,
+                            use_gpu=bool(gpu_status and gpu_status.available and not gpu_stopped),
+                            decode=decode,
                         )
                     except (ExtractError, OSError, RuntimeError) as exc:
                         detail = sanitize_text(
@@ -526,7 +573,15 @@ def main(argv: list[str] | None = None) -> int:
                     slots_total += result.slots
                     images_total += len(result.images)
                     x264_core = x264_core or result.x264_core
-                    print(f"    ok: {clip_key} ({result.slots} slots)")
+                    print(f"    ok: {clip_key} ({result.slots} slots, {result.low_encoder or 'no degraded tier'})")
+                    if result.gpu_fallback:
+                        gpu_streak += 1
+                        print(f"    warning: GPU encode failed, redone with libx264: {result.gpu_fallback}")
+                        if gpu_streak >= GPU_MAX_FAILURES and not gpu_stopped:
+                            gpu_stopped = result.gpu_fallback
+                            print(f"warning: GPU encode failed on {gpu_streak} clips in a row; the rest of this run uses libx264")
+                    elif result.low_encoder == gpu.GPU_ENCODER:
+                        gpu_streak = 0
                 if args.limit is not None and new_placed >= args.limit:
                     break
             if args.limit is not None and new_placed >= args.limit:
@@ -575,6 +630,8 @@ def main(argv: list[str] | None = None) -> int:
             "input_bytes": input_bytes,
             "input_duration_s": round(input_duration_s, 1),
         },
+        "encoder": {**encoder_summary(gpu_status, gpu_stopped, clip_rows),
+                    "decode": decode.summary() if decode is not None else "cpu (--cpu)"},
         "output": {
             "tiers": list(recipe.tiers),
             "frame_mode": "native",
@@ -586,7 +643,7 @@ def main(argv: list[str] | None = None) -> int:
     atomic_write_json(personal / "run_manifest.json", manifest)
     print(
         f"Done: ok={clips_ok} skipped_existing={clips_skipped_existing} "
-        f"failed={clips_failed} → frame_sources/_personal/{run_id}/"
+        f"failed={clips_failed} -> frame_sources/_personal/{run_id}/"
     )
     if any_hard_refuse or clips_failed:
         return EXIT_FAIL
