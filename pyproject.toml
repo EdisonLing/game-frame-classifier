@@ -20,6 +20,7 @@ gfc-encode-quality = "game_frame_classifier.quality_encoder:main"
 gfc-catalog-clips = "game_frame_classifier.clip_catalog:main"
 gfc-batch-extract = "game_frame_classifier.batch_extract:main"
 gfc-frame-export = "game_frame_classifier.frame_export.cli:main"
+gfc-ingest-pack = "game_frame_classifier.ingest_pack:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
