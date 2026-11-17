@@ -4,6 +4,8 @@ How to train the CNN on a Radeon RX 9000 series card under Windows 11 with AMD's
 
 Training support on Windows is recent. AMD's ROCm 7.2.1 pages listed "No ML training support" for Windows; the ROCm 10.1.0 pages no longer list that limitation, but they do not state training support explicitly either. Section 3 is therefore the real test, and nothing should depend on the GPU until it passes.
 
+**Tested 2026-11-17** on an RX 9070 XT (`gfx1201`), Adrenalin 26.10.1, Windows 11 25H2, Python 3.12.7, `torch 2.14.0+rocm10.1.0`: the install, the checks in section 3, an overfit test, a continuous training run of 11 minutes and a benchmark all passed. Results and timings are in [CNN trainer, Training time](roadmap/tools/cnn-trainer.md#training-time).
+
 The CPU environment stays the default and the fallback. The GPU environment is a second virtual environment next to it, so a broken GPU install never blocks work.
 
 **Related:** [training pipeline](training-pipeline.md) · [CNN trainer](roadmap/tools/cnn-trainer.md) · [design decisions](design-decisions.md) (D23)
@@ -18,12 +20,12 @@ Versions are those of ROCm 10.1.0, the current release when this page was writte
 |---|---|---|
 | GPU | RX 9070 XT, 9070, 9070 GRE (`gfx1201`); RX 9060 XT, 9060, 9050 (`gfx1200`) | Device Manager → Display adapters |
 | OS | Windows 11 25H2 | `winver` |
-| Driver | AMD Software: Adrenalin Edition, 26.10 branch (ROCm 10.1.0 lists driver 26.10.41.05) | AMD Software → System, or the PowerShell check below |
+| Driver | AMD Software: Adrenalin Edition, 26.10 branch (ROCm 10.1.0 lists driver 26.10.41.05; **26.10.1 was tested and works**, with the harmless MIOpen warning in section 5) | AMD Software → System, or the PowerShell check below |
 | Python | 3.12 (AMD supports 3.11–3.14; the project uses 3.12) | `py -0p` |
 | Smart App Control | Off (AMD: can interfere with ROCm) | Windows Security → App & browser control |
 | Application Guard (WDAG) | Off | Windows Features |
 | Old HIP SDK | Not installed (AMD: remove any HIP SDK for Windows and conflicting AMD graphics software) | Installed apps |
-| Disk | About 5 GB for the environment | |
+| Disk | About 4.5 GB for the environment (4.2 GB measured) | |
 
 The card name differs only in the wheel variant: `device-gfx1201` for the RX 9070 family, `device-gfx1200` for the RX 9060 / 9050 family. Everything else on this page is the same for the whole series.
 
@@ -76,7 +78,7 @@ python -m pip install -e ".[dev,train]"
 python -c "import torch, torchvision; print(torch.__version__, torchvision.__version__)"
 ```
 
-The second line must still print `+rocm10.1.0` versions. The `train` group does not pin `torch`, so pip keeps the ROCm build that is already installed. If a plain `torch` from PyPI ever replaces it, repeat 2.2.
+The second line must still print `+rocm10.1.0` versions (tested: `2.14.0+rocm10.1.0 0.29.0a0+rocm10.1.0`). Until a `train` group exists in `pyproject.toml`, pip prints `WARNING: game-frame-classifier 0.1.0 does not provide the extra 'train'` and installs only the `dev` group plus the package; that is harmless here, because the ROCm wheels from 2.2 already bring `torch`, `torchvision`, NumPy and Pillow. Once the group exists it must not pin `torch`, so pip keeps the ROCm build that is already installed. If a plain `torch` from PyPI ever replaces it, repeat 2.2.
 
 ---
 
@@ -86,9 +88,9 @@ The second line must still print `+rocm10.1.0` versions. The `train` group does 
 python -c "import torch; print(torch.cuda.is_available(), torch.version.hip, torch.cuda.get_device_name(0))"
 ```
 
-Expected: `True`, a HIP version, and the card name.
+Expected: `True`, a HIP version, and the card name. Tested output: `True 7.16.26385 AMD Radeon RX 9070 XT`. The first GPU call prints one `MIOpen: Warning [ParseAndLoadDb] File is unreadable: ...gfx120140.HIP.fdb.txt` line; it is harmless (section 5).
 
-Then a training-shaped check (convolution, backward pass, optimiser step) on the GPU:
+Then a training-shaped check (convolution, backward pass, optimiser step) on the GPU. Tested: prints `ok 0.0765 s/step`.
 
 ```powershell
 python -c "import torch,torch.nn as nn,time; d='cuda'; m=nn.Sequential(nn.Conv2d(3,32,3,padding=1),nn.BatchNorm2d(32),nn.ReLU(),nn.MaxPool2d(2),nn.Flatten(),nn.Linear(32*72*128,6)).to(d); o=torch.optim.Adam(m.parameters()); x=torch.randn(64,3,144,256,device=d); y=torch.randint(0,6,(64,),device=d); [(o.zero_grad(),nn.functional.cross_entropy(m(x),y).backward(),o.step()) for _ in range(3)]; torch.cuda.synchronize(); t=time.perf_counter(); [(o.zero_grad(),nn.functional.cross_entropy(m(x),y).backward(),o.step()) for _ in range(20)]; torch.cuda.synchronize(); print('ok', round((time.perf_counter()-t)/20,4),'s/step')"
@@ -113,9 +115,9 @@ gfc-train-cnn --split-dir data/manifests/splits/v1          # device "auto" pick
 gfc-train-cnn --split-dir data/manifests/splits/v1 --device cpu
 ```
 
-On the GPU the model step becomes faster than augmentation in the main process. Set `num_workers` to 2–4 with `cache: "none"` in `config/train_cnn.json` when the GPU sits idle between batches ([loader working defaults](roadmap/tools/dataset-loader.md#working-defaults-d35)).
+On the GPU the model step (0.08 s per batch of 64) is about 2.5 times faster than augmentation in the main process (about 0.2 s), so with `num_workers` 0 the GPU idles about 70 % of the time. Measured: 2 workers already keep the GPU busy (0.076 s per batch); 4 workers gave no further gain (0.083 s). Each epoch pays about 4 s to start the workers on Windows. Use `num_workers` 2 with `cache: "none"` in `config/train_cnn.json` ([loader working defaults](roadmap/tools/dataset-loader.md#working-defaults-d35)); the entry point must be under `if __name__ == "__main__":` because Windows starts workers by spawning.
 
-Close games and other GPU-heavy programs while training; they share the same 16 GB of video memory.
+Peak GPU memory for the default model at batch 64 is about 1.9 GB. Close games and other GPU-heavy programs while training; they share the same 16 GB of video memory.
 
 ---
 
@@ -125,8 +127,9 @@ Close games and other GPU-heavy programs while training; they share the same 16 
 |---|---|
 | `torch.cuda.is_available()` is `False` | Driver outside the version ROCm expects: install the Adrenalin driver linked from AMD's ROCm release notes for this ROCm version, reboot, check again. Confirm Smart App Control and WDAG are off and no old HIP SDK is installed |
 | Import error about a missing `.dll` | Install the Microsoft Visual C++ 2015–2022 Redistributable (x64) |
-| GPU reset or crash during training | AMD's documented workaround for RX 9070 series training: `$env:TORCH_BLAS_PREFER_HIPBLASLT = "0"` before training |
-| First epoch much slower than the rest | Kernel selection on first use; later epochs and runs are faster |
+| `MIOpen: Warning [ParseAndLoadDb] File is unreadable: ...\gfx120140.HIP.fdb.txt` on the first GPU call | Harmless: training, evaluation and the benchmarks all ran correctly with it. The cause was not investigated (the file is a MIOpen tuning database that cannot be read) |
+| GPU reset or crash during training | AMD's documented workaround for RX 9070 series training: `$env:TORCH_BLAS_PREFER_HIPBLASLT = "0"` before training. **Not needed in testing**: no crash, reset or NaN in the 11-minute run or anything else, all without the variable |
+| First epoch much slower than the rest | Kernel selection on first use; later epochs are faster |
 | Versions without `+rocm` after installing the project | A PyPI `torch` replaced the ROCm one; repeat 2.2 |
 | Anything else unresolved within an hour | Train on CPU and come back later; nothing in the pipeline depends on the GPU |
 
