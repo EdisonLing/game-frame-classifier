@@ -248,7 +248,7 @@ Related open fork from proposal: **flatten vs global average pooling** — decid
 
 | | |
 |---|---|
-| **Status** | decided (spec v1; pack not built yet) |
+| **Status** | decided (export kit implemented; ingest + make-sources still to build) |
 | **Prompt** | Friends convert clips → frames and zip to me; plug-and-play; what to keep without masters |
 | **Options** | (A) 256×144 only (B) resolution-capped stills (C) **native res, no cap** + optional compact 256 |
 | **Decision** | **(C) No resolution cap.** After video CRF (D22), extract stills at the **source video resolution**. Default tiers: **full + crf45** (D04), set in a shipped `recipe.json` (`crf_list`, `include_full`, `interval_s` = 5), not hardcoded. **Footage budget** `footage_budget_min` = 180 per game per run (editable; `0` = all), clips spread across recording days; rerun sends more. Optional **compact** = 256×144 via the same derive step as my pipeline (D27). **Packaging:** Python embeddable + `.bat` launcher (drag a folder), pinned static ffmpeg (x264 + dav1d + zimg), stdlib-only app; Windows-first. Name and consent asked once (`user.json`), game per run, auto-zip per run (`ZIP_STORED`, verified). Friends do **not** clean. Manifests keep clip SHA-256, file timing, sanitised probe, actual frame timestamps, slot pairing, recipe, tool/ffmpeg/x264 versions, sizes and hashes; uncompressed size + file count for ingest-side bomb checks. **Track** handoff size vs source by resolution. |

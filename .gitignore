@@ -222,6 +222,7 @@ __marimo__/
 # Project data (clips / extracted frames — keep local)
 data/raw/
 data/frames/
+data/frame_sources/
 data/manifests/
 data/bench_extract/
 data/bench_handoff/

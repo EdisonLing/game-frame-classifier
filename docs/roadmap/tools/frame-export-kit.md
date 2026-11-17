@@ -196,7 +196,7 @@ At least one tier must exist (`include_full` or a non-empty `crf_list`). The too
 }
 ```
 
-- `handle` is normalised to `[a-z0-9_]{1,24}` (lowercase, spaces and dashes to `_`, other characters dropped); the prompt repeats until non-empty. It becomes the source id `friend_<handle>` at ingest.
+- `handle` is normalised to `[a-z0-9_]{1,24}` (lowercase, spaces and dashes to `_`, other characters dropped); the prompt repeats until non-empty. It becomes the source id `contributor_<handle>` at ingest.
 - `contributor_id` is a random UUID created once; it ties packs to one person even if the handle changes, and lets me delete someone's data on request.
 - **Precedence:** command-line flag > `user.json` override > `recipe.json`.
 
@@ -526,7 +526,7 @@ Zip ≈ unzipped (stored JPEGs).
 
 ## 11. Receiving side (ingest contract)
 
-`gfc-ingest-pack <zip>` on my machine. Detailed pipeline changes are planned separately; this is the contract the pack must satisfy.
+`gfc-ingest-pack <zip>` on my machine. Full tool spec: [ingest-pack.md](ingest-pack.md). Summary of the contract the pack must satisfy:
 
 **Zip safety (before writing anything):**
 
@@ -537,7 +537,7 @@ Zip ≈ unzipped (stored JPEGs).
 
 **Content checks:** schema versions known; every `frames.csv` row exists with matching bytes and SHA-256; slots complete for every tier; recipe compared with the expected recipe (differences recorded, not fatal); `contributor_id` vs handle collisions reported.
 
-**Placement:** `data/frame_sources/<Game>/friend_<handle>/<clip_key>/<tier>/`, manifests copied verbatim to `data/frame_sources/_packs/<pack_id>/`. Clips whose `clip_sha256` already exists anywhere (any friend or my own clips) are skipped and logged. `Other` packs go to `data/frame_sources/_other/<other_name>/...` (unknown-class material, D24).
+**Placement:** `data/frame_sources/<Game>/contributor_<handle>/<clip_key>/<tier>/`, manifests copied verbatim to `data/frame_sources/_packs/<pack_id>/`. Clips whose `clip_sha256` already exists anywhere (any contributor or my own clips) are skipped and logged. `Other` packs go to `data/frame_sources/_other/<other_name>/...` (unknown-class material, D24).
 
 **Size tracking (D25):** `zip_bytes` vs `input_bytes` per pack and per resolution appended to a local stats table.
 

@@ -9,8 +9,22 @@ Raw media stays **local** (`data/raw/`, `data/frames/`, `data/manifests/` are gi
 data/
   README.md          # short pointer (tracked)
   raw/               # source videos/clips (local only) — collect here
-  frames/            # extracted / cleaned / quality copies (local only)
+  frame_sources/     # native-res stills per clip (local only) — D26; from gfc-ingest-pack / future gfc-make-sources
+  frames/            # derived / cleaned / quality copies (local only)
   manifests/         # optional shared catalogs & split lists (local only)
+```
+
+## Frame sources (`data/frame_sources/`)
+
+Native-resolution JPEG stills used as the shared source of truth for personal and friend footage (D26). Layout and ingest rules: [tools/ingest-pack.md](roadmap/tools/ingest-pack.md).
+
+```text
+data/frame_sources/
+  <Game>/contributor_<handle>/<clip_key>/<tier>/*.jpg
+  _other/<other_name>/contributor_<handle>/<clip_key>/...
+  _packs/<pack_id>/          # verbatim contributor pack manifests
+  _index/by_sha256.json      # dedupe index
+  _stats/handoff_sizes.jsonl # local size tracking (D25)
 ```
 
 ## Raw clips — collection layout (`data/raw/`)
