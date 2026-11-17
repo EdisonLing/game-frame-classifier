@@ -2,6 +2,7 @@
 
 | Doc | What it is |
 |---|---|
+| [training-pipeline.md](training-pipeline.md) | How the tools connect from clips to model results: step order, files passed between them, shared conventions, open decisions |
 | [pipeline-status.md](pipeline-status.md) | What’s done vs missing (interim batch vs D26 frame_sources) |
 | [pipeline-timing.md](pipeline-timing.md) | Measured wall-time rates (extract sec per video-minute) |
 | [handoff-sizes.md](handoff-sizes.md) | Contributor pack size vs recordings and processing time, by resolution |

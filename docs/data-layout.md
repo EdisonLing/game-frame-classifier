@@ -10,9 +10,12 @@ data/
   README.md          # short pointer (tracked)
   raw/               # source videos/clips (local only) — collect here
   frame_sources/     # native-res stills per clip (local only) — D26; from gfc-ingest-pack / future gfc-make-sources
-  frames/            # derived / cleaned / quality copies (local only)
-  manifests/         # optional shared catalogs & split lists (local only)
+  frames/            # 256×144 model-size frames derived from frame_sources (local only)
+  manifests/         # index tables and split manifests (local only)
+  runs/              # training runs and evaluation output (local only)
 ```
+
+How the folders feed each other: [training-pipeline.md](training-pipeline.md).
 
 ## Frame sources (`data/frame_sources/`)
 
@@ -20,7 +23,9 @@ Native-resolution JPEG stills used as the shared source of truth for personal an
 
 ```text
 data/frame_sources/
-  <Game>/contributor_<handle>/<clip_key>/<tier>/*.jpg
+  <Game>/contributor_<handle>/<clip_key>/<tier>/*.jpg   # from gfc-ingest-pack
+  <Game>/<source>/<clip_key>/<tier>/*.jpg               # my clips, from gfc-make-sources
+  _personal/<run_id>/                                   # make-sources run records
   _other/<other_name>/contributor_<handle>/<clip_key>/...
   _packs/<pack_id>/          # verbatim contributor pack manifests
   _index/by_sha256.json      # dedupe index
@@ -91,7 +96,15 @@ Batch extract reads game + source from the catalog (paths under `raw/`) and writ
 
 ## Derived frames (`data/frames/`)
 
-Outputs from extract / clean / quality tools. Suggested pattern:
+Training frames, written by `gfc-derive-frames` ([spec](roadmap/tools/derive-frames.md)), mirror `frame_sources/`:
+
+```text
+data/frames/
+  <Game>/<source>/<clip_key>/full/<clip_key>_full_b000012.jpg
+  <Game>/<source>/<clip_key>/crf45/<clip_key>_crf45_b000012.jpg
+```
+
+Outputs of the single-clip debugging tools (extract / clean / quality) use this pattern:
 
 ```text
 data/frames/
@@ -115,17 +128,32 @@ data/frames/
 
 ## Manifests (`data/manifests/`)
 
-Optional shared tables (clip catalog, train/val/test lists):
+CSV + JSON side by side; paths inside are relative to `data/`.
 
 ```text
 data/manifests/
-  clips.csv                 # from gfc-catalog-clips (also clips.json)
-  clips.json
-  splits/
-    train.csv
-    val.csv
-    test.csv
-    personal_holdout.csv
+  clips.csv / clips.json            # gfc-catalog-clips (interim path)
+  clips_index.csv                   # gfc-derive-frames: one row per clip
+  slots.csv                         # gfc-derive-frames: one row per slot
+  quarantine.csv                    # optional hand list of slots to drop
+  slots_clean.csv                   # gfc-clean-frames --slots
+  clean_summary.json
+  splits/<split_id>/
+    train.csv  val.csv  test_session.csv  test_source.csv
+    ledger.csv  sessions.csv  counts.csv  sources.csv
+    unused.csv  reassigned.csv  summary.json  freeze.json
+    report/                         # gfc-evaluate --data-report
+```
+
+## Runs (`data/runs/`)
+
+```text
+data/runs/
+  baseline/<run_id>/                # gfc-train-baseline
+  cnn/<run_id>/                     # gfc-train-cnn
+    eval/<split>/                   # gfc-evaluate
+  compare/<runA>__<runB>/
+  holdout_access.jsonl              # every evaluation of a test split
 ```
 
 ## Game name ↔ `--game` flag

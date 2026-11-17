@@ -1,58 +1,128 @@
-# Colour-histogram baseline
+# Colour-histogram baseline (`gfc-train-baseline`)
 
 **Stage:** 4 — Baseline model  
 **Status:** planned  
-**Back to:** [ROADMAP.md](../ROADMAP.md)
+**Back to:** [ROADMAP.md](../ROADMAP.md) · [training pipeline](../../training-pipeline.md)
 
 ## What it does (high level)
 
-Reduces each frame to a colour histogram and trains a simple multinomial logistic regression to predict the game. Same splits as the CNN.
+Reduces each frame to a 48-number colour histogram and fits a multinomial logistic regression to predict the game. It uses the same frames, splits and tiers as the CNN.
 
 ## Why we need it
 
-Progress report **requires** a non-random baseline with quantitative and qualitative results. It also sets the bar the CNN must beat — especially on look-alike pairs (Overwatch 2 vs Marvel Rivals) where palette alone should struggle.
+A colour histogram throws away all spatial layout, so this model can only use palette and art style. It sets the bar the CNN has to clear and shows what layout adds, most of all on the look-alike pair Overwatch 2 and Marvel Rivals. The progress report needs a non-deep baseline with one quantitative and one qualitative result.
 
-## Inputs / outputs
+## Connections
 
 | | |
 |---|---|
-| **In** | Train/val/test frame manifests |
-| **Out** | Fitted model + metrics + a few example predictions |
+| **Reads** | `train` and `val` manifests from [`gfc-split`](dataset-splitter.md) through [`split_manifest`](dataset-loader.md); `config/baseline.json` |
+| **Writes** | `data/runs/baseline/<run_id>/` |
+| **Then** | [`gfc-evaluate`](evaluation.md) on `val` runs automatically at the end of training |
 
-## Known design choices (from proposal)
+## Usage
 
-- Feature: colour histogram, e.g. **16 bins per RGB channel**, concatenated
-- Classifier: **multinomial logistic regression**
-- Same splits as the primary model
-- **Same tier assignment as the CNN (D04):** half full / half low (CRF 45) per slot, read from the split manifests
-- Expectation: Minecraft-like distinct palettes easier; OW2 vs Marvel Rivals harder
+```text
+gfc-train-baseline --split-dir data/manifests/splits/v1
+gfc-train-baseline --split-dir data/manifests/splits/v1 --tag bins32 --config config/baseline.json
+python -m game_frame_classifier.baseline --split-dir ...
+```
 
-## Undecided / blank
+| Flag | Meaning |
+|---|---|
+| `--split-dir` | Split folder (required) |
+| `--data-root` | Data root (default `data`) |
+| `--config` | Settings (default `config/baseline.json`) |
+| `--tag` | Suffix for the run id |
+| `--out` | Run folder (default `data/runs/baseline/<run_id>`) |
 
-- **Stack:** scikit-learn is the obvious default — confirm when implementing
-- **Histogram on raw vs resized frames**
-- **Architecture:** N/A (non-deep)
+## Config (`config/baseline.json`)
 
-## Implementation notes
+```json
+{
+  "schema": "gfc.baseline/1",
+  "seed": 360,
+  "bins": 16,
+  "c_grid": [0.01, 0.1, 1.0, 10.0],
+  "max_iter": 2000,
+  "class_weight": "balanced"
+}
+```
 
--
+## Method
 
-## Acceptance checks
+### Features
 
-- [ ] Beats chance (~16.7% for 6 classes) on val
-- [ ] Confusion matrix saved — look-alike pair visible
-- [ ] At least one quantitative metric + one qualitative example for the progress report
+```python
+def histogram_features(image_u8: np.ndarray, bins: int = 16) -> np.ndarray   # shape (3 * bins,), float32
+```
+
+For each of R, G, B: count pixels in `bins` equal-width bins over 0–255 (width 16 for 16 bins), divide by the pixel count so each channel sums to 1, then concatenate R, G, B. The input is the 256×144 frame exactly as the CNN receives it before normalisation; no resize, no colour-space change.
+
+Features for a split are computed once and cached in the run folder as `features_<split>.npy`.
+
+### Model
+
+`sklearn.pipeline.Pipeline([StandardScaler(), LogisticRegression(C=c, max_iter=..., class_weight="balanced", random_state=seed)])` with the default lbfgs solver (multinomial).
+
+One model is fitted on `train` for each value in `c_grid`. The one with the best macro-F1 on `val` is kept; ties go to the smaller `C`. No test split is read.
+
+### Prediction interface
+
+```python
+class BaselinePredictor:
+    labels: tuple[str, ...]
+    def predict_proba(self, rows: list[SlotRow], data_root: Path, tier_mode: str = "assigned") -> np.ndarray   # (N, 6)
+```
+
+This is the interface [evaluation](evaluation.md) calls for every model type.
+
+## Run folder
+
+```text
+data/runs/baseline/<run_id>/
+  run.json              # model_type "baseline", config, labels, seed, split_dir, split_id, split hashes, git commit, versions, chosen C
+  model.joblib          # fitted pipeline
+  c_search.csv          # C, val accuracy, val macro-F1
+  features_train.npy  features_val.npy
+  eval/val/...          # written by evaluation
+```
+
+## Decisions
+
+| | |
+|---|---|
+| Frames | Same 256×144 files and tier assignment as the CNN, so the only difference between the two models is the model |
+| Stack | scikit-learn |
+| Imbalance | `class_weight="balanced"` (D34) |
+| Unknown | The baseline is six-way only; no threshold |
+
+## Working defaults (D36)
+
+| | Default | Alternative |
+|---|---|---|
+| Bins | 16 per channel (proposal) | 32; joint 3-D histogram; HSV |
+| Scaling | `StandardScaler` | None |
+| `C` | Picked on val from four values | Fixed 1.0 |
 
 ## Testing
 
 | Kind | Cases |
 |---|---|
-| **Unit** | Histogram vector length = `3 * n_bins` (e.g. 48 for 16 bins); solid-color image → mass in expected bins; predict shape = n_classes probs/logits |
-| **System** | Tiny synthetic dataset (e.g. 3 colors ↔ 3 fake “games”) → train logistic regression → accuracy ≫ chance on held-out same-color frames (sanity that wiring works) |
-| **Manual / report** | Real val metrics + confusion matrix figure; qualitative Minecraft vs OW2/Rivals examples |
+| **Unit** | Feature length is `3 * bins`; each channel block sums to 1; a solid-colour image puts all mass in the expected bin of each channel; value 255 falls in the last bin; `predict_proba` shape `(N, 6)` with rows summing to 1 |
+| **System** | Synthetic split of three solid-ish colours standing in for three games → train → val accuracy far above chance; run folder holds every file listed; rerun with the same seed gives identical `c_search.csv` |
+| **Manual / report** | Real val metrics, confusion matrix and example grid from evaluation |
 
-**How to run:** `pytest tests/unit/test_baseline.py tests/system/test_baseline.py`
+**How to run:** `pytest tests/unit/test_baseline.py tests/system/test_baseline.py` (skips without scikit-learn)
 
-## Ties to proposal
+## Acceptance checks
 
-Baseline Model section; evaluation “CNN should clearly outperform the colour-histogram baseline.”
+- [ ] Beats chance (16.7 % for six classes) on val
+- [ ] Confusion matrix saved; look-alike pair visible
+- [ ] One quantitative metric and one qualitative example for the progress report
+- [ ] Reads frames only through `split_manifest`
+- [ ] CLI entry `gfc-train-baseline` in `pyproject.toml`
+
+## Ties to proposal and decisions
+
+Baseline Model section; Evaluation: "the CNN should clearly outperform the colour-histogram baseline". D05, D34, D36.

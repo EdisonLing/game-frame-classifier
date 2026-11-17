@@ -2,7 +2,10 @@
 
 Living log of choices for Frame to Game. Fill in **Decision** / **Rationale** / **Date** when we decide — leave blank until then.
 
-**Statuses:** `open` · `leaning` · `decided` · `deferred` · `rejected`
+**Statuses:** `open` · `leaning` · `provisional` · `gate` · `decided` · `deferred` · `rejected`
+
+- `provisional`: a working default chosen so building can continue. Cheap to change (a config value or a rerun); the alternative is written down and gets revisited after first results.
+- `gate`: expensive to undo. Must be decided explicitly, together, before the step it blocks. The blocked step is named in the entry.
 
 **Sources of prompts:** proposal notes · reviewer feedback · roadmap work · experiments
 
@@ -25,7 +28,7 @@ Called out positively in TA feedback. Treat as decided unless we explicitly reop
 | D01 | Split by **video/session**, not by frame | decided | Leakage fix vs prior work |
 | D02 | Test on **unseen streamers** + **held-out personal sessions** | decided | |
 | D03 | **Augment only after** splitting | decided | |
-| D04 | Ops stills **full + low (CRF 45)**; medium=38 docs only; **every frame used (train, val, test, baseline, CNN) is one tier: half full, half low**, fixed 50/50 per slot (not both tiers per slot); **per-tier eval is a diagnostic on top** | decided (revised 2026-11-17) | Small 256×144 Δ → no 2× dataset; dual folders kept for sampling + per-tier diagnostics. Was: random full *or* low per train example |
+| D04 | Ops stills **full + low (CRF 45)**; medium=38 docs only; **every frame used (train, val, test, baseline, CNN) is one tier: half full, half low**, fixed per slot by bucket parity with a per-clip offset (not both tiers per slot); **per-tier eval is a diagnostic on top** | decided (revised 2026-11-17) | Small 256×144 Δ → no 2× dataset; dual folders kept for sampling + per-tier diagnostics. Was: random full *or* low per train example |
 | D05 | Colour-histogram + logistic regression baseline | decided | Exposes what spatial layout adds |
 | D06 | Keep menus/overlays in the data (do not strip as “bad”) | decided | Differs from Trivedi et al. |
 | D07 | Course primary goal = **frame classification**; clip tagging = inference glue | decided | See roadmap |
@@ -88,12 +91,12 @@ Called out positively in TA feedback. Treat as decided unless we explicitly reop
 
 | | |
 |---|---|
-| **Status** | leaning (toward TA advice) |
+| **Status** | provisional |
 | **Prompt** | TA: keep personal-clip held-out set untouched during development |
 | **Options** | (A) Strict freeze once split is written (B) Allow rare peek for debugging only, never for tuning (C) Soft holdout until dataset is larger |
-| **Decision** | |
-| **Rationale** | |
-| **Date** | |
+| **Decision** | **(A) for now.** Training and tuning read `train` and `val` only. `test_session` and `test_source` open through `gfc-evaluate` alone, only after the split is frozen, with a stated reason, and every access is appended to `data/runs/holdout_access.jsonl`. Development and progress-report numbers come from `val`. |
+| **Rationale** | Strict is the direction that can be relaxed later; a look at the test set cannot be taken back. Whether the progress report shows one logged `test_session` result is settled with D32. |
+| **Date** | 2026-11-17 |
 | **Links** | [tools/dataset-splitter.md](roadmap/tools/dataset-splitter.md) |
 
 ---
@@ -102,13 +105,13 @@ Called out positively in TA feedback. Treat as decided unless we explicitly reop
 
 | | |
 |---|---|
-| **Status** | leaning (do this) |
+| **Status** | decided |
 | **Prompt** | TA: report frames, videos, and channels **per game** |
 | **Options** | (A) Table in progress report only (B) Also auto-generate from catalog as a script output |
-| **Decision** | |
-| **Rationale** | |
-| **Date** | |
-| **Links** | [tools/clip-catalog.md](roadmap/tools/clip-catalog.md), Stage 6 in [ROADMAP](roadmap/ROADMAP.md) |
+| **Decision** | **(B).** `gfc-split` writes `counts.csv` (slots, clips, sessions, sources per game and split) and `sources.csv` (per-source share); `gfc-evaluate --data-report` draws the class-count figure and example frames. |
+| **Rationale** | The numbers change every time footage arrives; a generated table cannot go stale. |
+| **Date** | 2026-11-17 |
+| **Links** | [tools/dataset-splitter.md](roadmap/tools/dataset-splitter.md), [tools/evaluation.md](roadmap/tools/evaluation.md) |
 
 ---
 
@@ -116,12 +119,12 @@ Called out positively in TA feedback. Treat as decided unless we explicitly reop
 
 | | |
 |---|---|
-| **Status** | open — **do not adopt by default** |
+| **Status** | provisional — **two-stream not adopted** |
 | **Prompt** | TA: consider full-frame stream + small CNN on fixed HUD crops (minimap, ability bar, corners), fuse before classifier |
 | **Options** | (A) Stick to single-stream 4-block CNN for progress report; revisit after first results (B) Implement two-stream as primary before progress report (C) Single-stream primary + two-stream as ablation for final (D) Reject two-stream |
-| **Decision** | |
-| **Rationale** | |
-| **Date** | |
+| **Decision** | **(A) for now.** Single stream for the first results. (C) or (D) is chosen once the look-alike confusion of the single-stream model is known. |
+| **Rationale** | Nothing in the single-stream pipeline has to change to add a second stream later: HUD crops would be cut from the native stills in `frame_sources`, which are kept for exactly this (D25). |
+| **Date** | 2026-11-17 |
 | **Links** | [tools/cnn-trainer.md](roadmap/tools/cnn-trainer.md) |
 
 **Why it’s optional:** tests the “HUD position matters” claim and may help OW2 vs Marvel Rivals, but adds crop design, fusion, and tuning cost before we even have a working single-stream baseline+CNN.
@@ -132,12 +135,12 @@ Called out positively in TA feedback. Treat as decided unless we explicitly reop
 
 | | |
 |---|---|
-| **Status** | open |
+| **Status** | provisional |
 | **Prompt** | TA: give exact channel/FC sizes; flattening 16×9×256 ≈ 37k features into first FC |
-| **Options** | Lock numbers when first trainable CNN is defined; report param count in progress report |
-| **Decision** | Conv channels: ___ · FC: ___ · Params: ___ |
-| **Rationale** | |
-| **Date** | |
+| **Options** | FC 128 (5,108,390 params) · **FC 256 (9,827,878)** · FC 512 (19,266,854) · two FC layers · GAP head (390,438) |
+| **Decision** | Conv channels: **32-64-128-256** (3×3, no bias, BN, ReLU, 2×2 max pool) · Flatten 256×9×16 = 36,864 · FC: **36,864→256**, dropout 0.5, **256→6** · Params: **9,827,878** (conv stack 388,896; first FC 9,437,440). Layer table in the tool page. |
+| **Rationale** | Matches the proposal (four blocks, 32–256 channels, one FC with dropout). 256 keeps the first FC under 10 M weights for a training set of roughly 10,000 frames; sizes are config values, so this is tuned on val after the first curves. |
+| **Date** | 2026-11-17 |
 | **Links** | [tools/cnn-trainer.md](roadmap/tools/cnn-trainer.md) |
 
 Related open fork from proposal: **flatten vs global average pooling** — decide with D16 or separately as D16b.
@@ -146,11 +149,11 @@ Related open fork from proposal: **flatten vs global average pooling** — decid
 
 | | |
 |---|---|
-| **Status** | open |
+| **Status** | decided |
 | **Options** | (A) Flatten first (matches “where HUD is” claim) (B) GAP first (C) Ablate both for final |
-| **Decision** | |
-| **Rationale** | |
-| **Date** | |
+| **Decision** | **(A) then (C).** Flatten is the primary head; `model.head=gap` is a config switch so the comparison promised in the proposal is one extra run. |
+| **Rationale** | As the proposal states: flatten preserves where HUD features appear. |
+| **Date** | 2026-11-17 |
 
 ---
 
@@ -226,11 +229,12 @@ Related open fork from proposal: **flatten vs global average pooling** — decid
 
 | | |
 |---|---|
-| **Status** | open |
+| **Status** | provisional |
 | **Options** | Local PyTorch · Colab · both |
-| **Decision** | |
-| **Rationale** | |
-| **Date** | |
+| **Decision** | **Stack (decided):** PyTorch + torchvision for the CNN, scikit-learn for the baseline, matplotlib for figures, as an optional `train` dependency group. **Hardware (provisional):** local CPU; the device is auto-detected (CUDA, MPS, CPU), so the same command runs on Colab with the derived frames uploaded. |
+| **Rationale** | Measured about 1 s per batch of 64 on an 8-thread CPU, a few minutes per epoch at the target dataset size. No CUDA device locally. |
+| **Date** | 2026-11-17 |
+| **Links** | [tools/cnn-trainer.md](roadmap/tools/cnn-trainer.md) |
 
 ### D24 — Unknown / other as a seventh output
 
@@ -280,13 +284,131 @@ Related open fork from proposal: **flatten vs global average pooling** — decid
 | **Date** | 2026-11-16 |
 | **Links** | [tools/frame-export-kit.md](roadmap/tools/frame-export-kit.md), [tools/frame-extractor.md](roadmap/tools/frame-extractor.md) |
 
+### D29 — Training input contract
+
+| | |
+|---|---|
+| **Status** | decided |
+| **Prompt** | Two frame paths exist: interim batch extract (256×144, video-stem ids, absolute paths, no paired tiers) and frame sources (D26) |
+| **Options** | (A) Let the splitter accept either (B) **Training reads only split manifests built from `frame_sources` through the slot index** |
+| **Decision** | **(B).** `gfc-derive-frames` writes `clips_index` and `slots`; the cleaner adds verdicts; `gfc-split` writes the split manifests; the loader reads nothing else. Paths in every table are relative to the data root. The interim path stays for single-clip debugging. |
+| **Rationale** | D04 needs paired tiers per slot and D01 needs clip identity and recording times; only frame sources carry them. One input format keeps the baseline and CNN on identical frames. |
+| **Date** | 2026-11-17 |
+| **Links** | [training-pipeline.md](training-pipeline.md), [tools/derive-frames.md](roadmap/tools/derive-frames.md) |
+
+### D30 — Session rule
+
+| | |
+|---|---|
+| **Status** | provisional (confirmed or changed with D32) |
+| **Options** | (A) **Gap rule:** clips of one source and game join a session when they start within 30 min of the session's latest end (B) One session per recording day (C) One session per clip |
+| **Decision** | **(A), 30 min**, `session_gap_min` in `config/split.json`. Overlapping clips always share a session; clips without a recorded start are their own session. |
+| **Rationale** | Instant-replay clips overlap and cluster inside one match; the gap rule keeps a match together without merging a whole day. (C) leaks, (B) wastes sessions when a game has few recording days. |
+| **Date** | 2026-11-17 |
+| **Links** | [tools/dataset-splitter.md](roadmap/tools/dataset-splitter.md) |
+
+### D31 — Split mechanics
+
+| | |
+|---|---|
+| **Status** | decided |
+| **Prompt** | Footage arrives over weeks; a reshuffle on every arrival would move clips between train and test |
+| **Options** | (A) Shuffle sessions with a seed and cut at 70/15/15 on every run (B) Hash each session to a split (C) **Per-clip ledger with greedy fill** |
+| **Decision** | **(C).** Splits `train` / `val` / `test_session` (target 70 / 15 / 15 of each game's slots) plus `test_source` for held-out sources. A new session goes to the split furthest below target for its game; every clip's split is stored in `splits/<split_id>/ledger.csv` and never moves to a less held-out split. A changed policy gets a new `split_id`. |
+| **Rationale** | (A) contaminates the held-out sets each time data is added. (B) is stable but badly unbalanced with few sessions per game. The ledger is stable and balanced. |
+| **Date** | 2026-11-17 |
+| **Links** | [tools/dataset-splitter.md](roadmap/tools/dataset-splitter.md) |
+
+### D32 — Held-out test design (gate G1)
+
+| | |
+|---|---|
+| **Status** | **gate** — blocks `gfc-split --freeze`, every `test_session` / `test_source` evaluation, and any reported test number |
+| **Prompt** | Proposal: test on unseen streamers and on held-out personal sessions. Actual footage so far is personal clips and contributor packs, a few people per game |
+| **Options** | (A) `test_session` only (B) `test_session` + `test_source`, holding out whole contributors where a game has at least three sources (C) `test_source` only |
+| **Sub-questions** | Which sources are held out per game · confirm the session rule (D30) · whether the progress report shows a test number or `val` only (D13) |
+| **Decision** | |
+| **Rationale** | |
+| **Date** | |
+| **Links** | [tools/dataset-splitter.md](roadmap/tools/dataset-splitter.md#gates) |
+
+**Suggested:** (B). **Until decided:** drafts only; both models are developed on `train` / `val`.
+
+### D33 — Source cap with few sources
+
+| | |
+|---|---|
+| **Status** | provisional — confirm before writing a report's data section |
+| **Prompt** | Proposal: 15+ channels per game, each capped at about 1/15 of the game's frames. With a few sources per game that cap would discard most of the data |
+| **Options** | (A) Enforce 1/15 (needs public sources first, D12) (B) Enforce a relaxed cap (C) **No cap; report every source's share, warn above 1/15, report per-source accuracy** |
+| **Decision** | **(C) for now**, `max_source_share = 1.0`. |
+| **Rationale** | The cap thins `train` only, so it can be tightened at any time without touching a held-out set. Reporting the shares keeps the deviation from the proposal visible. |
+| **Date** | 2026-11-17 |
+| **Links** | [tools/dataset-splitter.md](roadmap/tools/dataset-splitter.md), D12 |
+
+### D34 — Class imbalance
+
+| | |
+|---|---|
+| **Status** | provisional |
+| **Options** | (A) Downsample every game to the smallest class (B) **Keep all kept slots; class-weighted loss / `class_weight="balanced"`; macro-F1 beside accuracy** |
+| **Decision** | **(B).** |
+| **Rationale** | Games will fill at different rates while footage arrives; downsampling would tie the dataset size to the slowest game. |
+| **Date** | 2026-11-17 |
+
+### D35 — Augmentation
+
+| | |
+|---|---|
+| **Status** | provisional |
+| **Options** | Online vs offline copies · zoom both ways vs zoom-out only · jitter strength |
+| **Decision** | Online. On half the samples: scale 0.85–1.15 with up to 2 % shift, black fill. On 80 %: brightness / contrast / saturation 0.2, hue 0.02. No flips, no rotation. Tier is not an augmentation (D04). |
+| **Rationale** | Proposal ranges; online needs no extra disk and no bookkeeping. Zoom-in can crop a few HUD pixels at the edge, which is the thing to check on real samples. |
+| **Date** | 2026-11-17 |
+| **Links** | [tools/dataset-loader.md](roadmap/tools/dataset-loader.md) |
+
+### D36 — Baseline details
+
+| | |
+|---|---|
+| **Status** | provisional |
+| **Decision** | 16 equal-width bins per RGB channel on the 256×144 frame, each channel normalised to sum 1 (48 features); `StandardScaler`; multinomial logistic regression, `C` chosen on val from 0.01 / 0.1 / 1 / 10; balanced class weights. |
+| **Rationale** | The proposal's baseline, on exactly the CNN's input so the comparison isolates spatial layout. |
+| **Date** | 2026-11-17 |
+| **Links** | [tools/baseline.md](roadmap/tools/baseline.md) |
+
+### D37 — CNN training settings
+
+| | |
+|---|---|
+| **Status** | provisional |
+| **Decision** | Adam, lr 1e-3, weight decay 1e-4, batch 64, up to 30 epochs, early stop after 6 epochs without a better val macro-F1, best-val checkpoint kept, seed 360. |
+| **Rationale** | Standard starting point; the proposal fixes only cross-entropy and Adam. Tuned on val. |
+| **Date** | 2026-11-17 |
+| **Links** | [tools/cnn-trainer.md](roadmap/tools/cnn-trainer.md) |
+
+### D38 — Evaluation and run layout
+
+| | |
+|---|---|
+| **Status** | decided |
+| **Decision** | One `gfc-evaluate` for both models through a shared `predict_proba` interface. Runs live in `data/runs/<model_type>/<run_id>/` with the resolved config, labels, split id and split hashes. Headline = accuracy and macro-F1 on the half-and-half set; always broken down by tier, source and clip; paired per-tier diagnostic on request. Example figures use only frames whose source allows public examples. |
+| **Rationale** | Identical measurement for baseline and CNN; every number traceable to a data snapshot. |
+| **Date** | 2026-11-17 |
+| **Links** | [tools/evaluation.md](roadmap/tools/evaluation.md) |
+
 ---
 
 ## Decision log (newest first)
 
 | Date | ID | Change |
 |---|---|---|
-| 2026-11-17 | D04 | Quality mix → **half full / half low (CRF 45) wherever frames are used**, assigned once per slot (deterministic, ~50/50 per game × split); replaces random per-draw train sampling. Per-tier eval kept as a diagnostic (both tiers of each test slot) |
+| 2026-11-17 | D32 | Opened as a **gate**: held-out test design must be agreed before the split is frozen or any test split is evaluated |
+| 2026-11-17 | D29–D31, D38 | Decided: training reads only split manifests from frame sources; ledger-based split; shared evaluation and run layout |
+| 2026-11-17 | D13, D15, D16, D23, D30, D33–D37 | Provisional working defaults recorded with their alternatives (see [training-pipeline.md](training-pipeline.md) §4.2) |
+| 2026-11-17 | D14, D16b | Decided: generated data tables; flatten primary with GAP as a config switch |
+| 2026-11-17 | D04 | Tier rule made concrete: bucket parity with a per-clip offset, so it is stable when footage is added |
+| 2026-11-17 | D04 | Quality mix → **half full / half low (CRF 45) wherever frames are used**, assigned once per slot (deterministic, half and half within each clip); replaces random per-draw train sampling. Per-tier eval kept as a diagnostic (both tiers of each test slot) |
 | 2026-11-16 | D25 | Tool renamed friend pack → **Frame Export Kit** (`gfc-frame-export`, package `frame_export`); its zips are contributor packs |
 | 2026-11-16 | D28 | Friends stay libx264; personal optional AMF speed toggle (not friend default; not AMF-only personal) |
 | 2026-11-16 | D25 | Decided: spec v1 (recipe file, embeddable Python + pinned ffmpeg, manifests, ingest checks) |

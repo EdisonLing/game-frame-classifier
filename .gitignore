@@ -224,6 +224,7 @@ data/raw/
 data/frames/
 data/frame_sources/
 data/manifests/
+data/runs/
 data/bench_extract/
 data/bench_handoff/
 *.mp4

@@ -1,0 +1,114 @@
+# Derive frames (`gfc-derive-frames`)
+
+**Stage:** 1 — Personal-clip data tools  
+**Status:** planned  
+**Back to:** [ROADMAP.md](../ROADMAP.md) · [training pipeline](../../training-pipeline.md)
+
+## What it does (high level)
+
+Walks `data/frame_sources/`, makes the 256×144 model-size copy of every native still (D27), and writes the two index tables every later step reads: one row per clip and one row per slot.
+
+## Why we need it
+
+Frame sources are native resolution and spread over per-clip folders with per-pack manifests. Training needs one image size and one table. This is the single place where native stills become model input, so personal and contributor frames get exactly the same scaler.
+
+## Connections
+
+| | |
+|---|---|
+| **Reads** | `data/frame_sources/<Game>/<source>/<clip_key>/` (tier folders + `clip.json`), `_index/by_sha256.json`, `_packs/<pack_id>/pack_manifest.json`, `config/recipe.json` |
+| **Writes** | `data/frames/<Game>/<source>/<clip_key>/<tier>/*.jpg`, `data/manifests/clips_index.csv/json`, `data/manifests/slots.csv/json` |
+| **Previous step** | [`gfc-make-sources`](make-sources.md), [`gfc-ingest-pack`](ingest-pack.md) |
+| **Next step** | [`gfc-clean-frames --slots`](frame-cleaner.md) |
+
+## Usage
+
+```text
+gfc-derive-frames
+gfc-derive-frames --game Valorant
+gfc-derive-frames --force
+gfc-derive-frames --index-only
+python -m game_frame_classifier.derive_frames
+```
+
+| Flag | Meaning |
+|---|---|
+| `--data-root` | Data root (default `data`) |
+| `--recipe` | Recipe file (default `config/recipe.json`); supplies `compact_size`, pad tolerance, scaler and JPEG quality |
+| `--game`, `--source` | Only this game / source |
+| `--force` | Derive again even when the output folder is complete |
+| `--index-only` | Skip image work; rebuild the two tables from what is on disk |
+
+Exit codes: `0` success, `1` at least one clip failed, `2` usage or missing input.
+
+## Behaviour
+
+1. **Find clips.** Every `frame_sources/<Game>/<source>/<clip_key>/clip.json` where `<Game>` is one of the six games. Folders starting with `_` (`_other`, `_packs`, `_personal`, `_index`, `_stats`, `_tmp`) are not clips. `_other` material is not derived in v1.
+2. **Tiers.** Tier folders present in the clip folder. A clip must have `full` and exactly one `crf<N>` tier matching the recipe; otherwise it is reported and left out of the tables.
+3. **Slots.** Parse `bucket` from `<clip_key>_<tier>_b<bucket>.jpg`. A slot exists when both tiers have that bucket. Unpaired files are counted and ignored.
+4. **Derive.** For each tier folder, `sourcing.derive` pad-then-scale (`pad` to 16:9 when the aspect is off by more than the tolerance, `scale=256:144:flags=bicubic`, JPEG `q2`) into `data/frames/<Game>/<source>/<clip_key>/<tier>/` with the **same file names**. A clip is skipped when its output folders already hold one image per slot per tier.
+5. **Already model-size sources.** When a clip's native size equals `compact_size` (a compact contributor pack), files are copied byte for byte and `derive_id` is `compact_passthrough`.
+6. **Check.** Every derived image is read back with `sourcing.hashing.jpeg_size` and must be exactly 256×144.
+7. **Tables.** Rewritten in full on every run from the files on disk, sorted by game, source, `clip_key`, bucket.
+
+`sourcing.derive.derive_dir` batches a folder as an image sequence only when files are named `%06d.jpg`. This tool keeps the pack file names, so it stages each tier folder as a numbered sequence (hard links or copies in a temp folder under `data/frames/_tmp/`), derives, and renames the outputs back. Per-file ffmpeg calls are the fallback for mixed sizes.
+
+## Output tables
+
+### `clips_index.csv` (one row per clip)
+
+| Column | Notes |
+|---|---|
+| `clip_key`, `clip_sha256` | Identity |
+| `game`, `source` | Folder names |
+| `source_kind` | `contributor` when `source` starts with `contributor_`, `public` when it starts with `public_`, else `personal` |
+| `origin` | `pack_id` from the index (`personal:<run_id>` for make-sources) |
+| `public_examples_ok` | `true` for personal sources; for contributor sources the pack's `consent.public_examples`; `false` when unknown |
+| `recorded_start_utc`, `recorded_start_source`, `duration_s` | From `clip.json`; input to sessions |
+| `native_width`, `native_height`, `padded` | Native geometry; `padded` = aspect pad applied |
+| `hdr`, `vfr`, `video_codec`, `encoder_tag` | From `clip.json`, for shortcut analysis |
+| `low_tier` | e.g. `crf45` |
+| `slots` | Paired slots found on disk |
+| `derive_id` | `pad16x9_bicubic_256x144_q2` or `compact_passthrough` |
+
+### `slots.csv` (one row per slot)
+
+| Column | Example |
+|---|---|
+| `slot_id` | `c1a2b3c4d5e6f:b000012` |
+| `clip_key` | `c1a2b3c4d5e6f` |
+| `game`, `source` | `Valorant`, `contributor_alex` |
+| `bucket`, `target_time_s` | `12`, `60.0` (`bucket × interval_s`) |
+| `path_full` | `frames/Valorant/contributor_alex/c1a2b3c4d5e6f/full/c1a2b3c4d5e6f_full_b000012.jpg` |
+| `path_low` | `frames/Valorant/contributor_alex/c1a2b3c4d5e6f/crf45/c1a2b3c4d5e6f_crf45_b000012.jpg` |
+
+Paths are relative to the data root. Original file names from `clip.json` are deliberately not copied into these tables.
+
+## Decisions
+
+| | |
+|---|---|
+| Disk is the source of truth | Tables are rebuilt from `frame_sources/` and `frames/` each run; there is no merged manifest to keep in sync with ingest |
+| Derive policy | D27, parameters from the recipe. Changing the model input size means changing the recipe and running with `--force` |
+| Output location | `data/frames/<Game>/<source>/<clip_key>/`. Interim batch-extract folders under the same game/source use the video stem, never a `clip_key`, and can be deleted |
+| Public sources | The `public_` prefix is the working convention until public collection is designed (D12) |
+
+## Testing
+
+| Kind | Cases |
+|---|---|
+| **Unit** | Bucket parsing; slot pairing with an unpaired file; `source_kind` rules; `public_examples_ok` for personal / consenting / non-consenting / unknown contributor; table rows sorted and paths relative |
+| **System** | Temp `frame_sources` with a 16:9 clip, a 4:3 clip and a 256×144 clip → all outputs 256×144, 4:3 padded, compact copied byte for byte; rerun derives nothing; `--index-only` reproduces identical tables; a clip missing its `crf45` folder is reported and excluded |
+
+**How to run:** `pytest tests/unit/test_derive_frames.py tests/system/test_derive_frames.py`
+
+## Acceptance checks
+
+- [ ] Every row of `slots.csv` points at two existing 256×144 files
+- [ ] Rerun with nothing new performs no image work and rewrites identical tables
+- [ ] A new pack or new personal clips appear after a rerun without touching existing outputs
+- [ ] CLI entry `gfc-derive-frames` in `pyproject.toml`
+
+## Ties to decisions
+
+D21 (JPEG), D26 (frame sources), D27 (derive policy), D29 (slot index is the training input).
