@@ -1,8 +1,12 @@
-"""Vendor-neutral GPU video encode via Direct3D 12 (D28), with a startup self-test.
+"""Vendor-neutral GPU video encode (Direct3D 12) and decode (D3D11VA), each with its own check (D28).
 
 D3D12 video encode works on NVIDIA, AMD and Intel through the normal graphics
-driver (Windows 11). The kit tries it once at startup by encoding a short test
-clip and checking the result; anything unexpected means "use libx264 instead".
+driver (Windows 11). It is tried once at startup by encoding a short test clip and
+checking the frame count and the picture; anything unexpected means libx264.
+
+GPU decode is checked separately, per codec: the first frames of a real clip are
+decoded on the GPU and on the CPU, and the GPU is used for that codec only when the
+pixels are identical. Decode and encode never disable each other.
 """
 
 from __future__ import annotations
@@ -17,9 +21,13 @@ from .ffbin import FFTools, ToolError, run_capture
 
 GPU_ENCODER = "h264_d3d12va"
 HW_DEVICE = "d3d12va"
-# The encode input is decoded on the GPU as well (bit-exact, and ffmpeg falls back to
-# software decode by itself when the GPU can't decode a codec). Keeps the CPU mostly idle.
+# GPU decode, used for every ffmpeg call on a codec that passed DecodeCheck (bit-exact
+# with CPU decode; ffmpeg also falls back to software decode by itself when it can't).
 GPU_DECODE = "d3d11va"
+DECODE_CHECK_FRAMES = 8
+# Lowest acceptable PSNR (dB) of a GPU-encoded picture against its source. QP 51 lands
+# far above this on real footage; a broken encoder (green, black or garbled frames) far below.
+MIN_PSNR_DB = 18.0
 # Appended to the -vf chain: CPU frames (after tone-map / crop) are uploaded to the GPU.
 GPU_FILTERS = ("format=nv12", "hwupload")
 # H.264 level 5.2 allows 2,073,600 macroblocks per second (e.g. 4K60). Above that no level
@@ -28,6 +36,7 @@ GPU_FILTERS = ("format=nv12", "hwupload")
 LEVEL_52_MBPS = 2_073_600
 PROBE_FRAMES = 30
 PROBE_TIMEOUT_S = 90
+_PROBE_SOURCE = f"testsrc2=s=1280x720:r=30:d={PROBE_FRAMES / 30:g}"
 _ADAPTER = re.compile(r"Using device [0-9a-fA-F]{4}:[0-9a-fA-F]{4} \((.+?)\)\.?\s*$", re.MULTILINE)
 
 
@@ -69,9 +78,85 @@ def error_line(text: str) -> str:
     return _CONTEXT.sub("", pick).lstrip("- ")[:200]
 
 
-def hw_input_args() -> list[str]:
-    """ffmpeg options before -i for a GPU encode."""
-    return ["-hwaccel", GPU_DECODE, "-init_hw_device", f"{HW_DEVICE}=gpu", "-filter_hw_device", "gpu"]
+def hw_decode_args() -> list[str]:
+    """ffmpeg options before -i to decode the input on the GPU."""
+    return ["-hwaccel", GPU_DECODE]
+
+
+def hw_encode_device_args() -> list[str]:
+    """ffmpeg options before -i that open the D3D12 device the GPU encoder uploads to."""
+    return ["-init_hw_device", f"{HW_DEVICE}=gpu", "-filter_hw_device", "gpu"]
+
+
+_PSNR = re.compile(r"PSNR y:\S+ u:\S+ v:\S+ average:(\S+)")
+
+
+def psnr_db(tools: FFTools, a: Path | str, b: Path | str, *, a_lavfi: bool = False) -> float:
+    """Average PSNR of b against a (inf when identical); raises ToolError when ffmpeg can't compare."""
+    first: list[object] = ["-f", "lavfi", "-i", a] if a_lavfi else ["-i", a]
+    proc = run_capture([
+        tools.ffmpeg, "-hide_banner", "-nostdin", "-loglevel", "info", "-nostats",
+        *first, "-i", b, "-lavfi", "[1:v][0:v]psnr", "-f", "null", "-",
+    ], timeout=120)
+    found = _PSNR.findall(proc.stderr)
+    if proc.returncode != 0 or not found:
+        raise ToolError(f"psnr failed: {error_line(proc.stderr)}", proc.returncode, proc.stderr[-2000:])
+    return float("inf") if found[-1] == "inf" else float(found[-1])
+
+
+def pictures_ok(tools: FFTools, pairs: list[tuple[Path, Path]]) -> tuple[bool, str]:
+    """True when every GPU still is close enough to its full-tier still (same slot)."""
+    for ref, test in pairs:
+        db = psnr_db(tools, ref, test)
+        if db < MIN_PSNR_DB:
+            return False, f"GPU picture check failed on {test.name}: {db:.1f} dB (minimum {MIN_PSNR_DB:g})"
+    return True, ""
+
+
+class DecodeCheck:
+    """Per-codec GPU decode decision for one run; a codec is checked once, on its first clip."""
+
+    def __init__(self) -> None:
+        self.results: dict[str, tuple[bool, str]] = {}
+
+    def allowed(self, tools: FFTools, src: Path, stream_index: int, codec: str, bit_depth: int) -> bool:
+        key = f"{codec}:{'10bit' if bit_depth > 8 else '8bit'}"
+        if key not in self.results:
+            self.results[key] = _check_decode(tools, src, stream_index, bit_depth)
+        return self.results[key][0]
+
+    def summary(self) -> dict[str, str]:
+        """{"h264:8bit": "gpu", "av1:10bit": "cpu: <reason>"} for run records."""
+        return {k: ("gpu" if ok else f"cpu: {why}") for k, (ok, why) in sorted(self.results.items())}
+
+
+def _frame_hashes(tools: FFTools, src: Path, stream_index: int, pix_fmt: str, hw: bool) -> list[str]:
+    proc = run_capture([
+        tools.ffmpeg, "-hide_banner", "-nostdin", "-loglevel", "error",
+        *(hw_decode_args() if hw else []),
+        "-protocol_whitelist", "file", "-i", src, "-map", f"0:{stream_index}",
+        "-frames:v", str(DECODE_CHECK_FRAMES), "-pix_fmt", pix_fmt, "-f", "framemd5", "-",
+    ], timeout=120)
+    if proc.returncode != 0:
+        raise ToolError(error_line(proc.stderr), proc.returncode, proc.stderr[-2000:])
+    return [ln.rsplit(",", 1)[-1].strip() for ln in proc.stdout.splitlines() if ln and not ln.startswith("#")]
+
+
+def _check_decode(tools: FFTools, src: Path, stream_index: int, bit_depth: int) -> tuple[bool, str]:
+    """GPU decode is allowed only when its first frames match CPU decode bit for bit."""
+    if os.name != "nt":
+        return False, "GPU decoding is only used on Windows"
+    pix_fmt = "yuv420p10le" if bit_depth > 8 else "yuv420p"
+    try:
+        cpu = _frame_hashes(tools, src, stream_index, pix_fmt, hw=False)
+        hw = _frame_hashes(tools, src, stream_index, pix_fmt, hw=True)
+    except ToolError as exc:
+        return False, first_line(str(exc)) or "decode check failed"
+    if not cpu:
+        return False, "no frames decoded"
+    if hw != cpu:
+        return False, "GPU decode differs from CPU decode"
+    return True, ""
 
 
 def encode_args(qp: int, width: int = 0, height: int = 0, fps: float = 0.0) -> list[str]:
@@ -113,7 +198,7 @@ def _probe(tools: FFTools, tmp: Path) -> GpuStatus:
     args: list[object] = [
         tools.ffmpeg, "-hide_banner", "-nostdin", "-loglevel", "verbose", "-nostats", "-y",
         "-init_hw_device", f"{HW_DEVICE}=gpu", "-filter_hw_device", "gpu",
-        "-f", "lavfi", "-i", f"testsrc2=s=1280x720:r=30:d={PROBE_FRAMES / 30:g}",
+        "-f", "lavfi", "-i", _PROBE_SOURCE,
         "-vf", ",".join(GPU_FILTERS), *encode_args(51), out,
     ]
     try:
@@ -133,4 +218,10 @@ def _probe(tools: FFTools, tmp: Path) -> GpuStatus:
     if check.stdout.strip() != f"h264,{PROBE_FRAMES}":
         got = check.stdout.strip() or error_line(check.stderr)
         return GpuStatus(False, adapter, f"test encode came out wrong ({got})")
+    try:
+        db = psnr_db(tools, _PROBE_SOURCE, out, a_lavfi=True)
+    except ToolError as exc:
+        return GpuStatus(False, adapter, f"test encode picture check failed: {first_line(str(exc))}")
+    if db < MIN_PSNR_DB:
+        return GpuStatus(False, adapter, f"test encode picture is wrong ({db:.1f} dB, minimum {MIN_PSNR_DB:g})")
     return GpuStatus(True, adapter)

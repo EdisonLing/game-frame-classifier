@@ -59,6 +59,7 @@ class ClipResult:
     images: list[ImageRecord]
     low_encoder: str = ""  # encoder of the crf tiers: libx264, the GPU encoder, "mixed" or ""
     gpu_fallback: str = ""  # why the GPU encode was redone on the CPU; "" if it wasn't
+    decoder: str = ""  # how the source was decoded: the GPU decoder or "cpu"
 
 
 def pre_filters(info: ProbeInfo) -> list[str]:
@@ -102,14 +103,20 @@ def encode_crf(
     on_progress: Callable[[float], None] | None = None,
     *,
     gpu_qp: int | None = None,
+    hw_decode: bool = False,
 ) -> None:
-    """Re-encode src at x264 CRF crf, or on the GPU at constant QP gpu_qp when given (D28)."""
+    """Re-encode src at x264 CRF crf, or on the GPU at constant QP gpu_qp when given (D28).
+
+    hw_decode decodes src on the GPU; it is independent of which encoder is used.
+    """
     args: list[object] = [
         tools.ffmpeg, "-hide_banner", "-nostdin", "-loglevel", "error", "-nostats", "-y",
         "-progress", "pipe:1",
     ]
+    if hw_decode:
+        args += gpu.hw_decode_args()
     if gpu_qp is not None:
-        args += gpu.hw_input_args()
+        args += gpu.hw_encode_device_args()
     args += [
         "-protocol_whitelist", "file", "-i", src,
         "-map", f"0:{info.stream_index}", "-an", "-sn", "-dn",
@@ -137,6 +144,7 @@ def extract_tier(
     apply_pre: bool,
     genpts: bool = False,
     on_progress: Callable[[float], None] | None = None,
+    hw_decode: bool = False,
 ) -> list[float]:
     """Write %06d.jpg (one per bucket) into out_dir; return each image's actual pts_time."""
     off = offset_s(info.nominal_fps)
@@ -150,6 +158,8 @@ def extract_tier(
     ]
     if genpts:
         args += ["-fflags", "+genpts"]
+    if hw_decode:
+        args += gpu.hw_decode_args()
     args += [
         "-protocol_whitelist", "file", "-i", src,
         "-map", f"0:{info.stream_index}" if apply_pre else "0:v:0",
@@ -186,13 +196,17 @@ def _extract_with_retry(
     log_path: Path,
     apply_pre: bool,
     progress: _Progress,
+    hw_decode: bool = False,
 ) -> list[float]:
-    times = extract_tier(tools, src, info, recipe, out_dir, log_path, apply_pre=apply_pre, on_progress=progress.part)
+    times = extract_tier(
+        tools, src, info, recipe, out_dir, log_path,
+        apply_pre=apply_pre, on_progress=progress.part, hw_decode=hw_decode,
+    )
     if not times and info.duration_s > 0:
         _reset_dir(out_dir)
         times = extract_tier(
             tools, src, info, recipe, out_dir, log_path,
-            apply_pre=apply_pre, genpts=True, on_progress=progress.part,
+            apply_pre=apply_pre, genpts=True, on_progress=progress.part, hw_decode=hw_decode,
         )
     if not times:
         raise ExtractError("no_timestamps")
@@ -202,6 +216,38 @@ def _extract_with_retry(
 
 def _lines_up(times: list[float], ref: list[float], tolerance: float) -> bool:
     return len(times) == len(ref) and all(abs(a - b) <= tolerance for a, b in zip(times, ref))
+
+
+def _check_pairs(full_dir: Path, low_dir: Path) -> list[tuple[Path, Path]]:
+    """First, middle and last (full, low) still pairs; the same file name is the same slot."""
+    names = sorted(f.name for f in low_dir.glob("*.jpg"))
+    if not names:
+        return []
+    picks = sorted({names[0], names[len(names) // 2], names[-1]})
+    return [(full_dir / n, low_dir / n) for n in picks if (full_dir / n).is_file()]
+
+
+def _tmp_hw(decode: gpu.DecodeCheck | None, tools: FFTools, tmp: Path) -> bool:
+    """GPU decode for the intermediate file (always 8-bit H.264, stream 0), checked on first use."""
+    return bool(decode) and decode.allowed(tools, tmp, 0, "h264", 8)
+
+
+def _x264_tier(
+    tools: FFTools, src: Path, info: ProbeInfo, recipe: Recipe, crf: int, tmp: Path,
+    encode_log: Path, out_dir: Path, extract_log: Path, progress: _Progress,
+    hw_decode_src: bool, decode: gpu.DecodeCheck | None,
+) -> list[float]:
+    mark = progress.done
+    try:
+        encode_crf(tools, src, info, recipe, crf, tmp, encode_log, progress.part, hw_decode=hw_decode_src)
+        progress.finish_step()
+        return _extract_with_retry(
+            tools, tmp, info, recipe, out_dir, extract_log, False, progress,
+            hw_decode=_tmp_hw(decode, tools, tmp),
+        )
+    except BaseException:
+        progress.done = mark
+        raise
 
 
 @dataclass(frozen=True)
@@ -223,11 +269,17 @@ def _degraded_tier(
     progress: _Progress,
     gpu_qp: int | None,
     ref_times: list[float] | None,
+    *,
+    hw_decode_src: bool = False,
+    decode: gpu.DecodeCheck | None = None,
 ) -> _TierEncode:
     """Encode then extract one crf tier, on the GPU when gpu_qp is given.
 
     A GPU attempt that fails in any way (ffmpeg error, no frames, timestamps that don't
-    line up with the full tier) is thrown away and the tier is redone with libx264.
+    line up with the full tier, pictures too far from the full tier's) is thrown away and
+    the tier is redone with libx264. GPU decode (hw_decode_src for the source, decode for
+    the intermediate H.264 file) is separate from the encoder: the libx264 redo keeps it,
+    and drops it only if the redo itself fails.
     """
     crf = int(tier[3:])
     out_dir = stage / tier
@@ -238,13 +290,23 @@ def _degraded_tier(
     if gpu_qp is not None:
         mark = progress.done
         try:
-            encode_crf(tools, src, info, recipe, crf, tmp, encode_log, progress.part, gpu_qp=gpu_qp)
+            encode_crf(
+                tools, src, info, recipe, crf, tmp, encode_log, progress.part,
+                gpu_qp=gpu_qp, hw_decode=hw_decode_src,
+            )
             progress.finish_step()
-            times = _extract_with_retry(tools, tmp, info, recipe, out_dir, extract_log, False, progress)
+            times = _extract_with_retry(
+                tools, tmp, info, recipe, out_dir, extract_log, False, progress,
+                hw_decode=_tmp_hw(decode, tools, tmp),
+            )
             if ref_times is not None and not _lines_up(times, ref_times, 0.5 / info.nominal_fps):
                 raise ExtractError(
                     f"GPU output has {len(times)} samples that don't line up with the original's {len(ref_times)}"
                 )
+            if ref_times is not None:
+                ok, why = gpu.pictures_ok(tools, _check_pairs(stage / "full", out_dir))
+                if not ok:
+                    raise ExtractError(why)
             tmp.unlink()
             return _TierEncode(times, gpu.GPU_ENCODER, f"qp{gpu_qp}", "", "")
         except (ToolError, ExtractError, OSError) as exc:
@@ -253,9 +315,20 @@ def _degraded_tier(
             progress.done = mark
             _reset_dir(out_dir)
             tmp.unlink(missing_ok=True)
-    encode_crf(tools, src, info, recipe, crf, tmp, encode_log, progress.part)
-    progress.finish_step()
-    times = _extract_with_retry(tools, tmp, info, recipe, out_dir, extract_log, False, progress)
+    try:
+        times = _x264_tier(
+            tools, src, info, recipe, crf, tmp, encode_log, out_dir, extract_log, progress,
+            hw_decode_src, decode,
+        )
+    except (ToolError, ExtractError) as exc:
+        if not (hw_decode_src or decode):
+            raise
+        reason = reason or f"GPU decode failed: {gpu.first_line(str(exc))}"
+        _reset_dir(out_dir)
+        tmp.unlink(missing_ok=True)
+        times = _x264_tier(
+            tools, src, info, recipe, crf, tmp, encode_log, out_dir, extract_log, progress, False, None,
+        )
     core = read_x264_core(tmp)
     tmp.unlink()
     return _TierEncode(times, X264, f"crf{crf}", reason, core)
@@ -273,11 +346,14 @@ def extract_clip(
     on_progress: Callable[[float], None] | None = None,
     *,
     use_gpu: bool = False,
+    decode: gpu.DecodeCheck | None = None,
 ) -> ClipResult:
     """All tiers for one clip into frames_root/<clip_key>/<tier>/; stage is scratch space.
 
     use_gpu encodes the crf tiers on the GPU at recipe.gpu_qp, falling back to libx264
     per tier; the result says which encoder made each tier and why any fallback happened.
+    decode (separate from use_gpu) decodes on the GPU for codecs whose GPU decode matched
+    CPU decode bit for bit; a GPU decode that fails is redone on the CPU.
     """
     tiers = recipe.tiers
     progress = _Progress(sum(1 if t == "full" else 2 for t in tiers), on_progress)
@@ -286,14 +362,30 @@ def extract_clip(
         _reset_dir(stage)
         times: dict[str, list[float]] = {}
         encodes: dict[str, _TierEncode] = {}
+        hw_src = bool(decode) and decode.allowed(tools, src, info.stream_index, info.video_codec, info.bit_depth)
+        tmp_decode = decode
         for tier in tiers:
             out_dir = stage / tier
             out_dir.mkdir()
             if tier == "full":
-                times[tier] = _extract_with_retry(tools, src, info, recipe, out_dir, stage / "full.log", True, progress)
+                try:
+                    times[tier] = _extract_with_retry(
+                        tools, src, info, recipe, out_dir, stage / "full.log", True, progress, hw_decode=hw_src,
+                    )
+                except (ToolError, ExtractError):
+                    if not hw_src:
+                        raise
+                    hw_src, tmp_decode = False, None
+                    _reset_dir(out_dir)
+                    times[tier] = _extract_with_retry(
+                        tools, src, info, recipe, out_dir, stage / "full.log", True, progress,
+                    )
                 continue
             qp = recipe.gpu_qp.get(int(tier[3:])) if use_gpu else None
-            enc = _degraded_tier(tools, src, info, recipe, tier, stage, progress, qp, times.get("full"))
+            enc = _degraded_tier(
+                tools, src, info, recipe, tier, stage, progress, qp, times.get("full"),
+                hw_decode_src=hw_src, decode=tmp_decode,
+            )
             encodes[tier] = enc
             times[tier] = enc.times
         off = offset_s(info.nominal_fps)
@@ -350,6 +442,7 @@ def extract_clip(
         images=images,
         low_encoder=_summary(e.encoder for e in encodes.values()),
         gpu_fallback=next((e.gpu_fallback for e in encodes.values() if e.gpu_fallback), ""),
+        decoder=gpu.GPU_DECODE if hw_src else "cpu",
     )
 
 

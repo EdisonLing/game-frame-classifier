@@ -6,6 +6,8 @@ import os
 import re
 import shutil
 import subprocess
+import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Sequence
@@ -14,6 +16,11 @@ EXE_SUFFIX = ".exe" if os.name == "nt" else ""
 ENV_DIR = "GFC_FFMPEG_DIR"
 STRIPPED_ENV = ("FFREPORT",)
 _OUT_TIME = re.compile(r"^out_time_us=(\d+)\s*$")
+# Progress keys that only change when ffmpeg makes real progress (speed and bitrate drift with the clock).
+_PROGRESS_KEYS = ("frame", "out_time_us", "total_size", "dup_frames", "drop_frames")
+# No progress for this long means ffmpeg is stuck (for example a hung GPU driver). Sparse outputs
+# (one still per 5 s of video) can legitimately go quiet for a while, so this is generous.
+STALL_S = 300.0
 _state = {"low_priority": False}
 
 
@@ -126,8 +133,13 @@ def run_ffmpeg(
     stderr_path: Path,
     duration_s: float = 0.0,
     on_progress: Callable[[float], None] | None = None,
+    stall_s: float = STALL_S,
 ) -> None:
-    """Run ffmpeg whose args include `-progress pipe:1`; stderr is saved to stderr_path."""
+    """Run ffmpeg whose args include `-progress pipe:1`; stderr is saved to stderr_path.
+
+    ffmpeg is killed and ToolError raised when its progress values stop changing for
+    stall_s seconds, so a hung encoder or driver can't stop a run forever.
+    """
     with open(stderr_path, "wb") as err:
         try:
             proc = subprocess.Popen(
@@ -143,16 +155,39 @@ def run_ffmpeg(
             )
         except OSError as exc:
             raise ToolError(f"could not start ffmpeg: {exc.strerror}") from exc
-        try:
+        state = {"last": time.monotonic(), "seen": {}}
+
+        def read_progress() -> None:
             for line in proc.stdout:
+                key, _, value = line.strip().partition("=")
+                if key in _PROGRESS_KEYS and state["seen"].get(key) != value:
+                    state["seen"][key] = value
+                    state["last"] = time.monotonic()
                 match = _OUT_TIME.match(line)
                 if match and on_progress is not None and duration_s > 0:
                     on_progress(min(1.0, int(match.group(1)) / 1_000_000 / duration_s))
-            code = proc.wait()
+
+        reader = threading.Thread(target=read_progress, daemon=True)
+        reader.start()
+        stalled = False
+        try:
+            while True:
+                try:
+                    code = proc.wait(timeout=1.0)
+                    break
+                except subprocess.TimeoutExpired:
+                    if time.monotonic() - state["last"] > stall_s:
+                        stalled = True
+                        proc.kill()
+                        code = proc.wait()
+                        break
+            reader.join(timeout=5)
         except BaseException:
             proc.kill()
             proc.wait()
             raise
+    if stalled:
+        raise ToolError(f"ffmpeg made no progress for {stall_s:g} s and was stopped", code, _tail(stderr_path))
     if code != 0:
         tail = _tail(stderr_path)
         last = tail.splitlines()[-1] if tail else "no error output"

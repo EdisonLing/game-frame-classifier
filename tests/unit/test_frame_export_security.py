@@ -17,7 +17,7 @@ EXPECTED = {
 ALLOWED_MODULES = {
     "__future__", "argparse", "collections", "copy", "csv", "dataclasses", "datetime", "hashlib",
     "json", "math", "os", "pathlib", "platform", "re", "shutil", "struct", "subprocess", "sys",
-    "time", "typing", "uuid", "zipfile", "game_frame_classifier",
+    "threading", "time", "typing", "uuid", "zipfile", "game_frame_classifier",
 }
 SUBPROCESS_ALLOWED = {"sourcing/ffbin.py", "frame_export/cli.py"}
 BANNED_NAMES = {"eval", "exec", "compile", "__import__", "breakpoint"}

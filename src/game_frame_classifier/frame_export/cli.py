@@ -79,7 +79,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--no-zip", action="store_true", help="leave the pack folder unzipped")
     p.add_argument("--output", help="existing folder to save the finished zip in (default: the tool's output folder)")
     p.add_argument("--no-open", action="store_true", help="do not open Explorer when done")
-    p.add_argument("--cpu", action="store_true", help="encode on the CPU even if the graphics card encoder works")
+    p.add_argument("--cpu", action="store_true", help="decode and encode on the CPU even if the graphics card works")
     p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     return p
 
@@ -415,6 +415,7 @@ def _main(args: argparse.Namespace) -> int:
     ctx = RunContext(root, items, recipe, tools, user, game, other_name)
     work = work_dir(ctx)
     ctx.gpu = choose_encoder(args, recipe, tools, work.parent / f"gpu_probe_{work.name}")
+    ctx.decode = None if args.cpu else gpu.DecodeCheck()
     state = load_state(work)
     if state is not None:
         print("Continuing an earlier run on this folder.")

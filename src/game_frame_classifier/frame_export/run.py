@@ -19,7 +19,7 @@ from typing import Any
 from game_frame_classifier.sourcing import SCHEMA_PACK
 from game_frame_classifier.sourcing.extract import extract_clip
 from game_frame_classifier.sourcing.ffbin import FFTools, version_line
-from game_frame_classifier.sourcing.gpu import GPU_ENCODER, GpuStatus
+from game_frame_classifier.sourcing.gpu import GPU_ENCODER, DecodeCheck, GpuStatus
 from game_frame_classifier.sourcing.hashing import sha256_file
 from game_frame_classifier.sourcing.labels import OTHER, label_hints
 from game_frame_classifier.sourcing.manifests import (
@@ -61,6 +61,7 @@ class RunContext:
     other_name: str
     gpu: GpuStatus | None = None  # None: the GPU was not tried (--cpu or recipe encoder x264)
     gpu_stopped: str = ""  # set when repeated GPU failures switched the rest of the run to the CPU
+    decode: DecodeCheck | None = None  # None: decode on the CPU (--cpu); else per-codec GPU decode check
 
     @property
     def selected(self) -> list[ScanItem]:
@@ -250,7 +251,7 @@ def process(
             clip_key = "c" + sha[:12]
             result = extract_clip(
                 ctx.tools, it.path, it.info, ctx.recipe, clip_key,
-                work / "stage" / clip_key, frames_root, pack, show, use_gpu=ctx.use_gpu,
+                work / "stage" / clip_key, frames_root, pack, show, use_gpu=ctx.use_gpu, decode=ctx.decode,
             )
         except KeyboardInterrupt:
             _cleanup_clip(work, frames_root, clip_key)
@@ -272,7 +273,7 @@ def process(
         done[it.quick_id] = data
         footage_done += it.info.duration_s
         remaining_s -= it.info.duration_s
-        log.write(f"clip ok {it.relpath} slots={result.slots} wall={wall:.1f}s encoder={result.low_encoder}")
+        log.write(f"clip ok {it.relpath} slots={result.slots} wall={wall:.1f}s encoder={result.low_encoder} decoder={result.decoder}")
         print(f"\r{prefix} 100%  {result.slots} slots                    ")
         if result.gpu_fallback:
             gpu_streak += 1
@@ -381,6 +382,7 @@ def encoder_summary(ctx: RunContext, done: dict[str, dict[str, Any]]) -> dict[st
         "clips_cpu": encoders.count("libx264"),
         "clips_mixed": encoders.count("mixed"),
         "clips_gpu_fallback": sum(1 for d in done.values() if d["result"].get("gpu_fallback")),
+        "decode": ctx.decode.summary() if ctx.decode is not None else "cpu (--cpu)",
     }
 
 
