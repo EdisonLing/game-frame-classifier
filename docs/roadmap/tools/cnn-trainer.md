@@ -104,7 +104,7 @@ The code is the same on every device; only the installed PyTorch build changes.
 | Option | Setup | Notes |
 |---|---|---|
 | CPU (default) | `pip install -e ".[dev,train]"` | Enough for the progress report: one run in an evening |
-| AMD Radeon on Windows (RX 7000 / 9000) | Separate virtual environment; current AMD graphics driver; AMD's ROCm SDK wheels and its matching `torch` / `torchvision` wheels from AMD's package index, following AMD's "PyTorch on Windows" guide; then `pip install -e ".[dev]"` plus `numpy scikit-learn matplotlib` without reinstalling `torch` | Python 3.12 required by AMD's wheels. Check with `torch.cuda.is_available()` and `torch.version.hip`. Pre-release quality on Windows; expect the first epoch to be slower while kernels are tuned. Keep the CPU environment as the fallback |
+| AMD Radeon RX 9000 on Windows | Separate `.venv-rocm` with AMD's ROCm build of `torch` / `torchvision`; step by step in [AMD GPU setup](../../amd-gpu-setup.md) | Check with `torch.cuda.is_available()` and `torch.version.hip`. Training support on Windows is recent; expect the first epoch to be slower while kernels are selected. Keep the CPU environment as the fallback |
 | AMD Radeon on Linux or WSL2 | ROCm build of PyTorch | Most mature AMD path |
 | Colab GPU | Upload `data/frames/` and the split folder as a zip | Same command; mind session limits |
 
