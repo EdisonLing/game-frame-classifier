@@ -1,4 +1,4 @@
-"""Re-encode frames at controlled quality tiers (ffmpeg CRF)."""
+"""Quality tiers via video CRF re-encode, then extract/downscale."""
 
 from __future__ import annotations
 
@@ -12,23 +12,31 @@ from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 from typing import Iterable, Sequence
 
-from game_frame_classifier.frame_cleaner import FrameRecord, load_frame_manifest
-from game_frame_classifier.frame_extractor import FFmpegNotFoundError, require_ffmpeg
+from game_frame_classifier.frame_extractor import (
+    DEFAULT_HEIGHT,
+    DEFAULT_INTERVAL_S,
+    DEFAULT_WIDTH,
+    FFmpegNotFoundError,
+    FrameRecord,
+    extract_frames,
+    require_ffmpeg,
+)
 
 
-# Eval tiers from the proposal. Augmentation may sample CRF in [28, 40].
+# Eval tiers (D04/D22): chosen so 256x144 stills still separate (see quality-encoder.md).
+# Augmentation samples the medium→low band.
 TIER_CRF: dict[str, int] = {
     "full": 0,
-    "medium": 28,
-    "low": 38,
+    "medium": 38,
+    "low": 45,
 }
-AUGMENT_CRF_MIN = 28
-AUGMENT_CRF_MAX = 40
+AUGMENT_CRF_MIN = 32
+AUGMENT_CRF_MAX = 45
 
 
 @dataclass(frozen=True)
 class QualityFrameRecord:
-    """A frame copy tagged with quality tier / CRF."""
+    """A frame extracted from a quality-tiered video source."""
 
     frame_id: str
     video_id: str
@@ -61,133 +69,79 @@ def validate_crf(crf: int) -> int:
     return crf
 
 
-def degrade_frame_ffmpeg(
+def reencode_video_crf(
     src: Path | str,
     dest: Path | str,
     *,
     crf: int,
+    preset: str = "veryfast",
 ) -> Path:
     """
-    Degrade a still frame via an ffmpeg H.264 CRF round-trip.
+    Re-encode ``src`` to H.264 at ``crf`` (video only, no audio).
 
-    CRF 0 copies the source bytes (lossless path for the ``full`` tier).
-    Higher CRF → stronger compression after decode back to JPEG.
+    This is the authentic quality path: compress the timeline, then callers
+    extract and downscale. CRF 0 is rejected here — use the original file.
     """
     crf = validate_crf(crf)
+    if crf == 0:
+        raise ValueError("crf 0 means use the original video; do not re-encode")
     src = Path(src)
     dest = Path(dest)
     if not src.is_file():
-        raise FileNotFoundError(f"frame not found: {src}")
+        raise FileNotFoundError(f"video not found: {src}")
     dest.parent.mkdir(parents=True, exist_ok=True)
 
-    if crf == 0:
-        shutil.copy2(src, dest)
-        return dest.resolve()
-
     ffmpeg = require_ffmpeg()
-    with tempfile.TemporaryDirectory(prefix="gfc_qenc_") as tmp:
-        tmp_mp4 = Path(tmp) / "degraded.mp4"
-        # Still → short CFR clip at CRF, then extract one JPEG.
-        enc = [
-            ffmpeg,
-            "-hide_banner",
-            "-loglevel",
-            "error",
-            "-y",
-            "-loop",
-            "1",
-            "-i",
-            str(src),
-            "-frames:v",
-            "1",
-            "-c:v",
-            "libx264",
-            "-preset",
-            "veryfast",
-            "-crf",
-            str(crf),
-            "-pix_fmt",
-            "yuv420p",
-            str(tmp_mp4),
-        ]
-        proc = subprocess.run(enc, capture_output=True, text=True)
-        if proc.returncode != 0:
-            raise RuntimeError(
-                "ffmpeg CRF encode failed\n"
-                f"cmd: {' '.join(enc)}\n"
-                f"stderr: {proc.stderr.strip()}"
-            )
-
-        dec = [
-            ffmpeg,
-            "-hide_banner",
-            "-loglevel",
-            "error",
-            "-y",
-            "-i",
-            str(tmp_mp4),
-            "-frames:v",
-            "1",
-            "-q:v",
-            "2",
-            str(dest),
-        ]
-        proc = subprocess.run(dec, capture_output=True, text=True)
-        if proc.returncode != 0:
-            raise RuntimeError(
-                "ffmpeg decode-to-jpeg failed\n"
-                f"cmd: {' '.join(dec)}\n"
-                f"stderr: {proc.stderr.strip()}"
-            )
-
+    cmd = [
+        ffmpeg,
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-y",
+        "-i",
+        str(src),
+        "-an",
+        "-c:v",
+        "libx264",
+        "-preset",
+        preset,
+        "-crf",
+        str(crf),
+        "-pix_fmt",
+        "yuv420p",
+        str(dest),
+    ]
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    if proc.returncode != 0:
+        raise RuntimeError(
+            "ffmpeg video CRF encode failed\n"
+            f"cmd: {' '.join(cmd)}\n"
+            f"stderr: {proc.stderr.strip()}"
+        )
     return dest.resolve()
 
 
-def _safe_stem(frame_id: str) -> str:
-    return frame_id.replace(":", "_").replace("/", "_").replace("\\", "_")
-
-
-def encode_frame_record(
+def _frame_to_quality(
     rec: FrameRecord,
-    output_dir: Path | str,
     *,
-    tier: str | None = None,
-    crf: int | None = None,
+    tier: str,
+    crf: int,
+    source_video: Path,
 ) -> QualityFrameRecord:
-    """
-    Write one degraded copy of ``rec`` under ``output_dir``.
-
-    Provide ``tier`` (full/medium/low) and/or explicit ``crf``. If both are
-    given, ``crf`` wins for the encode but ``tier`` is still stored as the label
-    (use tier=None with only crf for augmentation samples).
-    """
-    if crf is None and tier is None:
-        raise ValueError("provide tier and/or crf")
-    if crf is None:
-        assert tier is not None
-        crf = crf_for_tier(tier)
-        tier_label = tier.strip().lower()
-    else:
-        crf = validate_crf(crf)
-        tier_label = tier.strip().lower() if tier else f"crf{crf}"
-
-    output_dir = Path(output_dir)
-    src = Path(rec.path)
-    dest = output_dir / f"{_safe_stem(rec.frame_id)}_{tier_label}_crf{crf}{src.suffix.lower() or '.jpg'}"
-    out_path = degrade_frame_ffmpeg(src, dest, crf=crf)
+    tier_label = tier.strip().lower()
     return QualityFrameRecord(
         frame_id=f"{rec.frame_id}:{tier_label}",
         video_id=rec.video_id,
         game=rec.game,
         timestamp_s=rec.timestamp_s,
-        path=str(out_path),
+        path=rec.path,
         width=rec.width,
         height=rec.height,
-        source_video=rec.source_video,
+        source_video=str(Path(source_video).resolve()),
         quality_tier=tier_label,
         crf=crf,
         source_frame_id=rec.frame_id,
-        source_path=str(src.resolve()),
+        source_path=str(Path(source_video).resolve()),
     )
 
 
@@ -213,40 +167,106 @@ def write_quality_manifest(
     return csv_path, json_path
 
 
-def encode_manifest(
-    manifest_path: Path | str,
+def encode_video_quality_tiers(
+    video_path: Path | str,
     output_dir: Path | str,
     *,
+    game: str,
+    video_id: str | None = None,
     tiers: Sequence[str] = ("full", "medium", "low"),
+    interval_s: float = DEFAULT_INTERVAL_S,
+    width: int = DEFAULT_WIDTH,
+    height: int = DEFAULT_HEIGHT,
+    max_duration_s: float | None = None,
+    preset: str = "veryfast",
+    keep_proxies: bool = False,
 ) -> dict[str, list[QualityFrameRecord]]:
     """
-    Encode every frame in a manifest into each requested quality tier.
+    Build full / medium / low frame sets from one source video.
 
-    Layout: ``output_dir/<tier>/`` with images + per-tier manifests, plus
-    ``quality_summary.json`` at the root.
+    **full (CRF 0):** extract + downscale from the original video.
+    **medium / low:** re-encode the *video* at CRF 38 / 45, then extract +
+    downscale from that proxy (authentic low-bitrate look).
+
+    Layout: ``output_dir/<tier>/`` images + manifests, plus
+    ``quality_summary.json``. Proxy mp4s are deleted unless ``keep_proxies``.
     """
-    records = load_frame_manifest(manifest_path)
+    video_path = Path(video_path).resolve()
+    if not video_path.is_file():
+        raise FileNotFoundError(f"video not found: {video_path}")
+    if not game.strip():
+        raise ValueError("game label must be non-empty")
+
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-
-    # Validate tiers up front
+    video_id = video_id or video_path.stem
     resolved = [(t, crf_for_tier(t)) for t in tiers]
     by_tier: dict[str, list[QualityFrameRecord]] = {}
+    proxy_dir = output_dir / "_proxies"
+    if keep_proxies:
+        proxy_dir.mkdir(parents=True, exist_ok=True)
 
-    for tier, _crf in resolved:
-        tier_dir = output_dir / tier
+    for tier, crf in resolved:
+        tier_key = tier.strip().lower()
+        tier_dir = output_dir / tier_key
+        if tier_dir.exists():
+            shutil.rmtree(tier_dir)
         tier_dir.mkdir(parents=True, exist_ok=True)
-        encoded: list[QualityFrameRecord] = []
-        for rec in records:
-            encoded.append(encode_frame_record(rec, tier_dir, tier=tier))
-        write_quality_manifest(encoded, tier_dir)
-        by_tier[tier] = encoded
+
+        tmp_proxy: Path | None = None
+        try:
+            if crf == 0:
+                src_for_extract = video_path
+            elif keep_proxies:
+                src_for_extract = proxy_dir / f"{video_id}_{tier_key}_crf{crf}.mp4"
+                reencode_video_crf(
+                    video_path, src_for_extract, crf=crf, preset=preset
+                )
+            else:
+                tmp = tempfile.NamedTemporaryFile(
+                    prefix=f"gfc_q_{tier_key}_",
+                    suffix=".mp4",
+                    delete=False,
+                )
+                tmp.close()
+                tmp_proxy = Path(tmp.name)
+                reencode_video_crf(video_path, tmp_proxy, crf=crf, preset=preset)
+                src_for_extract = tmp_proxy
+
+            frames = extract_frames(
+                src_for_extract,
+                tier_dir,
+                game=game,
+                video_id=video_id if crf == 0 else f"{video_id}_{tier_key}",
+                interval_s=interval_s,
+                width=width,
+                height=height,
+                max_duration_s=max_duration_s,
+                write_manifest=False,
+            )
+            qrecs = [
+                _frame_to_quality(r, tier=tier_key, crf=crf, source_video=video_path)
+                for r in frames
+            ]
+            write_quality_manifest(qrecs, tier_dir)
+            by_tier[tier_key] = qrecs
+        finally:
+            if tmp_proxy is not None:
+                tmp_proxy.unlink(missing_ok=True)
 
     summary = {
-        "input_count": len(records),
-        "tiers": {tier: {"crf": crf, "count": len(by_tier[tier])} for tier, crf in resolved},
+        "method": "video_crf_then_extract",
+        "source_video": str(video_path),
+        "tiers": {
+            tier: {"crf": crf, "count": len(by_tier[tier.strip().lower()])}
+            for tier, crf in resolved
+        },
         "tier_crf_map": dict(TIER_CRF),
         "augment_crf_range": [AUGMENT_CRF_MIN, AUGMENT_CRF_MAX],
+        "interval_s": interval_s,
+        "width": width,
+        "height": height,
+        "keep_proxies": keep_proxies,
     }
     (output_dir / "quality_summary.json").write_text(
         json.dumps(summary, indent=2), encoding="utf-8"
@@ -256,15 +276,34 @@ def encode_manifest(
 
 def build_arg_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        description="Re-encode gameplay frames at full/medium/low CRF tiers."
+        description=(
+            "Build full/medium/low frame sets: re-encode video at CRF "
+            "(medium/low), then extract 256×144 @ 1/5s from each."
+        )
     )
-    p.add_argument("manifest", type=Path, help="frames_manifest.csv or .json")
+    p.add_argument("video", type=Path, help="Source video (original / full quality)")
     p.add_argument("-o", "--output-dir", type=Path, required=True)
+    p.add_argument("--game", required=True, help="Game label (e.g. Valorant)")
+    p.add_argument("--video-id", default=None, help="Stable id (default: video stem)")
     p.add_argument(
         "--tiers",
         nargs="+",
         default=["full", "medium", "low"],
         help="Quality tiers to produce (default: full medium low)",
+    )
+    p.add_argument("--interval", type=float, default=DEFAULT_INTERVAL_S)
+    p.add_argument("--width", type=int, default=DEFAULT_WIDTH)
+    p.add_argument("--height", type=int, default=DEFAULT_HEIGHT)
+    p.add_argument("--max-duration", type=float, default=None)
+    p.add_argument(
+        "--preset",
+        default="veryfast",
+        help="x264 preset for medium/low re-encode (default: veryfast)",
+    )
+    p.add_argument(
+        "--keep-proxies",
+        action="store_true",
+        help="Keep re-encoded mp4s under output_dir/_proxies/",
     )
     return p
 
@@ -272,13 +311,25 @@ def build_arg_parser() -> argparse.ArgumentParser:
 def main(argv: Iterable[str] | None = None) -> int:
     args = build_arg_parser().parse_args(list(argv) if argv is not None else None)
     try:
-        by_tier = encode_manifest(args.manifest, args.output_dir, tiers=args.tiers)
+        by_tier = encode_video_quality_tiers(
+            args.video,
+            args.output_dir,
+            game=args.game,
+            video_id=args.video_id,
+            tiers=args.tiers,
+            interval_s=args.interval,
+            width=args.width,
+            height=args.height,
+            max_duration_s=args.max_duration,
+            preset=args.preset,
+            keep_proxies=args.keep_proxies,
+        )
     except FFmpegNotFoundError as exc:
         raise SystemExit(str(exc)) from exc
     total = sum(len(v) for v in by_tier.values())
     print(
-        f"encoded {total} frame-copies across {len(by_tier)} tiers "
-        f"-> {args.output_dir}"
+        f"quality tiers: {total} frames across {len(by_tier)} tiers "
+        f"(video CRF → extract) -> {args.output_dir}"
     )
     return 0
 

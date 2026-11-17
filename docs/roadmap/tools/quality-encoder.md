@@ -29,6 +29,8 @@ optional (docs / reference only):
 
 **Not** CRF on already-downscaled JPEGs (that was the early proxy; rejected).
 
+**Encoder (D28):** default / friend / named eval low = **libx264**. Personal tooling may add an **AMF toggle** for faster degraded encodes on my AMD GPU; record encoder in the manifest. Do not make AMF (or NVENC) the friend-pack default.
+
 ## Tier map (current)
 
 | Tier | CRF | Role |

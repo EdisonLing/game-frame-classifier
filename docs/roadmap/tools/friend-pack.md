@@ -326,7 +326,7 @@ ffmpeg -hide_banner -nostdin -loglevel error -y -i <file> -map 0:<v> -an -sn -dn
        -fps_mode passthrough -progress pipe:1 <stage>/tmp_crf<N>.mp4
 ```
 
-- Software libx264 on purpose, not NVENC / AMF / QuickSync: the CRF video is discarded, so encoder efficiency doesn't matter, but artifact consistency does. Hardware encoders differ by vendor and generation and have no true CRF, so the `crf45` tier would carry a per-friend encoder signature (a source confound). x264 with a pinned build gives the same artifacts on every PC. The cost is time (§8).
+- Software libx264 on purpose for **friend packs** (D28): not NVENC / AMF / QuickSync. Hardware encoders differ by vendor and generation and have no true CRF, so a GPU `crf45` tier would carry a per-friend encoder signature (a source confound). x264 with a pinned build gives the same artifacts on every PC. The cost is time (§8). **Personal** `gfc-make-sources` may later offer an **AMF toggle** for speed on my machine; that path is local-only and must be recorded in the manifest — it is not the friend default.
 - `-fps_mode passthrough` keeps frames 1:1, so the same sampler picks the same frames in every tier. The temp is `.mp4` (exact timestamps; `.mkv` rounds to 1 ms). Deleted after extraction.
 - The x264 build string (`x264 - core NNN rNNNN ...`) is read from the first 64 KiB of the temp file and recorded.
 

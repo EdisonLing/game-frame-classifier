@@ -205,10 +205,22 @@ Related open fork from proposal: **flatten vs global average pooling** — decid
 |---|---|
 | **Status** | decided |
 | **Options** | (A) Still-frame CRF round-trip after 256×144 extract (B) **Video CRF re-encode, then extract/downscale** (C) JPEG qscale proxy |
-| **Decision** | **(B)** Re-encode the **source video** at H.264 CRF, then sample @ 1/5s and scale to 256×144. **Operational tiers:** **full** (original) + **low=CRF 45**. **Medium=CRF 38** is kept for docs / visual reference, not as a required train/eval/friend folder. |
-| **Rationale** | Low-bitrate artifacts must form on the timeline before downscale. At model size, even a harsh encode is only a few % mean abs vs full (README Δ), so a three-way eval ladder costs more than it teaches; one hard degraded setting is enough. Same video-CRF recipe for personal clips and friend machines. |
+| **Decision** | **(B)** Re-encode the **source video** at H.264 CRF, then sample @ 1/5s and scale to 256×144. **Operational tiers:** **full** (original) + **low=CRF 45**. **Medium=CRF 38** is kept for docs / visual reference, not as a required train/eval/friend folder. **Encoder policy:** see **D28** (friends = libx264; personal may toggle AMF for speed). |
+| **Rationale** | Low-bitrate artifacts must form on the timeline before downscale. At model size, even a harsh encode is only a few % mean abs vs full (README Δ), so a three-way eval ladder costs more than it teaches; one hard degraded setting is enough. |
 | **Date** | 2026-11-16 (ops = full+low; method 2026-11-15) |
-| **Links** | [tools/quality-encoder.md](roadmap/tools/quality-encoder.md) |
+| **Links** | [tools/quality-encoder.md](roadmap/tools/quality-encoder.md), D28 |
+
+### D28 — Degraded-tier encoder (friends vs personal)
+
+| | |
+|---|---|
+| **Status** | decided (not built yet) |
+| **Prompt** | Friend-pack wall time is ~75% libx264; GPU (AMF/NVENC) is faster but not true CRF and differs by vendor |
+| **Options** | (A) libx264 everywhere (B) GPU everywhere including friends (C) **Friends libx264; personal optional AMF toggle** (D) Friends libx264; personal AMF-only (replace x264) |
+| **Decision** | **(C).** Friend pack and the named **low / crf45** eval recipe stay **software libx264**. Personal `gfc-make-sources` / quality path may expose an **AMF toggle** for speed on my AMD machine. Manifest must record encoder + settings. Official comparable eval uses the x264 low tier; AMF output is a local speed path / optional extra stress, not a silent substitute for “CRF 45.” NVENC later is the same idea if needed — not the friend default. |
+| **Rationale** | Mixing friend GPU vendors into the default low tier would confound source with artifact family. Keeping friends on pinned x264 preserves pack interchangeability. Personal AMF is fine when I accept non-identical mush and label it; replacing personal x264 entirely would make my data systematically different from friends (D rejected). |
+| **Date** | 2026-11-16 |
+| **Links** | [tools/friend-pack.md](roadmap/tools/friend-pack.md), [tools/quality-encoder.md](roadmap/tools/quality-encoder.md), D22 / D25 / D26 |
 
 ### D23 — Training stack / hardware
 
@@ -274,6 +286,7 @@ Related open fork from proposal: **flatten vs global average pooling** — decid
 
 | Date | ID | Change |
 |---|---|---|
+| 2026-11-16 | D28 | Friends stay libx264; personal optional AMF speed toggle (not friend default; not AMF-only personal) |
 | 2026-11-16 | D25 | Decided: spec v1 (recipe file, embeddable Python + pinned ffmpeg, manifests, ingest checks) |
 | 2026-11-16 | D26 | Frame sources first-class; one `sourcing` path for my clips and friend packs; `bucket_v1` sampler |
 | 2026-11-16 | D27 | Derive: pad to 16:9 (>1 % off) + bicubic 256×144 from native JPEG |

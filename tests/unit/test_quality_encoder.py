@@ -13,15 +13,15 @@ from game_frame_classifier.quality_encoder import (
 )
 
 
-def test_tier_crf_map_matches_proposal() -> None:
-    assert TIER_CRF == {"full": 0, "medium": 28, "low": 38}
-    assert AUGMENT_CRF_MIN == 28
-    assert AUGMENT_CRF_MAX == 40
+def test_tier_crf_map_matches_locked_tiers() -> None:
+    assert TIER_CRF == {"full": 0, "medium": 38, "low": 45}
+    assert AUGMENT_CRF_MIN == 32
+    assert AUGMENT_CRF_MAX == 45
 
 
 @pytest.mark.parametrize(
     ("tier", "crf"),
-    [("full", 0), ("FULL", 0), ("medium", 28), ("low", 38)],
+    [("full", 0), ("FULL", 0), ("medium", 38), ("low", 45)],
 )
 def test_crf_for_tier(tier: str, crf: int) -> None:
     assert crf_for_tier(tier) == crf
