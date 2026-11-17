@@ -136,11 +136,15 @@ Two files, so I can ship an updated recipe without touching a friend's name or c
 ```json
 {
   "schema": "gfc.recipe/1",
-  "recipe_id": "2026-11-16a",
+  "recipe_id": "2026-11-17b",
   "interval_s": 5,
   "include_full": true,
   "crf_list": "45",
   "x264_preset": "veryfast",
+  "low_window_s": 1.0,
+  "low_gop_s": 2.0,
+  "encoder": "auto",
+  "gpu_qp": { "45": 51 },
   "jpeg_qscale": 2,
   "frame_mode": "native",
   "compact_size": [256, 144],
@@ -169,6 +173,8 @@ Two files, so I can ship an updated recipe without touching a friend's name or c
 | `include_full` | Extract a tier from the original video | bool |
 | `crf_list` | Comma-separated H.264 CRFs; each becomes a tier `crf<N>` (re-encode the video, then extract). Accepts `"45"`, `"38,45"` or a JSON list | ints 1–51, deduplicated, sorted |
 | `x264_preset` | libx264 preset for the CRF re-encode (same as repo quality encoder) | x264 preset name |
+| `low_window_s` | Seconds of video encoded before each sample for a degraded tier (§5.5); `0` = encode the whole video | 0–10 |
+| `low_gop_s` | Keyframe interval of the degraded-tier encode, in seconds (`-g` = round(`low_gop_s` × fps), both encoders); `0` = encoder default | 0–30 |
 | `encoder` | `auto` = try the GPU encoder (D3D12) and fall back to libx264; `x264` = always libx264 | `auto` or `x264` |
 | `gpu_qp` | Constant QP used on the GPU in place of each CRF tier, e.g. `{"45": 51}` | CRF 1–51 → QP 1–51; must cover every `crf_list` entry when `encoder` is `auto` |
 | `jpeg_qscale` | mjpeg `-q:v` for every still (D21) | 2–31 |
@@ -312,6 +318,8 @@ ffmpeg -hide_banner -nostdin -loglevel info -y -i <src> -map 0:<v> -an -sn -dn
 - `bucket = floor((pts_time + OFF) / I)` computed in Python from the parsed time.
 - If zero frames are selected on a clip with duration > 0, retry once with `-fflags +genpts`; still zero → `no_timestamps`.
 - Works for VFR captures and gaps (verified on a synthetic VFR clip with dropped frames, a 1.7 s gap and a 2.7 s start offset).
+- **Implementation: one seek per bucket.** Rather than decoding the whole video, the full tier runs one ffmpeg call per bucket: `-ss max(0, b·I − OFF)` before `-i` (accurate seek: decode from the keyframe before, drop earlier frames), `select='gte(t,0)'`, then `PRE`, `showinfo`, `-frames:v 1`. That is the same frame as the select pass, with the same pixels (tested on CFR, VFR with gap and offset, odd size, HDR, AV1 and cover-art clips, and on real 1080p60, 1440p60 and 4K120 recordings). Its time is the seek point plus `showinfo`'s relative `pts_time` (within 1 ms of the select pass; MKV stores milliseconds). A frame whose bucket is not `b` belongs to a later bucket (gap) and is dropped. Each call decodes at most one keyframe interval, so the cost no longer grows with frame rate between samples. **Exact-frame seeks:** the kit first lists every video packet's time and keyframe flag (`ffprobe -show_entries packet=pts_time,flags`, no decoding; 0.2 s for 3 min of 1080p60, 0.4 s for 4K120) and seeks straight to the frame each bucket will pick. Recorders often put a keyframe exactly there, and a seek half a frame earlier would decode the whole previous group of pictures (4K120: 1.1 s against 0.4 s per sample). The returned frame is checked against the expected time; on any mismatch that bucket is redone with the plain seek. Windows likewise start exactly on a source keyframe when one is within half a frame of the window start. 3-min 4K120 AV1 clip: full tier 13.5 s instead of 147 s for the single pass, identical pixels and timestamps (also checked at 1080p60 and 1440p60). A clip without a usable duration, or one where no seek yields a frame, falls back to the single select pass above.
+- **Per-clip method.** Seeking is cheap only when the source has frequent keyframes: each sample decodes from the keyframe before it, about K/2 for a keyframe interval K, against `interval_s` per sample for one pass. The median keyframe interval comes from the same packet list. Up to 2 × `interval_s` (10 s): seeks for the full tier and windows for the low tier (`extract_method` `seek`). Longer, a single keyframe, or unknown: one pass for the full tier and one whole-video low-tier encode with `-force_key_frames` at `low_window_s` before each sample, the same structure as a window (`extract_method` `pass`). Both are recorded in `clips.csv` (`source_keyint_s`, `extract_method`).
 
 This replaces the repo's current `fps=1/5` + computed timestamps (which assume CFR). Both sides use the same sampler (D26).
 
@@ -320,9 +328,11 @@ This replaces the repo's current `fps=1/5` + computed timestamps (which assume C
 | Tier id | Source | Commands |
 |---|---|---|
 | `full` | Original file | §5.4 on `<file>` with `PRE` |
-| `crf<N>` | Original re-encoded at CRF N | Encode, then §5.4 on the temp file with no `PRE` (already applied) |
+| `crf<N>` | Original re-encoded at CRF N | For each full-tier frame at time `T`: encode the window `[max(0, T − low_window_s), T]` of the original (fresh keyframe at its start, `PRE` applied), then keep the frame at `T` from it. With `low_window_s` 0: encode the whole video, then §5.4 on it |
 
-CRF encode (D22; same parameters as the repo quality encoder):
+Each window is encoded with `-ss <start> -t <T − start + half a frame>` before `-i`, so the target is the window's last frame; it is then grabbed with the same seek-and-`showinfo` step as the full tier and must land within half a frame of `T`, or the tier fails (GPU: redone with libx264). With `low_gop_s` 2 the window holds one keyframe, at its start, so the sample is an ordinary predicted frame about 1 s into a group of pictures, like a stream with a 2 s keyframe interval. Without it the GPU encoder's default (120 frames) put every 5 s sample of a 120 fps clip exactly on a keyframe. The window and encodes about a fifth of the frames of the whole video at a 5 s interval.
+
+CRF encode (D22; same parameters as the repo quality encoder; a window adds `-ss`/`-t`):
 
 ```text
 ffmpeg -hide_banner -nostdin -loglevel error -y -i <file> -map 0:<v> -an -sn -dn [-vf PRE]

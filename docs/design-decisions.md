@@ -208,9 +208,9 @@ Related open fork from proposal: **flatten vs global average pooling** — decid
 |---|---|
 | **Status** | decided |
 | **Options** | (A) Still-frame CRF round-trip after 256×144 extract (B) **Video CRF re-encode, then extract/downscale** (C) JPEG qscale proxy |
-| **Decision** | **(B)** Re-encode the **source video** at H.264 CRF, then sample @ 1/5s and scale to 256×144. **Operational tiers:** **full** (original) + **low=CRF 45**. **Medium=CRF 38** is kept for docs / visual reference, not as a required train/eval/friend folder. **Encoder policy:** see **D28** (friends = libx264; personal may toggle AMF for speed). |
+| **Decision** | **(B)** Re-encode the **source video** at H.264 CRF, then sample @ 1/5s and scale to 256×144. **Since 2026-11-17 the re-encode covers a 1 s window before each sample** (`low_window_s`), starting with a fresh keyframe, instead of the whole video, with a 2 s keyframe interval on both encoders (`low_gop_s`): the artifacts still form on a video timeline, the sample is an ordinary predicted frame about 1 s into a group of pictures as in a stream, and only about a fifth of the frames are encoded. The full tier is taken by one accurate seek per sample, which gives the same frames as one pass over the whole video. Both depend on the source having frequent keyframes, so the method is chosen per clip from its keyframe interval (first 30 s of packets): up to 10 s, seeks and windows; longer, whole-video passes with a keyframe forced 1 s before each sample, which keeps the same structure. **Operational tiers:** **full** (original) + **low=CRF 45**. **Medium=CRF 38** is kept for docs / visual reference, not as a required train/eval/friend folder. **Encoder policy:** see **D28** (friends = libx264; personal may toggle AMF for speed). |
 | **Rationale** | Low-bitrate artifacts must form on the timeline before downscale. At model size, even a harsh encode is only a few % mean abs vs full (README Δ), so a three-way eval ladder costs more than it teaches; one hard degraded setting is enough. |
-| **Date** | 2026-11-16 (ops = full+low; method 2026-11-15) |
+| **Date** | 2026-11-16 (ops = full+low; method 2026-11-15; windows 2026-11-17) |
 | **Links** | [tools/quality-encoder.md](roadmap/tools/quality-encoder.md), D28 |
 
 ### D28 — Degraded-tier encoder
@@ -410,6 +410,7 @@ Related open fork from proposal: **flatten vs global average pooling** — decid
 | 2026-11-17 | D29–D31, D38 | Decided: training reads only split manifests from frame sources; ledger-based split; shared evaluation and run layout |
 | 2026-11-17 | D13, D15, D16, D23, D30, D33–D37 | Provisional working defaults recorded with their alternatives (see [training-pipeline.md](training-pipeline.md) §4.2) |
 | 2026-11-17 | D14, D16b | Decided: generated data tables; flatten primary with GAP as a config switch |
+| 2026-11-17 | D22 / D26 | **Extraction by seeks and windows:** full tier by one accurate seek per sample (same frames as the single select pass); low tier from a 1 s encoded window before each sample instead of the whole video (`low_window_s`, recipe `2026-11-17b`). GPU decode is used only when it is identical and faster. 3-min clips: 1080p60 38 → about 19 s, 1440p60 56 → about 26 s, 4K120 AV1 316 → about 66 s |
 | 2026-11-17 | D04 / D25 | **Quick mode** added to the Frame Export Kit: full quality only, about 4× faster on the CPU, asked on first run and changeable at the Start question or with `--change-mode`. Quick-mode clips use `full` for every slot; downstream reports their share |
 | 2026-11-17 | D04 | Tier rule made concrete: bucket parity with a per-clip offset, so it is stable when footage is added |
 | 2026-11-17 | D04 | Quality mix → **half full / half low (CRF 45) wherever frames are used**, assigned once per slot (deterministic, half and half within each clip); replaces random per-draw train sampling. Per-tier eval kept as a diagnostic (both tiers of each test slot) |
