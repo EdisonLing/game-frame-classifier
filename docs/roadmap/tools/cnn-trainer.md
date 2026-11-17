@@ -89,13 +89,29 @@ Training never opens a test split. The unknown threshold (D24) is not part of tr
 
 Measured with the default model on an 8-thread CPU (PyTorch CPU build): 1.0 s per training batch of 64 (0.93 s with `head="gap"`, since nearly all compute is in the convolutions), 0.39 s per evaluation batch, and 0.11–0.15 s per batch for augmentation in the main process. One forward and backward pass is about 3.3 GFLOP per frame.
 
-| Train frames | Batches per epoch | CPU epoch (incl. val) | 30 epochs on CPU | Discrete GPU, estimated per epoch |
-|---:|---:|---:|---:|---:|
-| 2,000 (smoke) | 32 | ~40 s | ~20 min | ~5–10 s |
-| 10,000 (proposal scale) | 157 | ~3.2 min | ~1.6 h | ~10–30 s |
-| 30,000 | 469 | ~9.5 min | ~4.7 h | ~25–90 s |
+| Train frames | Batches per epoch | CPU epoch (incl. val) | 30 epochs on CPU | GPU epoch, `num_workers` 0 | GPU epoch, `num_workers` 2 |
+|---:|---:|---:|---:|---:|---:|
+| 2,000 (smoke) | 32 | ~40 s | ~20 min | ~9 s | ~7 s |
+| 10,000 (proposal scale) | 157 | ~3.2 min | ~1.6 h | ~45 s | ~17 s |
+| 30,000 | 469 | ~9.5 min | ~4.7 h | ~2.3 min | ~42 s |
 
-Val is taken as about a fifth of train. Early stopping usually ends a run before 30 epochs. The GPU column assumes an effective 5–10 TFLOPS on these small convolutions; on a GPU the augmentation, not the model, sets the pace unless `num_workers` is raised (the low end of each GPU range) (see the [loader](dataset-loader.md#working-defaults-d35)).
+Val is taken as about a fifth of train. Early stopping usually ends a run before 30 epochs.
+
+**GPU column, measured** on a Radeon RX 9070 XT (ROCm 10.1.0 build of PyTorch 2.14, Windows), same method as the CPU column: batches × step time + val batches × eval time, plus augmentation. Per batch of 64 (median of 3 timings, warm-up and `torch.cuda.synchronize()` around each):
+
+| | CPU baseline (above) | CPU, same environment as the GPU | GPU |
+|---|---:|---:|---:|
+| Train step, flatten head | 1.0 s | 1.28 s | **0.078 s** |
+| Train step, GAP head | 0.93 s | 1.07 s | 0.076 s |
+| Eval step, flatten head | 0.39 s | 0.59 s | **0.010 s** |
+| Augmentation, main process | 0.11–0.15 s | 0.21 s | (same CPU work) 0.21 s |
+
+- **`num_workers` 0:** each batch costs step + augmentation, 0.078 + 0.21 ≈ 0.29 s. Augmentation is about 73 % of it, so **augmentation is the bottleneck**, not the model. A real DataLoader loop measured 0.22–0.36 s per batch, depending on background load.
+- **`num_workers` 2:** the worker processes augment in parallel with the GPU step. Measured end to end, 0.076 s per batch in steady state, which is the GPU step time, so the **model step is the bottleneck again**. Starting the workers costs about 4 s per epoch on Windows (included in the table, which assumes `num_workers` 2 with `cache: "none"`). 4 workers gave no gain (0.083 s per batch).
+- **Speedup over the CPU baseline:** the model step is about 13× faster (1.0 s to 0.078 s), evaluation about 39×. A whole epoch is 4–5× faster at `num_workers` 0 and 6–14× faster at `num_workers` 2 (larger datasets gain more, because the worker start-up is a fixed cost). 30 epochs at 10,000 train frames take about 8 min on the GPU with 2 workers, against about 1.6 h on the CPU.
+- **bf16 autocast** (information only, not used): train step 0.027 s against 0.078 s in float32. Not adopted, since it changes numerics and the float32 path is already fast enough.
+- **Memory:** peak GPU memory is about 1.9 GB at batch 64 with the default model.
+- Timings on this machine vary with background load (one CPU train-step timing came out at 1.8 s, one augmentation timing at 0.5 s); the table uses the median of 3 repeats. Expect ±30 % on the augmentation-bound figures. The CPU baseline is lower than the same-environment CPU column; background load is the likely reason, but the two were not measured side by side.
 
 ### Hardware
 
@@ -104,11 +120,13 @@ The code is the same on every device; only the installed PyTorch build changes.
 | Option | Setup | Notes |
 |---|---|---|
 | CPU (default) | `pip install -e ".[dev,train]"` | Enough for the progress report: one run in an evening |
-| AMD Radeon RX 9000 on Windows | Separate `.venv-rocm` with AMD's ROCm build of `torch` / `torchvision`; step by step in [AMD GPU setup](../../amd-gpu-setup.md) | Check with `torch.cuda.is_available()` and `torch.version.hip`. Training support on Windows is recent; expect the first epoch to be slower while kernels are selected. Keep the CPU environment as the fallback |
+| AMD Radeon RX 9000 on Windows | Separate `.venv-rocm` with AMD's ROCm build of `torch` / `torchvision`; step by step in [AMD GPU setup](../../amd-gpu-setup.md) | Check with `torch.cuda.is_available()` and `torch.version.hip`. Tested working on an RX 9070 XT (overfit test, an 11-minute training run and the timings above, with no crash and no workaround). Training support on Windows is recent; keep the CPU environment as the fallback |
 | AMD Radeon on Linux or WSL2 | ROCm build of PyTorch | Most mature AMD path |
 | Colab GPU | Upload `data/frames/` and the split folder as a zip | Same command; mind session limits |
 
 Before trusting a GPU environment, run the system overfit test and one smoke run (`--epochs 2 --limit 256`) on it and compare the loss curve with the CPU run. Results are not bit-identical across devices.
+
+The RX 9070 XT environment was checked with a standalone script that builds the model from the layer table above (9,827,878 and 390,438 parameters, asserted), because the trainer is not implemented yet: the overfit setup (3 classes × 8 synthetic frames, 30 epochs, no augmentation, seed 360) reached train accuracy 1.0 on both GPU and CPU. With identical weights, eval-mode logits differ between devices by 1.6e-7 and per-layer gradients by at most 0.3 % relative; the epoch-by-epoch loss curves of the tiny overfit run differ in the first epochs (one optimiser step per epoch amplifies the float differences) and both reach a loss near 0 by epoch 4–6. The trainer's own smoke run on the GPU still has to be done once it exists.
 
 ## Config (`config/train_cnn.json`)
 
