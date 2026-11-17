@@ -11,8 +11,8 @@ Builds quality-tier frame sets from one source video by re-encoding the **video*
 ## Why we need it
 
 1. **Ops storage** — produce **full** + **low (CRF 45)** stills (D04)  
-2. **Train** — for each example, pick **full or low at random** (not both; avoids ~2× data given small Δ). Probability TBD (default lean ~0.5 / 0.5 or slight full bias).  
-3. **Eval** — score **full** and **low** as separate conditions (report both).  
+2. **Everywhere frames are used** — each slot is used in **exactly one tier**, **half full / half low** (not both; avoids ~2× data given small Δ). Assigned once per slot by a deterministic rule (rank of a hash of `slot_id` within each game × split, alternating) so it is identical across epochs, baseline and CNN. Applies to train, val and test (D04, revised 2026-11-17).  
+3. **Eval** — headline metrics on the half/half set; as a **diagnostic**, also score **full** and **low** separately by running both tiers of every test slot (both are on disk).  
 4. **Contributor packs** — Frame Export Kit zips **full + low** so I can sample/eval either way (D25)  
 5. **Docs** — optional **medium (CRF 38)** for README only  
 

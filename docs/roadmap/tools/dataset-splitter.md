@@ -25,6 +25,7 @@ Frame-random splits leak near-duplicates from the same video into train and test
 - Test set should include **streamers unseen in training** (once public data exists)
 - Personal clips: split by **session**, ≈ **60–70% train**, remainder held out as separate personal test set
 - Augmentation only after splitting
+- **Quality tier (D04, 2026-11-17):** after splitting, each slot is assigned **full** or **crf45** (half and half, deterministic by `slot_id` hash rank within game × split) and the split manifests carry a `tier` column, so the baseline, CNN and eval all see the same frames
 
 ## Undecided / blank
 

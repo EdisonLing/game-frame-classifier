@@ -6,7 +6,7 @@
 
 ## What it does (high level)
 
-Applies training-only transforms to frames **after** splits exist: mild geometric scale, colour/brightness jitter, and (with quality tiers on disk) **random full vs low (CRF 45)** per example rather than using both (D04).
+Applies training-only transforms to frames **after** splits exist: mild geometric scale, colour/brightness jitter, and (with quality tiers on disk) **half full / half low (CRF 45)** per slot rather than using both (D04).
 
 ## Why we need it
 
@@ -24,8 +24,8 @@ Personal and public clips won’t cover every compression/lighting condition. Au
 - Mild scale: **10–20% zoom/rescale**
 - Colour / brightness jitter
 - **No horizontal flips** (mirrors HUDs)
-- **Quality tier (D04):** each train example uses **either** full **or** low (CRF 45), chosen at random — not both. Small model-size Δ does not justify 2× samples.
-- Must not let train-only randomness change val/test: eval runs fixed **full** and **low** passes
+- **Quality tier (D04, revised 2026-11-17):** each slot uses **either** full **or** low (CRF 45), **half and half**, fixed per slot (not re-rolled per epoch; not both). Same rule for train, val and test so every tool sees the same frames. Small model-size Δ does not justify 2× samples.
+- Not a train-only augmentation any more: the tier assignment is part of the dataset manifest. Train-only randomness (scale, jitter) must not touch val/test; per-tier diagnostic runs score both tiers of each test slot
 
 ## Undecided / blank
 
@@ -41,7 +41,7 @@ Personal and public clips won’t cover every compression/lighting condition. Au
 
 - [ ] Val/test pipelines apply **no** random train aug
 - [ ] Spot-check: HUD left/right orientation preserved (no flips)
-- [ ] Low-bitrate branch actually fires on ~30–50% of train samples
+- [ ] Exactly ~50% of slots per game × split resolve to low (CRF 45), same assignment every run
 
 ## Testing
 

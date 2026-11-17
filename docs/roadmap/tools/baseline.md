@@ -24,6 +24,7 @@ Progress report **requires** a non-random baseline with quantitative and qualita
 - Feature: colour histogram, e.g. **16 bins per RGB channel**, concatenated
 - Classifier: **multinomial logistic regression**
 - Same splits as the primary model
+- **Same tier assignment as the CNN (D04):** half full / half low (CRF 45) per slot, read from the split manifests
 - Expectation: Minecraft-like distinct palettes easier; OW2 vs Marvel Rivals harder
 
 ## Undecided / blank

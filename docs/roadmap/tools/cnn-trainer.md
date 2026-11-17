@@ -22,6 +22,7 @@ This is the graded primary model. Progress report needs an architecture descript
 ## Known design choices (from proposal)
 
 - Input: **256×144** RGB
+- **Frames used (D04, 2026-11-17):** half full / half low (CRF 45) per slot, fixed from the split manifests; per-tier eval (both tiers of each test slot) is a diagnostic, not the headline
 - From scratch (random init), **not** pretrained backbone (for the primary story)
 - Four conv blocks: 3×3 conv → BatchNorm → ReLU → 2×2 max pool; channels **32–256**
 - Flatten → 1–2 FC layers + dropout → softmax over 6 games

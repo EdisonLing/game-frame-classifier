@@ -437,7 +437,7 @@ CSV + JSON side by side (D20). All paths inside manifests are relative to the pa
 | Column | Example |
 |---|---|
 | `image_id` | `c1a2b3c4d5e6f:b000012:crf45` |
-| `slot_id` | `c1a2b3c4d5e6f:b000012` (tier-agnostic; the unit for D04 random-tier sampling) |
+| `slot_id` | `c1a2b3c4d5e6f:b000012` (tier-agnostic; the unit for D04 half-full / half-low tier assignment) |
 | `clip_key` | `c1a2b3c4d5e6f` |
 | `tier`, `crf` | `crf45`, `45` (`full` → `0`) |
 | `bucket`, `target_time_s`, `pts_time_s` | `12`, `60.0`, `60.016667` |

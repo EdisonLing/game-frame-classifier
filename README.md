@@ -54,8 +54,8 @@ Places I didn’t take the first convenient approach. Split into **across all ga
 **Decision**
 
 - **On disk / friends / eval:** keep **full** and **low (CRF 45)** stills.
-- **Train:** pick **full or low at random per example** (not both). The model-size gap is small enough that 2× data is not worth it.
-- **Eval:** report full and low separately.
+- **Every frame used:** half full, half low, fixed per slot (not both). The model-size gap is small enough that 2× data is not worth it.
+- **Eval:** headline numbers on that mix; full and low scored separately as a diagnostic.
 - **Method:** re-encode the **source video** at CRF, then extract and downscale to 256×144 (not CRF on tiny JPEGs).
 
 **Why this shape:** at model input size, even a harsh encode barely moves the pixels. On the Valorant still below, CRF 45 is only **3.5%** mean absolute difference vs full at 256×144 (`Δ = mean(|diff|) / 255`). 1080p looks much worse; the CNN never sees that. One hard degraded setting is enough. **Medium (CRF 38)** appears in the tables only as a reference so that gap is visible.

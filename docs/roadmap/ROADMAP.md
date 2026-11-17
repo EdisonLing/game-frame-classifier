@@ -75,12 +75,12 @@ raw clips / videos
     → [interim] batch extract 256×144   OR   [target] make-sources / ingest → frame_sources → derive
     → clean + dedupe (black/blur/junk + aHash)
     → split by video/session (not by frame)
-    → [train] augment (jitter, mild scale, random full/low)
+    → [train] augment (jitter, mild scale, half full / half low per slot)
     → baseline / CNN
     → evaluate (accuracy, F1, confusion, quality tiers)
 ```
 
-Quality tiers: on disk **full + low (45)**; train samples one at random; eval reports both (D04).
+Quality tiers: on disk **full + low (45)**; every frame used (train/val/test, baseline, CNN) is **half full, half low**, fixed per slot (D04, revised 2026-11-17); per-tier eval is a diagnostic.
 
 ---
 

@@ -25,7 +25,7 @@ Called out positively in TA feedback. Treat as decided unless we explicitly reop
 | D01 | Split by **video/session**, not by frame | decided | Leakage fix vs prior work |
 | D02 | Test on **unseen streamers** + **held-out personal sessions** | decided | |
 | D03 | **Augment only after** splitting | decided | |
-| D04 | Ops stills **full + low (CRF 45)**; medium=38 docs only; **train = random full *or* low per example** (not both); **eval reports full and low** | decided | Small 256×144 Δ → no 2× dataset; dual folders kept for eval + sampling |
+| D04 | Ops stills **full + low (CRF 45)**; medium=38 docs only; **every frame used (train, val, test, baseline, CNN) is one tier: half full, half low**, fixed 50/50 per slot (not both tiers per slot); **per-tier eval is a diagnostic on top** | decided (revised 2026-11-17) | Small 256×144 Δ → no 2× dataset; dual folders kept for sampling + per-tier diagnostics. Was: random full *or* low per train example |
 | D05 | Colour-histogram + logistic regression baseline | decided | Exposes what spatial layout adds |
 | D06 | Keep menus/overlays in the data (do not strip as “bad”) | decided | Differs from Trivedi et al. |
 | D07 | Course primary goal = **frame classification**; clip tagging = inference glue | decided | See roadmap |
@@ -286,6 +286,7 @@ Related open fork from proposal: **flatten vs global average pooling** — decid
 
 | Date | ID | Change |
 |---|---|---|
+| 2026-11-17 | D04 | Quality mix → **half full / half low (CRF 45) wherever frames are used**, assigned once per slot (deterministic, ~50/50 per game × split); replaces random per-draw train sampling. Per-tier eval kept as a diagnostic (both tiers of each test slot) |
 | 2026-11-16 | D25 | Tool renamed friend pack → **Frame Export Kit** (`gfc-frame-export`, package `frame_export`); its zips are contributor packs |
 | 2026-11-16 | D28 | Friends stay libx264; personal optional AMF speed toggle (not friend default; not AMF-only personal) |
 | 2026-11-16 | D25 | Decided: spec v1 (recipe file, embeddable Python + pinned ffmpeg, manifests, ingest checks) |
