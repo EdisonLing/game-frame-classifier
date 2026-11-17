@@ -227,24 +227,16 @@ def _check_pairs(full_dir: Path, low_dir: Path) -> list[tuple[Path, Path]]:
     return [(full_dir / n, low_dir / n) for n in picks if (full_dir / n).is_file()]
 
 
-def _tmp_hw(decode: gpu.DecodeCheck | None, tools: FFTools, tmp: Path) -> bool:
-    """GPU decode for the intermediate file (always 8-bit H.264, stream 0), checked on first use."""
-    return bool(decode) and decode.allowed(tools, tmp, 0, "h264", 8)
-
-
 def _x264_tier(
     tools: FFTools, src: Path, info: ProbeInfo, recipe: Recipe, crf: int, tmp: Path,
     encode_log: Path, out_dir: Path, extract_log: Path, progress: _Progress,
-    hw_decode_src: bool, decode: gpu.DecodeCheck | None,
+    hw_decode_src: bool,
 ) -> list[float]:
     mark = progress.done
     try:
         encode_crf(tools, src, info, recipe, crf, tmp, encode_log, progress.part, hw_decode=hw_decode_src)
         progress.finish_step()
-        return _extract_with_retry(
-            tools, tmp, info, recipe, out_dir, extract_log, False, progress,
-            hw_decode=_tmp_hw(decode, tools, tmp),
-        )
+        return _extract_with_retry(tools, tmp, info, recipe, out_dir, extract_log, False, progress)
     except BaseException:
         progress.done = mark
         raise
@@ -271,15 +263,15 @@ def _degraded_tier(
     ref_times: list[float] | None,
     *,
     hw_decode_src: bool = False,
-    decode: gpu.DecodeCheck | None = None,
 ) -> _TierEncode:
     """Encode then extract one crf tier, on the GPU when gpu_qp is given.
 
     A GPU attempt that fails in any way (ffmpeg error, no frames, timestamps that don't
     line up with the full tier, pictures too far from the full tier's) is thrown away and
-    the tier is redone with libx264. GPU decode (hw_decode_src for the source, decode for
-    the intermediate H.264 file) is separate from the encoder: the libx264 redo keeps it,
-    and drops it only if the redo itself fails.
+    the tier is redone with libx264. GPU decode of the source (hw_decode_src) is separate
+    from the encoder: the libx264 redo keeps it, and drops it only if the redo itself fails.
+    The intermediate H.264 file is always decoded on the CPU: copying its frames back from
+    the GPU costs more than the decode (4K120 test: 47 s on the GPU against 18 s on the CPU).
     """
     crf = int(tier[3:])
     out_dir = stage / tier
@@ -295,10 +287,7 @@ def _degraded_tier(
                 gpu_qp=gpu_qp, hw_decode=hw_decode_src,
             )
             progress.finish_step()
-            times = _extract_with_retry(
-                tools, tmp, info, recipe, out_dir, extract_log, False, progress,
-                hw_decode=_tmp_hw(decode, tools, tmp),
-            )
+            times = _extract_with_retry(tools, tmp, info, recipe, out_dir, extract_log, False, progress)
             if ref_times is not None and not _lines_up(times, ref_times, 0.5 / info.nominal_fps):
                 raise ExtractError(
                     f"GPU output has {len(times)} samples that don't line up with the original's {len(ref_times)}"
@@ -318,16 +307,16 @@ def _degraded_tier(
     try:
         times = _x264_tier(
             tools, src, info, recipe, crf, tmp, encode_log, out_dir, extract_log, progress,
-            hw_decode_src, decode,
+            hw_decode_src,
         )
     except (ToolError, ExtractError) as exc:
-        if not (hw_decode_src or decode):
+        if not hw_decode_src:
             raise
         reason = reason or f"GPU decode failed: {gpu.first_line(str(exc))}"
         _reset_dir(out_dir)
         tmp.unlink(missing_ok=True)
         times = _x264_tier(
-            tools, src, info, recipe, crf, tmp, encode_log, out_dir, extract_log, progress, False, None,
+            tools, src, info, recipe, crf, tmp, encode_log, out_dir, extract_log, progress, False,
         )
     core = read_x264_core(tmp)
     tmp.unlink()
@@ -363,7 +352,6 @@ def extract_clip(
         times: dict[str, list[float]] = {}
         encodes: dict[str, _TierEncode] = {}
         hw_src = bool(decode) and decode.allowed(tools, src, info.stream_index, info.video_codec, info.bit_depth)
-        tmp_decode = decode
         for tier in tiers:
             out_dir = stage / tier
             out_dir.mkdir()
@@ -375,7 +363,7 @@ def extract_clip(
                 except (ToolError, ExtractError):
                     if not hw_src:
                         raise
-                    hw_src, tmp_decode = False, None
+                    hw_src = False
                     _reset_dir(out_dir)
                     times[tier] = _extract_with_retry(
                         tools, src, info, recipe, out_dir, stage / "full.log", True, progress,
@@ -384,7 +372,7 @@ def extract_clip(
             qp = recipe.gpu_qp.get(int(tier[3:])) if use_gpu else None
             enc = _degraded_tier(
                 tools, src, info, recipe, tier, stage, progress, qp, times.get("full"),
-                hw_decode_src=hw_src, decode=tmp_decode,
+                hw_decode_src=hw_src,
             )
             encodes[tier] = enc
             times[tier] = enc.times
