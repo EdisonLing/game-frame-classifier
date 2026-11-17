@@ -1,7 +1,7 @@
 # Dataset loader and augmentation
 
 **Stage:** 2 — Dataset assembly  
-**Status:** planned  
+**Status:** implemented  
 **Back to:** [ROADMAP.md](../ROADMAP.md) · [training pipeline](../../training-pipeline.md)
 
 ## What it does (high level)
@@ -106,10 +106,10 @@ Quality tier is **not** an augmentation. It is fixed per slot by the splitter (D
 
 ## Acceptance checks
 
-- [ ] Baseline and CNN load frames through `split_manifest` only
-- [ ] Val and test pipelines contain no random step
-- [ ] No resize anywhere in the loader
-- [ ] Test splits cannot be opened by training code
+- [x] Baseline and CNN load frames through `split_manifest` only
+- [x] Val and test pipelines contain no random step
+- [x] No resize anywhere in the loader
+- [x] Test splits cannot be opened by training code
 
 ## Ties to proposal and decisions
 
