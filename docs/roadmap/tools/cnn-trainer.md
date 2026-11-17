@@ -78,7 +78,7 @@ Weights use PyTorch's default initialisation. No pretrained weights.
 | Selection | Best `val` macro-F1; that epoch's weights are saved as `best.pt` |
 | Early stop | No improvement in `val` macro-F1 for 6 epochs |
 | Data | `FrameDataset(train, transform=train_transform)`, shuffled; `FrameDataset(val, transform=eval_transform)` |
-| Device | `auto`: `cuda`, then `mps`, then CPU. PyTorch's ROCm builds for AMD GPUs report through the `cuda` device, so no AMD-specific code is needed |
+| Device | `auto`: `cuda`, then `mps`, then CPU. PyTorch's ROCm builds for AMD GPUs report through the `cuda` device, so no AMD-specific code is needed. Primary: the RX 9070 XT from `.venv-rocm`; fallback: CPU (D23) |
 | Seed | Python, NumPy and PyTorch seeded from `seed` before the model is built |
 
 Per epoch: train loss and accuracy (running, in train mode), then val loss, accuracy and macro-F1 in eval mode. One line is printed and appended to `history.csv`.
@@ -166,8 +166,8 @@ The code is the same on every device; only the installed PyTorch build changes.
 
 | Option | Setup | Notes |
 |---|---|---|
-| CPU (default) | `pip install -e ".[dev,train]"` | Enough for the progress report: one run in an evening |
-| AMD Radeon RX 9000 on Windows | Separate `.venv-rocm` with AMD's ROCm build of `torch` / `torchvision`; step by step in [AMD GPU setup](../../amd-gpu-setup.md) | Check with `torch.cuda.is_available()` and `torch.version.hip`. Tested working on an RX 9070 XT (overfit test, an 11-minute training run and the timings above, with no crash and no workaround). Training support on Windows is recent; keep the CPU environment as the fallback |
+| AMD Radeon RX 9000 on Windows (primary) | Separate `.venv-rocm` with AMD's ROCm build of `torch` / `torchvision`; step by step in [AMD GPU setup](../../amd-gpu-setup.md) | Check with `torch.cuda.is_available()` and `torch.version.hip`. Tested working on an RX 9070 XT (overfit test, an 11-minute training run and the timings above, with no crash and no workaround). About 7× faster per epoch than the CPU |
+| CPU (fallback) | `pip install -e ".[dev,train]"` in the normal environment, or `--device cpu` | Use when the GPU environment is broken or busy. Still enough for the progress report: one run in an evening |
 | AMD Radeon on Linux or WSL2 | ROCm build of PyTorch | Most mature AMD path |
 | Colab GPU | Upload `data/frames/` and the split folder as a zip | Same command; mind session limits |
 
@@ -221,7 +221,7 @@ Checkpoints are loaded with `weights_only=True` plus the config stored beside th
 | D15 | Single stream | Second stream on HUD crops cut from native stills, fused before the classifier | Look-alike pair still confused after tuning |
 | D37 | lr 1e-3, weight decay 1e-4, batch 64, 30 epochs, patience 6 | Cosine or plateau LR schedule; batch 32 / 128; no weight decay | Noisy or plateaued val curve |
 | D34 | Class-weighted loss | Unweighted loss on a downsampled balanced set | Per-class recall is uneven |
-| D23 | Local CPU | Local AMD GPU through a ROCm build of PyTorch; Colab GPU (see Hardware) | An epoch takes more than about 10 min, or a hyperparameter sweep is planned |
+| D23 | Local RX 9070 XT (ROCm build of PyTorch, `.venv-rocm`) | Local CPU (fallback); Colab GPU (see Hardware) | GPU environment breaks after a driver or ROCm update, or GPU and CPU smoke runs disagree |
 | — | Logging to `history.csv` + `curves.png` | TensorBoard | Never needed for the reports |
 
 ## Testing

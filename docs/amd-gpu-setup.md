@@ -6,7 +6,7 @@ Training support on Windows is recent. AMD's ROCm 7.2.1 pages listed "No ML trai
 
 **Tested 2026-11-17** on an RX 9070 XT (`gfx1201`), Adrenalin 26.10.1, Windows 11 25H2, Python 3.12.7, `torch 2.14.0+rocm10.1.0`: the install, the checks in section 3, an overfit test, a continuous training run of 11 minutes and a benchmark all passed. Results and timings are in [CNN trainer, Training time](roadmap/tools/cnn-trainer.md#training-time).
 
-The CPU environment stays the default and the fallback. The GPU environment is a second virtual environment next to it, so a broken GPU install never blocks work.
+This is the project's primary training route (D23); the CPU is the fallback. The GPU environment is a second virtual environment next to the normal one, so a broken GPU install never blocks work: train with `--device cpu`, or from the normal environment, until it is fixed.
 
 **Related:** [training pipeline](training-pipeline.md) · [CNN trainer](roadmap/tools/cnn-trainer.md) · [design decisions](design-decisions.md) (D23)
 
@@ -131,7 +131,7 @@ Peak GPU memory for the default model at batch 64 is about 1.9 GB. Close games a
 | GPU reset or crash during training | AMD's documented workaround for RX 9070 series training: `$env:TORCH_BLAS_PREFER_HIPBLASLT = "0"` before training. **Not needed in testing**: no crash, reset or NaN in the 11-minute run or anything else, all without the variable |
 | First epoch much slower than the rest | Kernel selection on first use: about 20 s extra once per process (measured 29 s against 6.4 s per epoch at 2,065 frames); later epochs are faster |
 | Versions without `+rocm` after installing the project | A PyPI `torch` replaced the ROCm one; repeat 2.2 |
-| Anything else unresolved within an hour | Train on CPU and come back later; nothing in the pipeline depends on the GPU |
+| Anything else unresolved within an hour | Fall back to the CPU (`--device cpu`) and come back later; nothing in the pipeline needs the GPU to be correct, only to be fast |
 
 To remove the GPU environment, delete the `.venv-rocm` folder.
 
