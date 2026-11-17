@@ -1,7 +1,7 @@
 # Derive frames (`gfc-derive-frames`)
 
 **Stage:** 1 — Personal-clip data tools  
-**Status:** planned  
+**Status:** implemented  
 **Back to:** [ROADMAP.md](../ROADMAP.md) · [training pipeline](../../training-pipeline.md)
 
 ## What it does (high level)
@@ -99,16 +99,16 @@ Paths are relative to the data root. Original file names from `clip.json` are de
 | Kind | Cases |
 |---|---|
 | **Unit** | Bucket parsing; slot pairing with an unpaired file; `source_kind` rules; `public_examples_ok` for personal / consenting / non-consenting / unknown contributor; table rows sorted and paths relative |
-| **System** | Temp `frame_sources` with a 16:9 clip, a 4:3 clip and a 256×144 clip → all outputs 256×144, 4:3 padded, compact copied byte for byte; rerun derives nothing; `--index-only` reproduces identical tables; a clip missing its `crf45` folder is reported and excluded |
+| **System** | Temp `frame_sources` with a 16:9 clip, a 4:3 clip and a 256×144 clip → all outputs 256×144, 4:3 padded, compact copied byte for byte; quick-mode (full only) kept with empty `path_low`; rerun derives nothing; `--index-only` reproduces identical tables; a clip with no `full` tier is reported and excluded |
 
 **How to run:** `pytest tests/unit/test_derive_frames.py tests/system/test_derive_frames.py`
 
 ## Acceptance checks
 
-- [ ] Every row of `slots.csv` points at two existing 256×144 files
-- [ ] Rerun with nothing new performs no image work and rewrites identical tables
-- [ ] A new pack or new personal clips appear after a rerun without touching existing outputs
-- [ ] CLI entry `gfc-derive-frames` in `pyproject.toml`
+- [x] Every row of `slots.csv` points at existing 256×144 files (`path_full` always; `path_low` when the clip has a low tier)
+- [x] Rerun with nothing new performs no image work and rewrites identical tables
+- [x] A new pack or new personal clips appear after a rerun without touching existing outputs
+- [x] CLI entry `gfc-derive-frames` in `pyproject.toml`
 
 ## Ties to decisions
 
