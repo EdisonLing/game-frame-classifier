@@ -1,0 +1,27 @@
+{
+  "schema": "gfc.recipe/1",
+  "recipe_id": "2026-11-16a",
+  "interval_s": 5,
+  "include_full": true,
+  "crf_list": "45",
+  "x264_preset": "veryfast",
+  "jpeg_qscale": 2,
+  "frame_mode": "native",
+  "compact_size": [256, 144],
+  "hdr_policy": "tonemap_hable_v1",
+  "derive": { "aspect": "pad_16x9", "aspect_tolerance": 0.01, "scale_flags": "bicubic" },
+  "video_extensions": [".mp4", ".mkv", ".mov", ".webm", ".avi", ".m4v", ".flv", ".ts"],
+  "min_duration_s": 1.0,
+  "footage_budget_min": 180,
+  "budget_selection": "spread_days_v1",
+  "games": ["Valorant", "League_of_Legends", "CS2", "Minecraft", "Overwatch_2", "Marvel_Rivals"],
+  "questions": {
+    "all": [
+      { "key": "colourblind_mode", "prompt": "Colourblind mode", "choices": ["none", "deuteranopia", "protanopia", "tritanopia", "unsure"], "default": "unsure" },
+      { "key": "graphics_preset", "prompt": "Graphics quality", "choices": ["low", "medium", "high", "ultra", "mixed", "unsure"], "default": "unsure" }
+    ],
+    "Valorant":  [ { "key": "enemy_highlight", "prompt": "Enemy highlight colour", "choices": ["red", "yellow", "purple", "unsure"], "default": "unsure" } ],
+    "CS2":       [ { "key": "stretched", "prompt": "Stretched / 4:3 resolution", "choices": ["yes", "no", "unsure"], "default": "unsure" } ],
+    "Minecraft": [ { "key": "visual_mods", "prompt": "Shaders or texture packs", "choices": ["none", "texture_pack", "shaders", "both", "unsure"], "default": "unsure" } ]
+  }
+}
