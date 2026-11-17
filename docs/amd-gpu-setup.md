@@ -2,7 +2,7 @@
 
 How to train the CNN on a Radeon RX 9000 series card under Windows 11 with AMD's ROCm build of PyTorch. The training code needs no changes: ROCm builds expose the GPU as PyTorch's `cuda` device, and `gfc-train-cnn` picks `cuda` automatically ([CNN trainer, Hardware](roadmap/tools/cnn-trainer.md#hardware), D23).
 
-Training support on Windows is recent. AMD's ROCm 7.2.1 pages listed "No ML training support" for Windows; the ROCm 10.1.0 pages no longer list that limitation, but they do not state training support explicitly either. Section 3 is therefore the real test, and nothing should depend on the GPU until it passes.
+Training support on Windows is recent. AMD's ROCm 7.2.1 pages listed "No ML training support" for Windows; the ROCm 10.1.0 pages no longer list that limitation, but they do not state training support explicitly either. Section 3 is therefore the real test, and nothing should depend on the GPU until it passes (it passed on 2026-11-17, see below).
 
 **Tested 2026-11-17** on an RX 9070 XT (`gfx1201`), Adrenalin 26.10.1, Windows 11 25H2, Python 3.12.7, `torch 2.14.0+rocm10.1.0`: the install, the checks in section 3, an overfit test, a continuous training run of 11 minutes and a benchmark all passed. Results and timings are in [CNN trainer, Training time](roadmap/tools/cnn-trainer.md#training-time).
 
@@ -55,7 +55,7 @@ py -3.12 -m venv .venv-rocm
 python -m pip install --upgrade pip
 ```
 
-`.venv-rocm/` is git-ignored.
+`.venv-rocm/` is git-ignored. If PowerShell refuses to run `Activate.ps1` (script execution policy), skip activation and call `.\.venv-rocm\Scripts\python.exe` directly in every later command.
 
 ### 2.2 PyTorch for ROCm
 

@@ -91,11 +91,15 @@ Measured with the default model on an 8-thread CPU (PyTorch CPU build): 1.0 s pe
 
 | Train frames | Batches per epoch | CPU epoch (incl. val) | 30 epochs on CPU | GPU epoch, `num_workers` 0 | GPU epoch, `num_workers` 2 |
 |---:|---:|---:|---:|---:|---:|
-| 2,000 (smoke) | 32 | ~40 s | ~20 min | ~9 s | ~7 s |
+| 2,000 (smoke) | 32 | ~40 s | ~20 min | ~9 s | ~7 s ¹ |
 | 10,000 (proposal scale) | 157 | ~3.2 min | ~1.6 h | ~45 s | ~17 s |
 | 30,000 | 469 | ~9.5 min | ~4.7 h | ~2.3 min | ~42 s |
 
-Val is taken as about a fifth of train. Early stopping usually ends a run before 30 epochs.
+Val is taken as about a fifth of train. Early stopping may end a run before 30 epochs (not yet measured).
+
+¹ Best case: synthetic augmentation cost and a val loader with 0 workers. On 2,065 real frames 0 workers was faster (6.4 s against 9.6 s, [Reference measurement](#reference-measurement-2065-frames)), so the break-even lies somewhere between about 2,000 and 5,000 train frames.
+
+This table and the [Full-run estimate](#full-run-estimate) below use different inputs: this one the synthetic per-batch timings, that one the per-frame cost measured on real frames. They differ by up to about 30 %; use the full-run estimate for planning.
 
 **GPU column, measured** on a Radeon RX 9070 XT (ROCm 10.1.0 build of PyTorch 2.14, Windows), same method as the CPU column: batches × step time + val batches × eval time, plus augmentation. Per batch of 64 (median of 3 timings, warm-up and `torch.cuda.synchronize()` around each):
 
@@ -156,7 +160,7 @@ Epochs per full run are **not measured yet** (no labelled split has been trained
 | 10,000 | 30 | ~1.9 h | ~9 min | ~16 min |
 | 30,000 | 15 | ~2.8 h | ~11 min | ~23 min |
 | 30,000 | 20 | ~3.7 h | ~14 min | ~31 min |
-| 30,000 | 30 | ~5.6 h | ~21 min | ~47 min |
+| 30,000 | 30 | ~5.5 h | ~21 min | ~47 min |
 
 These are single runs; a sweep or the flatten-versus-GAP comparison multiplies them. The reference frames are mostly benchmark extractions from one game, so augmentation cost on the real dataset may differ. Repeat the measurement once the real split exists.
 
@@ -197,6 +201,8 @@ The RX 9070 XT environment was checked with a standalone script that builds the 
 }
 ```
 
+`num_workers` applies to the train loader only; the val loader always uses 0 workers, since it has no augmentation and would otherwise pay the worker start-up every epoch. The default stays 0 (D35); 2 is the measured choice on the GPU from roughly 5,000 train frames upward (see Training time).
+
 ## Run folder
 
 ```text
@@ -221,7 +227,7 @@ Checkpoints are loaded with `weights_only=True` plus the config stored beside th
 | D15 | Single stream | Second stream on HUD crops cut from native stills, fused before the classifier | Look-alike pair still confused after tuning |
 | D37 | lr 1e-3, weight decay 1e-4, batch 64, 30 epochs, patience 6 | Cosine or plateau LR schedule; batch 32 / 128; no weight decay | Noisy or plateaued val curve |
 | D34 | Class-weighted loss | Unweighted loss on a downsampled balanced set | Per-class recall is uneven |
-| D23 | Local RX 9070 XT (ROCm build of PyTorch, `.venv-rocm`) | Local CPU (fallback); Colab GPU (see Hardware) | GPU environment breaks after a driver or ROCm update, or GPU and CPU smoke runs disagree |
+| D23 (decided) | Local RX 9070 XT (ROCm build of PyTorch, `.venv-rocm`) | Local CPU (fallback); Colab GPU (see Hardware) | GPU environment breaks after a driver or ROCm update, or GPU and CPU smoke runs disagree |
 | — | Logging to `history.csv` + `curves.png` | TensorBoard | Never needed for the reports |
 
 ## Testing

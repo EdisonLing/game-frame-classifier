@@ -184,6 +184,7 @@ Three kinds. IDs refer to [design-decisions.md](design-decisions.md).
 | D16b | Flatten is the primary head (keeps where HUD features are). Global average pooling is a config switch for the planned comparison. |
 | D38 | One evaluation module and one run-folder layout for both models. |
 | — | Stack: PyTorch + torchvision for the CNN, scikit-learn for the baseline, matplotlib for figures. |
+| D23 | Hardware: local AMD RX 9070 XT through a ROCm build of PyTorch in `.venv-rocm` is primary (0.078 s per batch of 64, about 17 s per epoch at 10,000 train frames with 2 loader workers, stable over an 11-minute run; [setup](amd-gpu-setup.md)); local CPU is the fallback (1 s per batch, about 3 min per epoch at 10,000 train frames), Colab the last resort; see [CNN trainer](roadmap/tools/cnn-trainer.md#hardware). Revisit if the GPU environment breaks after a driver or ROCm update, or the trainer's GPU smoke run disagrees with the CPU run. |
 | — | The baseline uses the same 256×144 files, splits and tiers as the CNN. |
 
 ### 4.2 Working defaults (cheap to change, revisit after first results)
@@ -195,7 +196,6 @@ Each is a config value or a small code switch. Changing one means rerunning a st
 | D13 | Strict: test splits untouched until the final evaluation; report development numbers on `val` | Allow one logged look at `test_session` for the progress report | Writing the progress report |
 | D15 | Single-stream CNN | Two-stream with HUD crops from native stills, as primary or as an ablation | After first CNN results on the look-alike pair |
 | D16 | Conv 32-64-128-256, one FC of 256, dropout 0.5; 9,827,878 parameters | FC 128 (5,108,390), FC 512 (19,266,854), two FC layers, or GAP head (390,438) | Train vs val gap is known |
-| D23 | Local AMD RX 9070 XT through a ROCm build of PyTorch in `.venv-rocm` (0.078 s per batch of 64, about 17 s per epoch at 10,000 train frames with 2 loader workers, stable over an 11-minute run; [setup](amd-gpu-setup.md)); device auto-detected | Local CPU as the fallback (1 s per batch, about 3 min per epoch at 10,000 train frames), or Colab; see [CNN trainer](roadmap/tools/cnn-trainer.md#hardware) | The GPU environment breaks after a driver or ROCm update, or the trainer's GPU smoke run disagrees with the CPU run |
 | D33 | No source cap; each source's share is reported and a warning is raised above 1/15 | Enforce the proposal's 1/15 cap, or a relaxed one; it only thins `train`, so it can be tightened later | Before writing a report's data section; again when public sources are added (D12) |
 | D30 | Session = clips of one source and game whose start is within 30 min of the previous clip's end | Different gap, or one session per recording day | Session report on real data looks wrong |
 | D34 | Keep every kept slot; correct imbalance with class weights | Downsample every game to the smallest class | Class counts are known |
