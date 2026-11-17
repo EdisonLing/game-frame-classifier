@@ -405,7 +405,7 @@ def finalize(
         "schema": SCHEMA_PACK,
         "pack_id": state["pack_id"],
         "created_utc": settings.utc_now_iso(),
-        "tool": {"name": "gfc-friendpack", "version": __version__, "source_commit": SOURCE_COMMIT},
+        "tool": {"name": "gfc-frame-export", "version": __version__, "source_commit": SOURCE_COMMIT},
         "recipe": ctx.recipe.to_manifest(),
         "ffmpeg": {
             "ffmpeg_version": version_line(ctx.tools.ffmpeg),

@@ -1,10 +1,10 @@
-"""Time the friend-pack recipe per resolution on simulated recordings.
+"""Time the Frame Export Kit recipe per resolution on simulated recordings.
 
 make-sources: cut one minute (60-120 s) from each clip under data/raw/<game>/
 and re-encode it as a typical gameplay recording: 60 fps H.264 at the NVIDIA
 App "High" preset bitrates (1080p 16.2 Mbps, 1440p 28.8 Mbps, 2160p 50 Mbps).
 
-time: run the friend-pack steps on each simulated recording, one resolution
+time: run the Frame Export Kit steps on each simulated recording, one resolution
 at a time, and report wall seconds per minute of footage plus still sizes:
   1. SHA-256 of the file
   2. full tier: bucket select @ 1/5 s -> JPEG q2

@@ -1,4 +1,4 @@
-"""Pack zip writer and validator (friend-pack spec §6.1, §11)."""
+"""Pack zip writer and validator (Frame Export Kit spec §6.1, §11)."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ HEX = frozenset("0123456789abcdef")
 
 
 class PackZipError(ValueError):
-    """The zip is not a valid, safe friend pack."""
+    """The zip is not a valid, safe contributor pack."""
 
 
 def write_pack_zip(pack_dir: Path, zip_path: Path) -> None:

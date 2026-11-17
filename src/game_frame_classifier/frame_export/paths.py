@@ -1,4 +1,4 @@
-"""Folders the friend pack may write to.
+"""Folders the Frame Export Kit may write to.
 
 Every write path goes through ensure_inside_home. The one exception is the finished zip
 when the user passes --output: it goes into that existing folder and nothing else does.

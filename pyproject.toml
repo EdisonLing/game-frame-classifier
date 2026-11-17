@@ -19,7 +19,7 @@ gfc-clean-frames = "game_frame_classifier.frame_cleaner:main"
 gfc-encode-quality = "game_frame_classifier.quality_encoder:main"
 gfc-catalog-clips = "game_frame_classifier.clip_catalog:main"
 gfc-batch-extract = "game_frame_classifier.batch_extract:main"
-gfc-friendpack = "game_frame_classifier.friendpack.cli:main"
+gfc-frame-export = "game_frame_classifier.frame_export.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

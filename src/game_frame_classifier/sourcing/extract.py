@@ -1,4 +1,4 @@
-"""Extract tier stills for one clip with the bucket_v1 sampler (friend-pack spec §5.3-5.8)."""
+"""Extract tier stills for one clip with the bucket_v1 sampler (Frame Export Kit spec §5.3-5.8)."""
 
 from __future__ import annotations
 

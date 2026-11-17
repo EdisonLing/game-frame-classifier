@@ -1,12 +1,12 @@
-"""End-to-end friend pack runs on synthetic clips inside a temporary tool folder."""
+"""End-to-end Frame Export Kit runs on synthetic clips inside a temporary tool folder."""
 
 import json
 import shutil
 import zipfile
 from pathlib import Path
 
-from game_frame_classifier.friendpack import cli, paths
-from game_frame_classifier.friendpack import run as run_mod
+from game_frame_classifier.frame_export import cli, paths
+from game_frame_classifier.frame_export import run as run_mod
 from game_frame_classifier.sourcing.packzip import validate_pack_zip
 from tests.helpers.ffmpeg_fixtures import make_testsrc_video, requires_ffmpeg
 

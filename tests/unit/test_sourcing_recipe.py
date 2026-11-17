@@ -1,4 +1,4 @@
-"""Recipe validation (friend-pack spec §4.1)."""
+"""Recipe validation (Frame Export Kit spec §4.1)."""
 
 import json
 from pathlib import Path

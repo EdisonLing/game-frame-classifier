@@ -1,4 +1,4 @@
-"""Find, fingerprint and probe candidate clips (friend-pack spec §5.1, §5.2, §5.2a)."""
+"""Find, fingerprint and probe candidate clips (Frame Export Kit spec §5.1, §5.2, §5.2a)."""
 
 from __future__ import annotations
 

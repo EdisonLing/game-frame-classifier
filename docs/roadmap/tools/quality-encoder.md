@@ -29,14 +29,14 @@ optional (docs / reference only):
 
 **Not** CRF on already-downscaled JPEGs (that was the early proxy; rejected).
 
-**Encoder (D28):** default / friend / named eval low = **libx264**. Personal tooling may add an **AMF toggle** for faster degraded encodes on my AMD GPU; record encoder in the manifest. Do not make AMF (or NVENC) the friend-pack default.
+**Encoder (D28):** default / friend / named eval low = **libx264**. Personal tooling may add an **AMF toggle** for faster degraded encodes on my AMD GPU; record encoder in the manifest. Do not make AMF (or NVENC) the Frame Export Kit default.
 
 ## Tier map (current)
 
 | Tier | CRF | Role |
 |---|---:|---|
 | **full** | 0 (original timeline) | Ops + eval |
-| **medium** | **38** | **Docs / reference only** (not required for train/eval/friend packs) |
+| **medium** | **38** | **Docs / reference only** (not required for train/eval/contributor packs) |
 | **low** | **45** | Ops + eval: one hard degraded setting |
 
 Code: `TIER_CRF` / `AUGMENT_CRF_*` in `quality_encoder.py` (may still expose medium until the CLI is trimmed to match D04).

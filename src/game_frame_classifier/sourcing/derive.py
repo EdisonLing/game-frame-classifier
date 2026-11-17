@@ -1,4 +1,4 @@
-"""Pad to 16:9 when needed, then scale to the train size (D27, friend-pack spec §5.7)."""
+"""Pad to 16:9 when needed, then scale to the train size (D27, Frame Export Kit spec §5.7)."""
 
 from __future__ import annotations
 

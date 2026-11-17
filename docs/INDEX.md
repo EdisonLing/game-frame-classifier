@@ -4,7 +4,7 @@
 |---|---|
 | [pipeline-status.md](pipeline-status.md) | What’s done vs missing for auto-processing raws (diagram) |
 | [pipeline-timing.md](pipeline-timing.md) | Measured wall-time rates (extract sec per video-minute) |
-| [handoff-sizes.md](handoff-sizes.md) | Friend pack size vs recordings and processing time, by resolution |
+| [handoff-sizes.md](handoff-sizes.md) | Contributor pack size vs recordings and processing time, by resolution |
 | [pipeline-optimizations.md](pipeline-optimizations.md) | Special pipeline speedups (approval required to add) |
 | [examples/](examples/) | **Published** doc figures only (e.g. README quality ladder) |
 | `examples-library/` (local, gitignored) | Full UI-reference + CRF catalog; promote into `examples/` when a doc embeds a file |

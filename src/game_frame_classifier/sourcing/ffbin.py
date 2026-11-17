@@ -38,7 +38,7 @@ class FFTools:
 
 
 def pack_root() -> Path:
-    """Folder holding app/ (friend pack) or src/ (repo checkout)."""
+    """Folder holding app/ (Frame Export Kit) or src/ (repo checkout)."""
     return Path(__file__).resolve().parents[3]
 
 

@@ -1,4 +1,4 @@
-"""Static checks that keep the friend pack stdlib-only and free of risky calls."""
+"""Static checks that keep the Frame Export Kit stdlib-only and free of risky calls."""
 
 import ast
 from pathlib import Path
@@ -6,20 +6,20 @@ from pathlib import Path
 import pytest
 
 SRC = Path(__file__).resolve().parents[2] / "src" / "game_frame_classifier"
-FILES = sorted([*(SRC / "sourcing").glob("*.py"), *(SRC / "friendpack").glob("*.py")])
+FILES = sorted([*(SRC / "sourcing").glob("*.py"), *(SRC / "frame_export").glob("*.py")])
 EXPECTED = {
     "sourcing/__init__.py", "sourcing/recipe.py", "sourcing/ffbin.py", "sourcing/probe.py",
     "sourcing/sampler.py", "sourcing/timeinfo.py", "sourcing/budget.py", "sourcing/hashing.py",
     "sourcing/labels.py", "sourcing/manifests.py", "sourcing/extract.py", "sourcing/derive.py",
-    "sourcing/packzip.py", "friendpack/__init__.py", "friendpack/__main__.py", "friendpack/paths.py",
-    "friendpack/settings.py", "friendpack/scan.py", "friendpack/run.py", "friendpack/cli.py",
+    "sourcing/packzip.py", "frame_export/__init__.py", "frame_export/__main__.py", "frame_export/paths.py",
+    "frame_export/settings.py", "frame_export/scan.py", "frame_export/run.py", "frame_export/cli.py",
 }
 ALLOWED_MODULES = {
     "__future__", "argparse", "collections", "copy", "csv", "dataclasses", "datetime", "hashlib",
     "json", "math", "os", "pathlib", "platform", "re", "shutil", "struct", "subprocess", "sys",
     "time", "typing", "uuid", "zipfile", "game_frame_classifier",
 }
-SUBPROCESS_ALLOWED = {"sourcing/ffbin.py", "friendpack/cli.py"}
+SUBPROCESS_ALLOWED = {"sourcing/ffbin.py", "frame_export/cli.py"}
 BANNED_NAMES = {"eval", "exec", "compile", "__import__", "breakpoint"}
 BANNED_OS = {
     "system", "popen", "startfile", "execl", "execle", "execlp", "execv", "execve", "execvp",

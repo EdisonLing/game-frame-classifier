@@ -1,4 +1,4 @@
-"""Recording-time evidence (friend-pack spec §5.2b)."""
+"""Recording-time evidence (Frame Export Kit spec §5.2b)."""
 
 import os
 from datetime import datetime, timezone

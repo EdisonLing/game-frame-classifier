@@ -1,6 +1,6 @@
-# Friend pack: size and time by resolution
+# Frame Export Kit: size and time by resolution
 
-How much a friend pack weighs compared to the recordings it replaces, and how long it takes to make. Recipe: [friend-pack.md](roadmap/tools/friend-pack.md) (1 sampled moment every 5 s; tiers **full** + **CRF 45**; JPEG q2; native resolution).
+How much a contributor pack weighs compared to the recordings it replaces, and how long it takes to make. Recipe: [frame-export-kit.md](roadmap/tools/frame-export-kit.md) (1 sampled moment every 5 s; tiers **full** + **CRF 45**; JPEG q2; native resolution).
 
 A **usable frame** is one sampled moment. In a pack that is 2 JPEGs (full + CRF 45). In a video it is the 5 s of footage it stands for.
 
@@ -57,4 +57,4 @@ Downscaling a 4K master gives cleaner pixels than a real 1080p/1440p recording, 
 1. `make-sources`: from each master, cut 60–120 s and re-encode as a typical recording at each resolution: 60 fps, libx264 at the NVIDIA "High" bitrates above (5 min of footage per resolution, measured 15.5 / 27.7 / 48.6 Mbps).
 2. `time`: run the four recipe steps one resolution at a time on an idle machine; sum the wall time and divide by footage minutes. Results: `data/bench_handoff/sim_recordings/timing_results.json` (local).
 
-Re-run both scripts after switching to the pinned friend-pack ffmpeg build, and on a friend's PC during the canary run, to replace the unmeasured multipliers.
+Re-run both scripts after switching to the pinned Frame Export Kit ffmpeg build, and on a friend's PC during the canary run, to replace the unmeasured multipliers.

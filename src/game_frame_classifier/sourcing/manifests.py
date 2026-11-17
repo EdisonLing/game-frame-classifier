@@ -1,4 +1,4 @@
-"""Clip and frame table columns and CSV + JSON writers (friend-pack spec §6.3, §6.4)."""
+"""Clip and frame table columns and CSV + JSON writers (Frame Export Kit spec §6.3, §6.4)."""
 
 from __future__ import annotations
 

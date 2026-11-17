@@ -7,6 +7,6 @@ if not exist "runtime\python.exe" (
   pause
   exit /b 1
 )
-"runtime\python.exe" -B -X utf8 "app\gfc_friendpack.py" %*
+"runtime\python.exe" -B -X utf8 "app\gfc_frame_export.py" %*
 echo.
 pause

@@ -4,9 +4,9 @@ import json
 
 import pytest
 
-from game_frame_classifier.friendpack import paths, settings
-from game_frame_classifier.friendpack.paths import UnsafePathError
-from game_frame_classifier.friendpack.run import RunLog, fmt_bytes, fmt_duration
+from game_frame_classifier.frame_export import paths, settings
+from game_frame_classifier.frame_export.paths import UnsafePathError
+from game_frame_classifier.frame_export.run import RunLog, fmt_bytes, fmt_duration
 
 
 @pytest.fixture

@@ -1,4 +1,4 @@
-"""Load and validate the extraction recipe (friend-pack spec §4.1)."""
+"""Load and validate the extraction recipe (Frame Export Kit spec §4.1)."""
 
 from __future__ import annotations
 

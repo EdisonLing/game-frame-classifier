@@ -1,9 +1,9 @@
-"""Discovery and fingerprinting (friend-pack spec §5.1)."""
+"""Discovery and fingerprinting (Frame Export Kit spec §5.1)."""
 
 import json
 from pathlib import Path
 
-from game_frame_classifier.friendpack.scan import discover, fingerprint
+from game_frame_classifier.frame_export.scan import discover, fingerprint
 from game_frame_classifier.sourcing.hashing import quick_id
 from game_frame_classifier.sourcing.recipe import recipe_from_dict
 

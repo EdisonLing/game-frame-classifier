@@ -120,7 +120,7 @@ def make_testsrc_video(
     """Moving test pattern (testsrc2), so every sampled frame differs.
     testsrc2 rounds its size down to even numbers, so odd sizes are scaled up afterwards.
     The file name is written as the title tag, so two clips made with the same settings
-    still differ in bytes (the friend pack skips byte-identical clips as duplicates).
+    still differ in bytes (the Frame Export Kit skips byte-identical clips as duplicates).
     """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)

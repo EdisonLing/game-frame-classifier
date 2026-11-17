@@ -1,4 +1,4 @@
-"""Recording-time evidence and best estimate for a clip (friend-pack spec §5.2b)."""
+"""Recording-time evidence and best estimate for a clip (Frame Export Kit spec §5.2b)."""
 
 from __future__ import annotations
 

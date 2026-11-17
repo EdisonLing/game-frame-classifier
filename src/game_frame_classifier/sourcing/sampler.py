@@ -1,4 +1,4 @@
-"""bucket_v1 sampler: first frame in each interval bucket (friend-pack spec §5.4, §5.6)."""
+"""bucket_v1 sampler: first frame in each interval bucket (Frame Export Kit spec §5.4, §5.6)."""
 
 from __future__ import annotations
 

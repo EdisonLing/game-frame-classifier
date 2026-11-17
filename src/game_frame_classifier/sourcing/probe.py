@@ -1,4 +1,4 @@
-"""ffprobe a clip and pick its video stream (friend-pack spec §5.2)."""
+"""ffprobe a clip and pick its video stream (Frame Export Kit spec §5.2)."""
 
 from __future__ import annotations
 

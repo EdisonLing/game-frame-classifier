@@ -1,4 +1,4 @@
-"""ffprobe JSON interpretation (friend-pack spec §5.2)."""
+"""ffprobe JSON interpretation (Frame Export Kit spec §5.2)."""
 
 import copy
 

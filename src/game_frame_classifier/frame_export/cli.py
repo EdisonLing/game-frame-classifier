@@ -1,4 +1,4 @@
-"""Friend pack command line: prompts, scan summary, run and finish (friend-pack spec §2)."""
+"""Frame Export Kit command line: prompts, scan summary, run and finish (Frame Export Kit spec §2)."""
 
 from __future__ import annotations
 
@@ -68,7 +68,7 @@ The data stays on my PC for this project. Ask me any time and I will delete it.
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="gfc-friendpack", description="Turn a folder of game clips into a frames zip.")
+    p = argparse.ArgumentParser(prog="gfc-frame-export", description="Turn a folder of game clips into a frames zip.")
     p.add_argument("folder", nargs="?", help="folder with clips (one game per folder)")
     p.add_argument("--game", help="game label, for example Valorant, or Other")
     p.add_argument("--other-name", help="game name when using --game Other")
@@ -442,7 +442,7 @@ def _main(args: argparse.Namespace) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    print(f"GFC Friend Pack v{__version__}")
+    print(f"GFC Frame Export Kit v{__version__}")
     try:
         return _main(args)
     except KeyboardInterrupt:

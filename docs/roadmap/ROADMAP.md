@@ -121,9 +121,9 @@ Prove every data step on clips you already have before caring about volume.
 | Frame extractor | **implemented** | Single video → frames @ 5s, 256×144 JPEG, CSV/JSON manifest, CLI `gfc-extract-frames` / module API; unit + synthetic system + optional personal smoke (20s stream-copy trim) | [tools/frame-extractor.md](tools/frame-extractor.md) |
 | Frame cleaner | **implemented** | Manifest in → kept/reject manifests; black + blur + aHash dedupe; reasons logged. **Gaps:** D11 detector not coded yet (rule decided); thresholds are v1 defaults (tunable via CLI) | [tools/frame-cleaner.md](tools/frame-cleaner.md) |
 | Quality encoder | **implemented** | Video CRF then extract; ops **full + low(45)**; medium=38 optional/docs (D04) | [tools/quality-encoder.md](tools/quality-encoder.md) |
-| Friend pack | **spec locked** | Plug-and-play toolset for friends: clips → native-res stills (full + crf45) zip with full metadata; same `sourcing` code as my clips (D25–D27) | [tools/friend-pack.md](tools/friend-pack.md) |
+| Frame Export Kit | **implemented** | `gfc-frame-export` + `scripts/build_frame_export.py`; release checklist (sandbox run, real collector build) pending. Plug-and-play toolset for friends: clips → native-res stills (full + crf45) zip with full metadata; same `sourcing` code as my clips (D25–D27) | [tools/frame-export-kit.md](tools/frame-export-kit.md) |
 
-**Stage 1 exit (almost):** catalog + batch extract + clean + quality tiers work. Remaining Stage 1 polish: **D11 lobby detector** (after first multi-game volume). Friend pack is optional volume help, not a Stage 1 blocker.
+**Stage 1 exit (almost):** catalog + batch extract + clean + quality tiers work. Remaining Stage 1 polish: **D11 lobby detector** (after first multi-game volume). Frame Export Kit is optional volume help, not a Stage 1 blocker.
 
 ---
 

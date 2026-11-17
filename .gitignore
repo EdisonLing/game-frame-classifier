@@ -243,7 +243,7 @@ docs/examples-library/**
 !docs/examples-library/.gitkeep
 !docs/examples-library/README.md
 
-# Friend pack run from a repo checkout
+# Frame Export Kit run from a repo checkout
 /config/user.json
 /config/history.json
 /output/

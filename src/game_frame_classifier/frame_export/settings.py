@@ -1,4 +1,4 @@
-"""config/user.json and config/history.json (friend-pack spec §4.2, §4.3)."""
+"""config/user.json and config/history.json (Frame Export Kit spec §4.2, §4.3)."""
 
 from __future__ import annotations
 

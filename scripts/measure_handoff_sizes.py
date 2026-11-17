@@ -1,6 +1,6 @@
-"""Measure friend-pack still sizes vs source video, by resolution.
+"""Measure Frame Export Kit still sizes vs source video, by resolution.
 
-Runs the friend-pack recipe (bucket sampler @ 1/5 s, full + CRF 45 video
+Runs the Frame Export Kit recipe (bucket sampler @ 1/5 s, full + CRF 45 video
 re-encode, JPEG q2) on every clip under data/raw/<game>/, at 2160p (native),
 1440p and 1080p (lanczos downscale of the same decoded frames), plus compact
 256x144 derived from the 1080p stills. Each clip is decoded once.

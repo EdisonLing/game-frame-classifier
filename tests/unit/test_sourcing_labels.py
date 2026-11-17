@@ -1,4 +1,4 @@
-"""Label hints and name normalisation (friend-pack spec §9, §4.2)."""
+"""Label hints and name normalisation (Frame Export Kit spec §9, §4.2)."""
 
 import pytest
 

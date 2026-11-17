@@ -215,12 +215,12 @@ Related open fork from proposal: **flatten vs global average pooling** — decid
 | | |
 |---|---|
 | **Status** | decided (not built yet) |
-| **Prompt** | Friend-pack wall time is ~75% libx264; GPU (AMF/NVENC) is faster but not true CRF and differs by vendor |
+| **Prompt** | Frame Export Kit wall time is ~75% libx264; GPU (AMF/NVENC) is faster but not true CRF and differs by vendor |
 | **Options** | (A) libx264 everywhere (B) GPU everywhere including friends (C) **Friends libx264; personal optional AMF toggle** (D) Friends libx264; personal AMF-only (replace x264) |
-| **Decision** | **(C).** Friend pack and the named **low / crf45** eval recipe stay **software libx264**. Personal `gfc-make-sources` / quality path may expose an **AMF toggle** for speed on my AMD machine. Manifest must record encoder + settings. Official comparable eval uses the x264 low tier; AMF output is a local speed path / optional extra stress, not a silent substitute for “CRF 45.” NVENC later is the same idea if needed — not the friend default. |
+| **Decision** | **(C).** Frame Export Kit and the named **low / crf45** eval recipe stay **software libx264**. Personal `gfc-make-sources` / quality path may expose an **AMF toggle** for speed on my AMD machine. Manifest must record encoder + settings. Official comparable eval uses the x264 low tier; AMF output is a local speed path / optional extra stress, not a silent substitute for “CRF 45.” NVENC later is the same idea if needed — not the friend default. |
 | **Rationale** | Mixing friend GPU vendors into the default low tier would confound source with artifact family. Keeping friends on pinned x264 preserves pack interchangeability. Personal AMF is fine when I accept non-identical mush and label it; replacing personal x264 entirely would make my data systematically different from friends (D rejected). |
 | **Date** | 2026-11-16 |
-| **Links** | [tools/friend-pack.md](roadmap/tools/friend-pack.md), [tools/quality-encoder.md](roadmap/tools/quality-encoder.md), D22 / D25 / D26 |
+| **Links** | [tools/frame-export-kit.md](roadmap/tools/frame-export-kit.md), [tools/quality-encoder.md](roadmap/tools/quality-encoder.md), D22 / D25 / D26 |
 
 ### D23 — Training stack / hardware
 
@@ -254,7 +254,7 @@ Related open fork from proposal: **flatten vs global average pooling** — decid
 | **Decision** | **(C) No resolution cap.** After video CRF (D22), extract stills at the **source video resolution**. Default tiers: **full + crf45** (D04), set in a shipped `recipe.json` (`crf_list`, `include_full`, `interval_s` = 5), not hardcoded. **Footage budget** `footage_budget_min` = 180 per game per run (editable; `0` = all), clips spread across recording days; rerun sends more. Optional **compact** = 256×144 via the same derive step as my pipeline (D27). **Packaging:** Python embeddable + `.bat` launcher (drag a folder), pinned static ffmpeg (x264 + dav1d + zimg), stdlib-only app; Windows-first. Name and consent asked once (`user.json`), game per run, auto-zip per run (`ZIP_STORED`, verified). Friends do **not** clean. Manifests keep clip SHA-256, file timing, sanitised probe, actual frame timestamps, slot pairing, recipe, tool/ffmpeg/x264 versions, sizes and hashes; uncompressed size + file count for ingest-side bomb checks. **Track** handoff size vs source by resolution. |
 | **Rationale** | Cap was solving a size-anxiety problem; the real need is knowing how much the sparse still pack saves at 1080 / 1440 / 4K. Native stills keep train-size, aspect, HUD-crop (D15) and docs flexibility on my side, so I never have to ask for clips again. Embeddable Python avoids the antivirus friction of an unsigned PyInstaller exe and stays patchable. |
 | **Date** | 2026-11-16 (revised: drop cap; spec v1) |
-| **Links** | [tools/friend-pack.md](roadmap/tools/friend-pack.md); [tools/quality-encoder.md](roadmap/tools/quality-encoder.md) |
+| **Links** | [tools/frame-export-kit.md](roadmap/tools/frame-export-kit.md); [tools/quality-encoder.md](roadmap/tools/quality-encoder.md) |
 
 ### D26 — Frame sources as first-class data (one extraction path)
 
@@ -262,11 +262,11 @@ Related open fork from proposal: **flatten vs global average pooling** — decid
 |---|---|
 | **Status** | decided (not built yet) |
 | **Prompt** | Friend frames replace masters, so stills must be usable as sources alongside my own clips |
-| **Options** | (A) Keep extracting personal clips straight to 256×144; treat friend packs as a side format (B) **Every clip, mine or a friend's, goes through the same `sourcing` code into native-res frame sources; train frames are derived from those** |
+| **Options** | (A) Keep extracting personal clips straight to 256×144; treat contributor packs as a side format (B) **Every clip, mine or a friend's, goes through the same `sourcing` code into native-res frame sources; train frames are derived from those** |
 | **Decision** | **(B).** `data/frame_sources/<Game>/<source>/<clip_key>/<tier>/` holds native-res stills for every source (`gfc-make-sources` for my clips, `gfc-ingest-pack` for friend zips). One stdlib-only package does probe, sampling and CRF for both. **Sampler `bucket_v1`:** one frame per `interval_s` bucket on the clip timeline, chosen by ffmpeg `select` on real timestamps (VFR-safe), actual `pts_time` recorded; tiers paired by bucket into **slots** (`<clip_key>:b<bucket>`). `clip_key` = `c` + first 12 hex of the clip SHA-256. Tier ids `full` / `crf<N>`. |
 | **Rationale** | Two paths would drift (different samplers, scalers, ffmpeg builds) and become a hidden source-vs-label confound. Content-addressed keys dedupe across people. The old `fps=1/5` + computed timestamps assumed CFR, which game captures often are not. |
 | **Date** | 2026-11-16 |
-| **Links** | [tools/friend-pack.md](roadmap/tools/friend-pack.md), [data-layout.md](data-layout.md) |
+| **Links** | [tools/frame-export-kit.md](roadmap/tools/frame-export-kit.md), [data-layout.md](data-layout.md) |
 
 ### D27 — Derive policy (native stills → 256×144)
 
@@ -276,9 +276,9 @@ Related open fork from proposal: **flatten vs global average pooling** — decid
 | **Prompt** | How native-resolution stills of any aspect become model input |
 | **Options** | (A) Stretch to 256×144 (B) Centre-crop to 16:9 (C) **Pad to 16:9 when aspect is off by more than 1 %, then bicubic scale** |
 | **Decision** | **(C)** via ffmpeg (`pad` then `scale=256:144:flags=bicubic`, JPEG q2) from the native JPEG, stored as `data/frames/...`; the dataloader does no resizing. Friend compact mode runs the same function. |
-| **Rationale** | Crop can cut HUD corners (main cue); stretch distorts shapes. Most sources are 16:9 and untouched. Same scaler and source for every frame avoids processing confounds between my clips and friend packs. Re-derivable if train size changes. |
+| **Rationale** | Crop can cut HUD corners (main cue); stretch distorts shapes. Most sources are 16:9 and untouched. Same scaler and source for every frame avoids processing confounds between my clips and contributor packs. Re-derivable if train size changes. |
 | **Date** | 2026-11-16 |
-| **Links** | [tools/friend-pack.md](roadmap/tools/friend-pack.md), [tools/frame-extractor.md](roadmap/tools/frame-extractor.md) |
+| **Links** | [tools/frame-export-kit.md](roadmap/tools/frame-export-kit.md), [tools/frame-extractor.md](roadmap/tools/frame-extractor.md) |
 
 ---
 
@@ -286,15 +286,16 @@ Related open fork from proposal: **flatten vs global average pooling** — decid
 
 | Date | ID | Change |
 |---|---|---|
+| 2026-11-16 | D25 | Tool renamed friend pack → **Frame Export Kit** (`gfc-frame-export`, package `frame_export`); its zips are contributor packs |
 | 2026-11-16 | D28 | Friends stay libx264; personal optional AMF speed toggle (not friend default; not AMF-only personal) |
 | 2026-11-16 | D25 | Decided: spec v1 (recipe file, embeddable Python + pinned ffmpeg, manifests, ingest checks) |
-| 2026-11-16 | D26 | Frame sources first-class; one `sourcing` path for my clips and friend packs; `bucket_v1` sampler |
+| 2026-11-16 | D26 | Frame sources first-class; one `sourcing` path for my clips and contributor packs; `bucket_v1` sampler |
 | 2026-11-16 | D27 | Derive: pad to 16:9 (>1 % off) + bicubic 256×144 from native JPEG |
 | 2026-11-16 | D04 | Train: **random full or low** per example (not both); eval still reports both |
 | 2026-11-16 | D04 / D22 | Ops tiers → **full + low (45)**; medium=38 docs/reference only (small 256×144 Δ) |
 | 2026-11-16 | D04 / D22 | Tier CRF map → **0 / 38 / 45** (was 0/28/38); 256×144 MAE showed 28≈full |
 | 2026-11-16 | D25 | Revised: **no res cap** (native × 3); optional 256 compact; track size savings by resolution |
-| 2026-11-16 | D25 | Friend pack lean (superseded same day): had been 1440p-capped × 3 + 256 compact |
+| 2026-11-16 | D25 | Frame Export Kit lean (superseded same day): had been 1440p-capped × 3 + 256 compact |
 | 2026-11-16 | — | Published `docs/examples/` vs local `docs/examples-library/` (gitignored full catalog) |
 | 2026-11-16 | — | README Going deeper: split **across all games** vs **per-game special considerations** (Valorant table: may affect vs what I did) |
 | 2026-11-16 | D24 | Product: six games + **unknown**; lean threshold first, trained 7th optional later |

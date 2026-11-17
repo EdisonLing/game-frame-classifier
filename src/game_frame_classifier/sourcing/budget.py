@@ -1,4 +1,4 @@
-"""Footage budget spread across recording days (spread_days_v1, friend-pack spec §5.2a)."""
+"""Footage budget spread across recording days (spread_days_v1, Frame Export Kit spec §5.2a)."""
 
 from __future__ import annotations
 

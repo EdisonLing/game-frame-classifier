@@ -1,4 +1,4 @@
-"""Pack zip writer and validator (friend-pack spec §6.1, §11)."""
+"""Pack zip writer and validator (Frame Export Kit spec §6.1, §11)."""
 
 import json
 import os

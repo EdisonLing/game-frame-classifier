@@ -1,4 +1,4 @@
-"""python -m game_frame_classifier.friendpack"""
+"""python -m game_frame_classifier.frame_export"""
 
 import sys
 

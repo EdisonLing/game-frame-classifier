@@ -1,7 +1,7 @@
-"""Fetch pinned binaries and build the friend pack (docs/roadmap/tools/friend-pack.md §12).
+"""Fetch pinned binaries and build the Frame Export Kit (docs/roadmap/tools/frame-export-kit.md §12).
 
-  python scripts/build_friend_pack.py fetch
-  python scripts/build_friend_pack.py build --collector-name NAME --collector-contact CONTACT
+  python scripts/build_frame_export.py fetch
+  python scripts/build_frame_export.py build --collector-name NAME --collector-contact CONTACT
 """
 
 from __future__ import annotations
@@ -19,9 +19,9 @@ import zipfile
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-PACKAGING = REPO / "packaging" / "friendpack"
-CACHE = REPO / "build" / "friendpack_cache"
-STAGE_ROOT = REPO / "build" / "friendpack_stage"
+PACKAGING = REPO / "packaging" / "frame_export"
+CACHE = REPO / "build" / "frame_export_cache"
+STAGE_ROOT = REPO / "build" / "frame_export_stage"
 DIST = REPO / "dist"
 SRC_PKG = REPO / "src" / "game_frame_classifier"
 ALLOWED_HOSTS = frozenset({
@@ -32,11 +32,11 @@ ALLOWED_HOSTS = frozenset({
 })
 REQUIRED_BUILDCONF = ("--enable-gpl", "--enable-libx264", "--enable-libdav1d", "--enable-libzimg")
 CHUNK = 1 << 20
-ENTRY_POINT = '''"""Friend pack entry point (started by START HERE.bat)."""
+ENTRY_POINT = '''"""Frame Export Kit entry point (started by START HERE.bat)."""
 
 import sys
 
-from game_frame_classifier.friendpack.cli import main
+from game_frame_classifier.frame_export.cli import main
 
 if __name__ == "__main__":
     sys.exit(main())
@@ -167,10 +167,10 @@ def check_ffmpeg(stage: Path, pin: dict) -> None:
 
 
 def tool_version() -> str:
-    text = (SRC_PKG / "friendpack" / "__init__.py").read_text(encoding="utf-8")
+    text = (SRC_PKG / "frame_export" / "__init__.py").read_text(encoding="utf-8")
     match = re.search(r'^__version__ = "(\d+\.\d+\.\d+)"$', text, re.M)
     if not match:
-        fail("cannot read __version__ from friendpack/__init__.py")
+        fail("cannot read __version__ from frame_export/__init__.py")
     return match.group(1)
 
 
@@ -180,7 +180,7 @@ def source_commit() -> str:
     ).stdout.strip()
     dirty = subprocess.run(
         ["git", "status", "--porcelain", "--", "src/game_frame_classifier/sourcing",
-         "src/game_frame_classifier/friendpack", "config/recipe.json", "packaging/friendpack"],
+         "src/game_frame_classifier/frame_export", "config/recipe.json", "packaging/frame_export"],
         cwd=REPO, capture_output=True, text=True, check=True,
     ).stdout.strip()
     return f"{head}-dirty" if dirty else head
@@ -189,16 +189,16 @@ def source_commit() -> str:
 def stage_app(stage: Path, commit: str) -> None:
     app_pkg = stage / "app" / "game_frame_classifier"
     app_pkg.mkdir(parents=True)
-    (app_pkg / "__init__.py").write_text('"""GFC friend pack application package."""\n', encoding="utf-8")
+    (app_pkg / "__init__.py").write_text('"""GFC Frame Export Kit application package."""\n', encoding="utf-8")
     ignore = shutil.ignore_patterns("__pycache__", "*.pyc")
-    for name in ("sourcing", "friendpack"):
+    for name in ("sourcing", "frame_export"):
         shutil.copytree(SRC_PKG / name, app_pkg / name, ignore=ignore)
-    init = app_pkg / "friendpack" / "__init__.py"
+    init = app_pkg / "frame_export" / "__init__.py"
     text = init.read_text(encoding="utf-8")
     if text.count('SOURCE_COMMIT = "dev"') != 1:
-        fail('friendpack/__init__.py must contain SOURCE_COMMIT = "dev" exactly once')
+        fail('frame_export/__init__.py must contain SOURCE_COMMIT = "dev" exactly once')
     init.write_text(text.replace('SOURCE_COMMIT = "dev"', f'SOURCE_COMMIT = "{commit}"'), encoding="utf-8")
-    (stage / "app" / "gfc_friendpack.py").write_text(ENTRY_POINT, encoding="utf-8")
+    (stage / "app" / "gfc_frame_export.py").write_text(ENTRY_POINT, encoding="utf-8")
 
 
 def stage_text_files(stage: Path, pins: dict, collector_name: str, collector_contact: str) -> None:
@@ -243,7 +243,7 @@ def smoke_test(stage: Path, commit: str) -> None:
         )
         (stage / "config" / "user.json").write_text(json.dumps(SMOKE_USER), encoding="utf-8")
         run = subprocess.run(
-            [str(py), "-B", "-X", "utf8", str(stage / "app" / "gfc_friendpack.py"), str(clips),
+            [str(py), "-B", "-X", "utf8", str(stage / "app" / "gfc_frame_export.py"), str(clips),
              "--yes", "--game", "Valorant", "--no-open"],
             capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=stage,
         )
@@ -298,10 +298,10 @@ def cmd_build(args: argparse.Namespace) -> None:
     py_zip, ff_zip = cached_path(pins["python"]), cached_path(pins["ffmpeg"])
     for path, pin in ((py_zip, pins["python"]), (ff_zip, pins["ffmpeg"])):
         if not path.is_file():
-            fail(f"{path.name} is not in the cache; run: python scripts/build_friend_pack.py fetch")
+            fail(f"{path.name} is not in the cache; run: python scripts/build_frame_export.py fetch")
         verify(path, pin)
     version, commit = tool_version(), source_commit()
-    stage = STAGE_ROOT / f"GFC-FriendPack-v{version}"
+    stage = STAGE_ROOT / f"GFC-FrameExportKit-v{version}"
     if STAGE_ROOT.exists():
         shutil.rmtree(STAGE_ROOT)
     stage.mkdir(parents=True)
@@ -319,7 +319,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("fetch", help="download and verify the pinned Python and ffmpeg zips").set_defaults(func=cmd_fetch)
-    build = sub.add_parser("build", help="stage, smoke-test and zip the friend pack")
+    build = sub.add_parser("build", help="stage, smoke-test and zip the Frame Export Kit")
     build.add_argument("--collector-name", required=True, help="name shown in README.txt")
     build.add_argument("--collector-contact", required=True, help="contact shown in README.txt")
     build.set_defaults(func=cmd_build)
