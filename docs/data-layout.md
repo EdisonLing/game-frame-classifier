@@ -97,10 +97,10 @@ Outputs from extract / clean / quality tools. Suggested pattern:
 data/frames/
   <run_or_video_id>/                 # extractor output + frames_manifest.*
   <run_or_video_id>_cleaned/         # cleaner kept/ + rejects
-  <run_or_video_id>_quality/         # quality encoder
-    full/
-    medium/
-    low/
+  <run_or_video_id>_quality/         # quality encoder (D04)
+    full/                            # ops
+    low/                             # ops = CRF 45
+    medium/                          # optional; docs/reference CRF 38 only
 ```
 
 Batch runs can mirror game/source:

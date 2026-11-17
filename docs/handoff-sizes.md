@@ -31,7 +31,7 @@ Wall time to process one minute of footage, whole recipe (hash, full extract, CR
 | 1440p | **22 s** | **22 min** | 75 % |
 | 2160p | **51 s** | **51 min** | 78 % |
 
-Measured on a fast 8-core desktop (Ryzen 7 7800X3D, 16 threads), machine otherwise idle, 60 fps H.264 sources. The time is almost all libx264 software encoding, so it scales with CPU cores and frame count:
+Measured on a fast 8-core desktop (16 threads), machine otherwise idle, 60 fps H.264 sources. The time is almost all libx264 software encoding, so it scales with CPU cores and frame count:
 
 - **Estimate for a friend:** footage minutes × (12 s at 1080p, 22 s at 1440p, 51 s at 4K), then **about 2×** on a typical 6-core gaming PC and **3× or more** on an older 4-core laptop. These multipliers are not measured.
 - 120 fps recordings take about twice as long (twice the frames to re-encode). HEVC and AV1 sources decode more slowly than H.264.

@@ -64,7 +64,7 @@ Called out positively in TA feedback. Treat as decided unless we explicitly reop
 
 **Note:** Proposal keeps menus/HUD as valid gameplay frames (D06). “Non-game” should mean desktop/browser/facecam-heavy/etc., not “has a menu.”
 
-**When:** Progress report can describe the rule + current black/blur/dedupe; implement the detector after first multi-game extract (not blocking the batch runner).
+**When:** Progress report can describe the rule + current black/blur/dedupe; implement the detector after first multi-game extract (not blocking batch extract).
 
 ---
 
@@ -244,7 +244,7 @@ Related open fork from proposal: **flatten vs global average pooling** — decid
 | **Date** | 2026-11-16 |
 | **Links** | [tools/clip-tagger.md](roadmap/tools/clip-tagger.md), [tools/cnn-trainer.md](roadmap/tools/cnn-trainer.md), root README “The trained model” |
 
-### D25 — Friend handoff pack (frames zip, not masters)
+### D25 — Frame Export Kit / contributor packs (frames zip, not masters)
 
 | | |
 |---|---|

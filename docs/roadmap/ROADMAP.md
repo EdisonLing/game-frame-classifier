@@ -21,6 +21,8 @@ CNN that maps a single gameplay frame → one of six games (Valorant, League of 
 | Stage 1 — frame cleaner | **implemented** | Black / blur / aHash dedupe + reject log; D11 detector planned (rule decided) |
 | Stage 1 — quality encoder | **implemented** | Video CRF then extract; **ops = full + low(45)**; medium=38 docs/reference (D04) |
 | Stage 1 — clip catalog | **implemented** | Scans `data/raw/<Game>/<source>/` → `clips.csv` + `clips.json`; absolute paths; ffprobe meta |
+| Stage 1 — Frame Export Kit | **implemented** | Contributor clips → zip; release canary pending | [tools/frame-export-kit.md](tools/frame-export-kit.md) |
+| Stage 1 — ingest pack | **implemented** | Zip → `data/frame_sources/`; make-sources still missing (D26) | [tools/ingest-pack.md](tools/ingest-pack.md) |
 | Stages 2–7 | **not started** | Split / volume / baseline / CNN still ahead — see note below |
 
 **Verified:** extractor + cleaner tests green; sample under `data/frames/valorant_smoke/` and cleaned output under `data/frames/valorant_smoke_cleaned/`.
@@ -64,14 +66,16 @@ Durations are rough working estimates, not calendar dates.
 
 ## High-level pipeline
 
+**Target (D26):** raw / contributor pack → native `frame_sources` (full + crf45) → derive 256×144 → clean → split → …  
+**Interim (works today):** catalog → batch extract straight to 256×144 `frames/` → clean → optional quality encoder → …
+
 ```text
 raw clips / videos
     → catalog (paths, game label, source meta)
-    → extract frames (ffmpeg, ~1 / 5s)
-    → clean + dedupe (black/blur/junk + pHash)
-    → resize 256×144 + store metadata
+    → [interim] batch extract 256×144   OR   [target] make-sources / ingest → frame_sources → derive
+    → clean + dedupe (black/blur/junk + aHash)
     → split by video/session (not by frame)
-    → [train] augment (jitter, mild scale, random low-bitrate)
+    → [train] augment (jitter, mild scale, random full/low)
     → baseline / CNN
     → evaluate (accuracy, F1, confusion, quality tiers)
 ```
@@ -117,14 +121,14 @@ Prove every data step on clips you already have before caring about volume.
 | Tool | Status | Extent | Detail |
 |---|---|---|---|
 | Clip catalog | **implemented** | Walk `data/raw/<Game>/<source>/` → `clips.csv` + `clips.json`; absolute paths; duration/width/height via ffprobe; CLI `gfc-catalog-clips` | [tools/clip-catalog.md](tools/clip-catalog.md) |
-| Batch extract | **implemented** | Catalog → `data/frames/<Game>/<source>/<stem>/`; skip-if-done; `--game` / `--limit` / `--force`; summary JSON; CLI `gfc-batch-extract` | — |
+| Batch extract | **implemented (interim)** | Catalog → `data/frames/<Game>/<source>/<stem>/` at 256×144; skip-if-done; `--game` / `--limit` / `--force` / `--clean`; CLI `gfc-batch-extract`. Superseded for dataset building once `gfc-make-sources` exists (D26) | [pipeline-status.md](../pipeline-status.md) |
 | Frame extractor | **implemented** | Single video → frames @ 5s, 256×144 JPEG, CSV/JSON manifest, CLI `gfc-extract-frames` / module API; unit + synthetic system + optional personal smoke (20s stream-copy trim) | [tools/frame-extractor.md](tools/frame-extractor.md) |
 | Frame cleaner | **implemented** | Manifest in → kept/reject manifests; black + blur + aHash dedupe; reasons logged. **Gaps:** D11 detector not coded yet (rule decided); thresholds are v1 defaults (tunable via CLI) | [tools/frame-cleaner.md](tools/frame-cleaner.md) |
 | Quality encoder | **implemented** | Video CRF then extract; ops **full + low(45)**; medium=38 optional/docs (D04) | [tools/quality-encoder.md](tools/quality-encoder.md) |
 | Frame Export Kit | **implemented** | `gfc-frame-export` + `scripts/build_frame_export.py`; release checklist (sandbox run, friend canary) pending. Plug-and-play toolset for friends: clips → native-res stills (full + crf45) zip with full metadata; same `sourcing` code as my clips (D25–D27) | [tools/frame-export-kit.md](tools/frame-export-kit.md) |
 | Ingest pack | **implemented** | `gfc-ingest-pack`: validate contributor zip → `data/frame_sources/` (D26); optional extra tests (zip-of-packs, Other, consent refuse) still open | [tools/ingest-pack.md](tools/ingest-pack.md) |
 
-**Stage 1 exit (almost):** catalog + batch extract + clean + quality tiers work. Remaining Stage 1 polish: **D11 lobby detector** (after first multi-game volume). Frame Export Kit is optional volume help, not a Stage 1 blocker.
+**Stage 1 exit (almost):** catalog + batch extract + clean + quality + Frame Export Kit + ingest work. Remaining: **D11 lobby detector** (after first multi-game volume); **`gfc-make-sources` + derive** to finish the D26 personal path. Frame Export Kit release canary is optional volume help, not a Stage 1 blocker.
 
 ---
 

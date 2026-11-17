@@ -1,23 +1,36 @@
 # Pipeline status
 
-What’s built vs missing for turning `data/raw/` into train-ready frames.
+What’s built vs missing for turning `data/raw/` (and contributor packs) into train-ready frames.
 
-**Rule of thumb:** clips in `data/raw/` are the source of truth. Frames under `data/frames/` are derived and can be reprocessed when tools or settings change.
+**Rule of thumb:** clips in `data/raw/` are collection input. **Target** shared truth is native-res stills under `data/frame_sources/` (D26). Train-size frames under `data/frames/` are derived and can be rebuilt.
+
+## Two paths (do not confuse)
+
+| Path | Status | What it does |
+|---|---|---|
+| **Interim personal** | **Done** | `gfc-catalog-clips` → `gfc-batch-extract` → `data/frames/...` at **256×144** (plus optional `gfc-encode-quality`) |
+| **Target (D26)** | **Partial** | Same `sourcing` code: Frame Export Kit / future `gfc-make-sources` → `data/frame_sources/` (native, full + crf45) → derive 256×144 (D27). **Ingest** is implemented; **make-sources** / derive CLI still to build |
+
+Batch extract is useful now; it is **not** the long-term personal path once `gfc-make-sources` lands.
 
 ## Diagram
 
 ```mermaid
 flowchart LR
   subgraph done ["Done"]
-    R[data/raw<br/>Game / source / clips]
-    Cat[Clip catalog<br/>scan raw → clips.csv]
-    Batch[Batch extract<br/>catalog → frames]
+    R[data/raw]
+    Cat[Clip catalog]
+    Batch[Batch extract → frames 256]
     E[Extract frames]
     C[Clean + dedupe]
-    Q[Quality tiers<br/>full + CRF 45]
+    Q[Quality full + CRF 45]
+    FEK[Frame Export Kit]
+    Ing[Ingest pack → frame_sources]
   end
 
   subgraph later ["Later"]
+    Make[gfc-make-sources]
+    Der[Derive 256 from frame_sources]
     D11[D11 lobby/non-game detector]
     S[Split train/val/test]
     A[Augment train]
@@ -27,6 +40,9 @@ flowchart LR
   R --> Cat --> Batch --> E
   E --> C --> Q --> S --> A --> M
   C -.-> D11
+  R -.-> Make -.-> Der
+  FEK --> Ing --> Der
+  Der --> S
 ```
 
 ## Status table
@@ -34,13 +50,16 @@ flowchart LR
 | Piece | Status | What it means |
 |---|---|---|
 | Catalog | **Done** | Scan `raw/` → `clips.csv` / `clips.json` with game, source, absolute path |
-| Batch extract | **Done** | `gfc-batch-extract` walks the catalog → `data/frames/<Game>/<source>/<stem>/` |
+| Batch extract | **Done (interim)** | `gfc-batch-extract` → `data/frames/<Game>/<source>/<stem>/` at 256×144 |
 | Extract | **Done** | One video → frames @ 1/5s + manifest (also used by batch) |
 | Clean | **Done** | Drop black / blur / near-dupes (D11 lobby detector still planned) |
-| Quality | **Done** | Video CRF (full=original / med=38 / low=45) → then extract 256×144 |
+| Quality encoder | **Done** | Video CRF → extract; **ops = full + low (CRF 45)**; medium=38 docs only (D04) |
+| Frame Export Kit | **Done** | Friends: clips → contributor zip (native full + crf45); release canary pending |
+| Ingest pack | **Done** | `gfc-ingest-pack` → `data/frame_sources/` |
+| `gfc-make-sources` / derive | **Missing** | Personal clips into the same `frame_sources` layout (D26 / D27) |
 | Split / models | **Later** | Needs a finished frames set first |
 
-## Batch extract usage
+## Batch extract usage (interim)
 
 ```bash
 gfc-catalog-clips
@@ -56,14 +75,17 @@ Skips a clip when `frames_manifest.csv` already exists (unless `--force` or `--c
 
 `--clean` is what to use after adding/removing source videos so `clips.csv` and `data/frames/<Game>/...` match disk.
 
+Ops quality on a single clip: `gfc-encode-quality … --tiers full low` (D04). Medium remains available for docs ladders.
+
 ## In short
 
-Catalog + **batch extract** + per-clip extract/clean/quality tools exist. Next for data: drop more clips under `data/raw/`, run catalog + batch extract, then clean (and later D11). Split / baseline / CNN still ahead.
+**Usable now:** catalog + batch extract + clean + quality + Frame Export Kit + ingest. **Still ahead for the D26 target:** `gfc-make-sources` + derive; then D11, split, baseline, CNN.
 
 ## Related
 
-- [Data layout](data-layout.md) — where clips live (`data/raw/<Game>/<source>/`)
-- [Pipeline timing](pipeline-timing.md) — wall-sec per video-minute (for batch estimates)
+- [Data layout](data-layout.md) — `raw/`, `frame_sources/`, `frames/`
+- [Pipeline timing](pipeline-timing.md) — wall-sec per video-minute (batch extract estimates)
+- [Handoff sizes](handoff-sizes.md) — contributor pack size/time by resolution
 - [Roadmap](roadmap/ROADMAP.md) — stages and tool detail pages
-- [D11](design-decisions.md) — lobby/non-game filter plan
-- Tool pages: [catalog](roadmap/tools/clip-catalog.md) · [extractor](roadmap/tools/frame-extractor.md) · [cleaner](roadmap/tools/frame-cleaner.md) · [quality](roadmap/tools/quality-encoder.md)
+- [D11](design-decisions.md) — lobby/non-game filter plan · [D26](design-decisions.md) — frame sources
+- Tool pages: [catalog](roadmap/tools/clip-catalog.md) · [extractor](roadmap/tools/frame-extractor.md) · [cleaner](roadmap/tools/frame-cleaner.md) · [quality](roadmap/tools/quality-encoder.md) · [Frame Export Kit](roadmap/tools/frame-export-kit.md) · [ingest](roadmap/tools/ingest-pack.md)

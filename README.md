@@ -115,8 +115,10 @@ Other titles get the same two-column treatment when I add clips for them.
 ## Docs
 
 - [Docs index](docs/INDEX.md)
-- [Pipeline status](docs/pipeline-status.md) (done vs missing)
+- [Pipeline status](docs/pipeline-status.md) (done vs missing; interim batch vs frame_sources)
 - [Pipeline timing](docs/pipeline-timing.md) (extract wall-time rates)
+- [Handoff sizes](docs/handoff-sizes.md) (contributor pack size/time)
 - [Data layout](docs/data-layout.md) (`data/raw/<Game>/<source>/...`)
+- [Frame Export Kit](docs/roadmap/tools/frame-export-kit.md) · [Ingest pack](docs/roadmap/tools/ingest-pack.md)
 - [Project roadmap](docs/roadmap/ROADMAP.md)
 - [Design decisions](docs/design-decisions.md)

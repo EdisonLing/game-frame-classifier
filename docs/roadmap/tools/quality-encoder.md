@@ -6,14 +6,14 @@
 
 ## What it does (high level)
 
-Builds **full / medium / low** frame sets from one source video by re-encoding the **video** at controlled H.264 CRF, then extracting and downscaling (same sample rate / size as the extractor).
+Builds quality-tier frame sets from one source video by re-encoding the **video** at controlled H.264 CRF, then extracting and downscaling (same sample rate / size as the extractor). **Ops default intent (D04):** **full + low (CRF 45)**; **medium (38)** is optional docs/reference.
 
 ## Why we need it
 
 1. **Ops storage** — produce **full** + **low (CRF 45)** stills (D04)  
 2. **Train** — for each example, pick **full or low at random** (not both; avoids ~2× data given small Δ). Probability TBD (default lean ~0.5 / 0.5 or slight full bias).  
 3. **Eval** — score **full** and **low** as separate conditions (report both).  
-4. **Friend handoff** — zip **full + low** so I can sample/eval either way (D25)  
+4. **Contributor packs** — Frame Export Kit zips **full + low** so I can sample/eval either way (D25)  
 5. **Docs** — optional **medium (CRF 38)** for README only  
 
 ## Method (D22)
@@ -66,9 +66,10 @@ Photos: root README Quality levels, or `docs/examples/quality-ladder/`. Rebuild:
 ## CLI
 
 ```bash
-gfc-encode-quality path\to\clip.mp4 -o data/frames/my_clip_quality --game Valorant
-gfc-encode-quality path\to\clip.mp4 -o out --game Valorant --max-duration 20
-gfc-encode-quality path\to\clip.mp4 -o out --game Valorant --keep-proxies
+# Ops (D04): full + low only
+gfc-encode-quality path\to\clip.mp4 -o data/frames/my_clip_quality --game Valorant --tiers full low
+gfc-encode-quality path\to\clip.mp4 -o out --game Valorant --tiers full low --max-duration 20
+gfc-encode-quality path\to\clip.mp4 -o out --game Valorant --keep-proxies   # CLI default may still list medium until trimmed
 ```
 
 ## Acceptance checks
@@ -84,7 +85,7 @@ gfc-encode-quality path\to\clip.mp4 -o out --game Valorant --keep-proxies
 | Kind | Cases |
 |---|---|
 | **Unit** | Tier → CRF map; validate_crf bounds |
-| **System** | Synthetic video → three tiers + summary; bad tier rejected |
+| **System** | Synthetic video → tier folders + summary (suite may still exercise medium); bad tier rejected |
 | **Personal** | Optional short slice of a `data/raw` clip |
 
 ```bash

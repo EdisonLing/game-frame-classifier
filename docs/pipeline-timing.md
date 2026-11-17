@@ -2,7 +2,9 @@
 
 Measured wall-clock rates so we can estimate batch jobs before running them.
 
-**How to refresh:** `python scripts/bench_extract.py` (uses `data/raw/`; writes `data/bench_extract/`).
+**How to refresh extract:** `python scripts/bench_extract.py` (uses `data/raw/`; writes `data/bench_extract/`).
+
+Contributor-pack size/time by resolution (full + CRF 45, native stills): [handoff-sizes.md](handoff-sizes.md).
 
 ---
 
@@ -44,7 +46,7 @@ Rate was stable across 1 min / 3 min / full (±1%), so linear scaling is trustwo
 
 Synthetic **1920×1080 H.264** color bars, 60 s: **0.39 wall-s / video-min**.
 
-So extract time is dominated by **source decode** (4K AV1 ≫ 1080p H.264), not by writing 256×144 JPEGs. Friend clips or 1080p downloads will be much faster; plan with the **103** rate only for 4K AV1 (or re-bench).
+So extract time is dominated by **source decode** (4K AV1 ≫ 1080p H.264), not by writing 256×144 JPEGs. Contributor 1080p clips will be much faster; plan with the **103** rate only for 4K AV1 (or re-bench).
 
 ### Pre-flight estimate from catalog
 
@@ -61,18 +63,18 @@ Or re-run the bench on a representative clip when codec/resolution changes.
 
 ## Quality tiers (video CRF → extract)
 
-Method (D22): re-encode video at CRF 28/38, then extract 256×144 @ 1/5s (full = extract from original).
+Method (D22 / D04): re-encode video at **CRF 45** (ops **low**), then extract 256×144 @ 1/5s; **full** = extract from the original. **Medium CRF 38** is docs/reference only, not required for ops timing.
 
-Synthetic **1080p** color bars (lower bound; real gameplay is slower to encode):
+Synthetic **1080p** color bars (lower bound; real gameplay is slower to encode), historical full+med+low bench:
 
 | Source | Wall-s / video-min (full+med+low) | Notes |
 |---|---:|---|
 | 1080p30 synth | ~7 | `scripts/bench_quality_1080.py` |
 | 1080p60 synth | ~12 | more frames to encode |
 
-Frame zip size (real HUD gameplay, not synth): ~**0.15 MB/video-min** per tier → ~**0.45 MB/video-min** for three tiers.
+For **ops = full + CRF 45** only, expect roughly **~2/3** of those three-tier synth numbers (one re-encode instead of two), plus extract. Prefer [handoff-sizes.md](handoff-sizes.md) for real contributor-pack wall time (~75% in the CRF 45 encode).
 
-4K AV1 personal clips: quality path will track near **extract rate × ~3** plus re-encode cost (much slower than 1080p friends).
+4K AV1 personal clips: quality path tracks near **extract rate** plus re-encode cost (much slower than 1080p contributors).
 
 ## Not measured yet (fill in later)
 
@@ -81,10 +83,13 @@ Frame zip size (real HUD gameplay, not synth): ~**0.15 MB/video-min** per tier �
 | Catalog (`gfc-catalog-clips`) | wall-s / clip (ffprobe) | Usually seconds for dozens of files |
 | Clean | wall-s / frame or / 1k frames | Pillow; should be ≪ extract for 4K AV1 sources |
 | Batch extract end-to-end | sum of above | `--clean` adds catalog rebuild + deletes |
+| `gfc-make-sources` (D26, not built) | wall-s / footage-min | Should align with handoff-sizes once shipped |
 
 ---
 
 ## Related
 
 - [pipeline-status.md](pipeline-status.md)
+- [handoff-sizes.md](handoff-sizes.md)
 - `scripts/bench_extract.py`
+- `scripts/bench_quality_1080.py`
