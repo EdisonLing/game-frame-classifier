@@ -10,11 +10,13 @@ from game_frame_classifier.frame_cleaner import (
     FrameRecord,
     average_hash,
     clean_frames,
+    clean_slots,
     hamming_distance,
     is_mostly_black,
     is_too_blurry,
     laplacian_variance,
 )
+from tests.helpers import clean_slots_fixtures as fx
 
 
 def _solid(path: Path, color: tuple[int, int, int], size=(256, 144)) -> Path:
@@ -158,3 +160,191 @@ def test_clean_frames_debug_keeps_rejects_and_match_id(tmp_path: Path) -> None:
     assert by_id["dup"].hamming_distance != ""
     assert Path(by_id["dup"].debug_path).is_file()
     assert "dup_of_k1" in Path(by_id["dup"].debug_path).name
+
+
+def _slot_tree_black_blur(tmp_path: Path) -> tuple[Path, list[dict[str, str]], dict[str, dict[str, str]]]:
+    data_root = tmp_path / "data"
+    game, source, clip = "Valorant", "me", "caaaaaaaaaaaa"
+    black = fx.write_slot_images(
+        data_root,
+        game=game,
+        source=source,
+        clip_key=clip,
+        bucket=0,
+        full=fx.solid_rgb((0, 0, 0)),
+    )
+    sharp = fx.write_slot_images(
+        data_root,
+        game=game,
+        source=source,
+        clip_key=clip,
+        bucket=1,
+        full=fx.sharp_pattern(),
+    )
+    soft = fx.write_slot_images(
+        data_root,
+        game=game,
+        source=source,
+        clip_key=clip,
+        bucket=2,
+        full=fx.blurry_gradient(),
+    )
+    slots = [black, sharp, soft]
+    clips = {
+        clip: fx.clip_index_row(
+            clip_key=clip, game=game, source=source, recorded_start_utc="2026-01-01T00:00:00Z", slots=3
+        )
+    }
+    return data_root, slots, clips
+
+
+def test_slot_verdict_from_full_applies_to_both_tiers(tmp_path: Path) -> None:
+    """Black/blur measured on full; keep/reject is one verdict for the slot."""
+    data_root, slots, clips = _slot_tree_black_blur(tmp_path)
+    # Deliberately make path_low a sharp image even when full is black.
+    black_row = slots[0]
+    fx.save_jpg(data_root / black_row["path_low"], fx.sharp_pattern())
+
+    rows = clean_slots(slots, clips, data_root=data_root)
+    by_id = {r["slot_id"]: r for r in rows}
+    assert by_id[black_row["slot_id"]]["keep"] is False
+    assert by_id[black_row["slot_id"]]["reject_reason"] == "black"
+    sharp_id = slots[1]["slot_id"]
+    soft_id = slots[2]["slot_id"]
+    assert by_id[sharp_id]["keep"] is True
+    assert by_id[soft_id]["keep"] is False
+    assert by_id[soft_id]["reject_reason"] == "blur"
+    # Both tier paths remain on the row regardless of verdict.
+    for row in rows:
+        assert (data_root / str(row["path_full"])).is_file()
+        assert (data_root / str(row["path_low"])).is_file()
+
+
+def test_slot_duplicate_across_two_clips_same_source(tmp_path: Path) -> None:
+    data_root = tmp_path / "data"
+    game, source = "CS2", "contributor_alex"
+    early = "cearly0000000"
+    late = "clate00000000"
+    pattern = fx.sharp_pattern()
+    slot_a = fx.write_slot_images(
+        data_root, game=game, source=source, clip_key=early, bucket=3, full=pattern
+    )
+    slot_b = fx.write_slot_images(
+        data_root, game=game, source=source, clip_key=late, bucket=1, full=pattern.copy()
+    )
+    clips = {
+        early: fx.clip_index_row(
+            clip_key=early, game=game, source=source, recorded_start_utc="2026-02-01T10:00:00Z"
+        ),
+        late: fx.clip_index_row(
+            clip_key=late, game=game, source=source, recorded_start_utc="2026-02-01T11:00:00Z"
+        ),
+    }
+    rows = clean_slots([slot_b, slot_a], clips, data_root=data_root)
+    by_id = {r["slot_id"]: r for r in rows}
+    assert by_id[slot_a["slot_id"]]["keep"] is True
+    assert by_id[slot_b["slot_id"]]["keep"] is False
+    assert by_id[slot_b["slot_id"]]["reject_reason"] == "duplicate"
+    assert by_id[slot_b["slot_id"]]["dup_of"] == slot_a["slot_id"]
+
+
+def test_slot_identical_frames_different_sources_both_kept(tmp_path: Path) -> None:
+    data_root = tmp_path / "data"
+    game = "Minecraft"
+    pattern = fx.sharp_pattern()
+    a = fx.write_slot_images(
+        data_root, game=game, source="me", clip_key="caaaaaaaaaaaa", bucket=0, full=pattern
+    )
+    b = fx.write_slot_images(
+        data_root,
+        game=game,
+        source="contributor_bob",
+        clip_key="cbbbbbbbbbbbb",
+        bucket=0,
+        full=pattern.copy(),
+    )
+    clips = {
+        "caaaaaaaaaaaa": fx.clip_index_row(
+            clip_key="caaaaaaaaaaaa", game=game, source="me", recorded_start_utc="2026-03-01T00:00:00Z"
+        ),
+        "cbbbbbbbbbbbb": fx.clip_index_row(
+            clip_key="cbbbbbbbbbbbb",
+            game=game,
+            source="contributor_bob",
+            recorded_start_utc="2026-03-01T00:00:00Z",
+        ),
+    }
+    rows = clean_slots([a, b], clips, data_root=data_root)
+    assert all(r["keep"] is True for r in rows)
+    assert all(r["reject_reason"] == "" for r in rows)
+
+
+def test_slot_quarantine_manual_reason(tmp_path: Path) -> None:
+    data_root = tmp_path / "data"
+    game, source, clip = "Overwatch_2", "me", "cquarantine001"
+    slot = fx.write_slot_images(
+        data_root, game=game, source=source, clip_key=clip, bucket=5, full=fx.sharp_pattern()
+    )
+    clips = {
+        clip: fx.clip_index_row(
+            clip_key=clip, game=game, source=source, recorded_start_utc="2026-04-01T00:00:00Z"
+        )
+    }
+    rows = clean_slots(
+        [slot],
+        clips,
+        data_root=data_root,
+        quarantine={slot["slot_id"]: "lobby"},
+    )
+    assert len(rows) == 1
+    assert rows[0]["keep"] is False
+    assert rows[0]["reject_reason"] == "manual:lobby"
+
+
+def test_slot_visit_order_independent_of_input_row_order(tmp_path: Path) -> None:
+    """Earlier recorded_start_utc wins even when that row is last in the CSV."""
+    data_root = tmp_path / "data"
+    game, source = "League_of_Legends", "me"
+    early_clip = "cearlyclip000"
+    late_clip = "clateclip0000"
+    pattern = fx.sharp_pattern(step=9, bg=(30, 10, 60))
+    early = fx.write_slot_images(
+        data_root, game=game, source=source, clip_key=early_clip, bucket=9, full=pattern
+    )
+    late = fx.write_slot_images(
+        data_root, game=game, source=source, clip_key=late_clip, bucket=0, full=pattern.copy()
+    )
+    clips = {
+        early_clip: fx.clip_index_row(
+            clip_key=early_clip,
+            game=game,
+            source=source,
+            recorded_start_utc="2026-05-01T08:00:00Z",
+        ),
+        late_clip: fx.clip_index_row(
+            clip_key=late_clip,
+            game=game,
+            source=source,
+            recorded_start_utc="2026-05-01T09:00:00Z",
+        ),
+    }
+    # Input order puts the later clip first.
+    rows = clean_slots([late, early], clips, data_root=data_root)
+    by_id = {r["slot_id"]: r for r in rows}
+    assert by_id[early["slot_id"]]["keep"] is True
+    assert by_id[late["slot_id"]]["reject_reason"] == "duplicate"
+    assert by_id[late["slot_id"]]["dup_of"] == early["slot_id"]
+
+    # Empty recorded_start_utc sorts after dated clips.
+    undated_clip = "cundated00000"
+    undated = fx.write_slot_images(
+        data_root, game=game, source=source, clip_key=undated_clip, bucket=0, full=pattern.copy()
+    )
+    clips[undated_clip] = fx.clip_index_row(
+        clip_key=undated_clip, game=game, source=source, recorded_start_utc=""
+    )
+    rows2 = clean_slots([undated, late, early], clips, data_root=data_root)
+    by_id2 = {r["slot_id"]: r for r in rows2}
+    assert by_id2[early["slot_id"]]["keep"] is True
+    assert by_id2[undated["slot_id"]]["reject_reason"] == "duplicate"
+    assert by_id2[undated["slot_id"]]["dup_of"] == early["slot_id"]

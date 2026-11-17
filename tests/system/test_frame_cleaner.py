@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import json
 from pathlib import Path
 
@@ -11,9 +12,12 @@ from PIL import Image, ImageDraw, ImageFilter
 from game_frame_classifier.frame_cleaner import (
     FrameRecord,
     clean_manifest,
+    clean_slots_table,
     load_frame_manifest,
+    main,
     write_frame_manifest,
 )
+from tests.helpers import clean_slots_fixtures as fx
 
 
 def _write_jpg(path: Path, builder) -> Path:
@@ -122,3 +126,181 @@ def test_clean_personal_valorant_smoke_dir() -> None:
     assert len(result.kept) + len(result.rejected) == 4
     assert (out / "frames_manifest.csv").is_file()
     assert (out / "clean_summary.json").is_file()
+
+
+def _build_slot_fixture(tmp_path: Path) -> tuple[Path, Path, dict[str, str]]:
+    """Derived tree with keep / black / blur / cross-clip dup / other-source twin."""
+    data_root = tmp_path / "data"
+    manifests = data_root / "manifests"
+    game = "Valorant"
+    source_a = "me"
+    source_b = "contributor_alex"
+    clip_early = "cearly0000000"
+    clip_late = "clate00000000"
+    clip_other = "cother0000000"
+
+    keep = fx.write_slot_images(
+        data_root,
+        game=game,
+        source=source_a,
+        clip_key=clip_early,
+        bucket=0,
+        full=fx.sharp_pattern(),
+    )
+    black = fx.write_slot_images(
+        data_root,
+        game=game,
+        source=source_a,
+        clip_key=clip_early,
+        bucket=1,
+        full=fx.solid_rgb((0, 0, 0)),
+    )
+    blur = fx.write_slot_images(
+        data_root,
+        game=game,
+        source=source_a,
+        clip_key=clip_early,
+        bucket=2,
+        full=fx.blurry_gradient(),
+    )
+    dup = fx.write_slot_images(
+        data_root,
+        game=game,
+        source=source_a,
+        clip_key=clip_late,
+        bucket=0,
+        full=fx.sharp_pattern(),
+    )
+    other = fx.write_slot_images(
+        data_root,
+        game=game,
+        source=source_b,
+        clip_key=clip_other,
+        bucket=0,
+        full=fx.sharp_pattern(),
+    )
+    # Scramble input row order.
+    slots = [dup, blur, other, black, keep]
+    fx.write_slots_csv(manifests / "slots.csv", slots)
+    fx.write_clips_index(
+        manifests / "clips_index.csv",
+        [
+            fx.clip_index_row(
+                clip_key=clip_early,
+                game=game,
+                source=source_a,
+                recorded_start_utc="2026-06-01T10:00:00Z",
+                slots=3,
+            ),
+            fx.clip_index_row(
+                clip_key=clip_late,
+                game=game,
+                source=source_a,
+                recorded_start_utc="2026-06-01T11:00:00Z",
+                slots=1,
+            ),
+            fx.clip_index_row(
+                clip_key=clip_other,
+                game=game,
+                source=source_b,
+                recorded_start_utc="2026-06-01T10:00:00Z",
+                slots=1,
+            ),
+        ],
+    )
+    expected = {
+        keep["slot_id"]: "keep",
+        black["slot_id"]: "black",
+        blur["slot_id"]: "blur",
+        dup["slot_id"]: "duplicate",
+        other["slot_id"]: "keep",
+    }
+    return data_root, manifests / "slots.csv", expected
+
+
+def test_clean_slots_table_end_to_end(tmp_path: Path) -> None:
+    data_root, slots_csv, expected = _build_slot_fixture(tmp_path)
+    rows = clean_slots_table(slots_csv, data_root=data_root)
+    by_id = {str(r["slot_id"]): r for r in rows}
+    assert set(by_id) == set(expected)
+    for slot_id, want in expected.items():
+        if want == "keep":
+            assert by_id[slot_id]["keep"] is True
+            assert by_id[slot_id]["reject_reason"] == ""
+            assert (data_root / str(by_id[slot_id]["path_full"])).is_file()
+            assert (data_root / str(by_id[slot_id]["path_low"])).is_file()
+        else:
+            assert by_id[slot_id]["keep"] is False
+            assert by_id[slot_id]["reject_reason"] == want
+
+    manifests = slots_csv.parent
+    assert (manifests / "slots_clean.csv").is_file()
+    assert (manifests / "slots_clean.json").is_file()
+    summary = json.loads((manifests / "clean_summary.json").read_text(encoding="utf-8"))
+    assert summary["mode"] == "slots"
+    assert summary["kept_count"] == 2
+    assert summary["rejected_count"] == 3
+    assert summary["rejects_by_reason"]["black"] == 1
+    assert summary["rejects_by_reason"]["blur"] == 1
+    assert summary["rejects_by_reason"]["duplicate"] == 1
+
+    with (manifests / "slots_clean.csv").open(encoding="utf-8", newline="") as f:
+        csv_rows = list(csv.DictReader(f))
+    assert csv_rows[0]["keep"] in {"true", "false"}
+    assert all(r["ahash"] == "" or len(r["ahash"]) == 16 for r in csv_rows)
+
+
+def test_clean_slots_rerun_byte_identical(tmp_path: Path) -> None:
+    data_root, slots_csv, _ = _build_slot_fixture(tmp_path)
+    clean_slots_table(slots_csv, data_root=data_root)
+    manifests = slots_csv.parent
+    first_csv = (manifests / "slots_clean.csv").read_bytes()
+    first_json = (manifests / "slots_clean.json").read_bytes()
+    first_summary = (manifests / "clean_summary.json").read_bytes()
+
+    clean_slots_table(slots_csv, data_root=data_root)
+    assert (manifests / "slots_clean.csv").read_bytes() == first_csv
+    assert (manifests / "slots_clean.json").read_bytes() == first_json
+    assert (manifests / "clean_summary.json").read_bytes() == first_summary
+
+
+def test_clean_slots_does_not_modify_frames_without_debug(tmp_path: Path) -> None:
+    data_root, slots_csv, _ = _build_slot_fixture(tmp_path)
+    frames_root = data_root / "frames"
+    before = {
+        p.relative_to(frames_root): (p.stat().st_mtime_ns, p.read_bytes())
+        for p in frames_root.rglob("*")
+        if p.is_file()
+    }
+    clean_slots_table(slots_csv, data_root=data_root, debug=False)
+    after_paths = {p.relative_to(frames_root) for p in frames_root.rglob("*") if p.is_file()}
+    assert after_paths == set(before)
+    for rel, (mtime_ns, content) in before.items():
+        path = frames_root / rel
+        assert path.stat().st_mtime_ns == mtime_ns
+        assert path.read_bytes() == content
+    assert not (frames_root / "_rejected").exists()
+
+
+def test_clean_slots_debug_writes_rejected_contact_sheet(tmp_path: Path) -> None:
+    data_root, slots_csv, _ = _build_slot_fixture(tmp_path)
+    clean_slots_table(slots_csv, data_root=data_root, debug=True)
+    rejected = data_root / "frames" / "_rejected"
+    assert (rejected / "black").is_dir()
+    assert (rejected / "blur").is_dir()
+    assert (rejected / "duplicate").is_dir()
+    assert any((rejected / "black").iterdir())
+
+
+def test_clean_slots_cli(tmp_path: Path) -> None:
+    data_root, slots_csv, expected = _build_slot_fixture(tmp_path)
+    code = main(["--slots", str(slots_csv), "--data-root", str(data_root)])
+    assert code == 0
+    with (slots_csv.parent / "slots_clean.csv").open(encoding="utf-8", newline="") as f:
+        rows = {r["slot_id"]: r for r in csv.DictReader(f)}
+    for slot_id, want in expected.items():
+        if want == "keep":
+            assert rows[slot_id]["keep"] == "true"
+        else:
+            assert rows[slot_id]["keep"] == "false"
+            assert rows[slot_id]["reject_reason"] == want
