@@ -110,6 +110,15 @@ Val is taken as about a fifth of train. Early stopping usually ends a run before
 - **`num_workers` 2:** the worker processes augment in parallel with the GPU step. Measured end to end, 0.076 s per batch in steady state, which is the GPU step time, so the **model step is the bottleneck again**. Starting the workers costs about 4 s per epoch on Windows (included in the table, which assumes `num_workers` 2 with `cache: "none"`). 4 workers gave no gain (0.083 s per batch).
 - **Speedup over the CPU baseline:** the model step is about 13× faster (1.0 s to 0.078 s), evaluation about 39×. A whole epoch is 4–5× faster at `num_workers` 0 and 6–14× faster at `num_workers` 2 (larger datasets gain more, because the worker start-up is a fixed cost). 30 epochs at 10,000 train frames take about 8 min on the GPU with 2 workers, against about 1.6 h on the CPU.
 - **bf16 autocast** (information only, not used): train step 0.027 s against 0.078 s in float32. Not adopted, since it changes numerics and the float32 path is already fast enough.
+- **Real frames, full loop** (2,065 Valorant frames resized to 256×144, all the frames in the repo's data folders at the time; labels were arbitrary, so only the timing counts; 33 batches per epoch, augmentation on, eval pass over every fifth frame, 8-thread CPU):
+
+  | Setup | First epoch | Later epochs | Speedup vs CPU |
+  |---|---:|---:|---:|
+  | CPU, 0 workers, RAM cache | 45 s | 45–50 s | 1× |
+  | GPU, 0 workers, RAM cache | 29 s | **6.4 s** | **about 7×** |
+  | GPU, 2 workers, no cache (JPEG decode in workers) | 22 s | 9.6 s | about 5× |
+
+  The first GPU epoch carries a one-time warm-up of about 20 s (kernel selection). At this small size, 2 workers are slower than 0: Windows starts the workers anew for each epoch (about 3–4 s) and the val loader paid that as well (3.4 s of the 9.6 s, for 0.08 s of real work). So use workers for the train loader only, give the val loader `num_workers` 0 (it has no augmentation), or use `persistent_workers=True` (not measured). With that, the table above holds; workers only pay off from roughly 5,000 train frames upward. The steady 0 workers epoch (6.4 s) is faster than the table's 9 s because augmentation on real frames cost about 0.12 s per batch here, against 0.21 s on the synthetic benchmark.
 - **Memory:** peak GPU memory is about 1.9 GB at batch 64 with the default model.
 - Timings on this machine vary with background load (one CPU train-step timing came out at 1.8 s, one augmentation timing at 0.5 s); the table uses the median of 3 repeats. Expect ±30 % on the augmentation-bound figures. The CPU baseline is lower than the same-environment CPU column; background load is the likely reason, but the two were not measured side by side.
 

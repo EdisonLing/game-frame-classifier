@@ -115,7 +115,7 @@ gfc-train-cnn --split-dir data/manifests/splits/v1          # device "auto" pick
 gfc-train-cnn --split-dir data/manifests/splits/v1 --device cpu
 ```
 
-On the GPU the model step (0.08 s per batch of 64) is about 2.5 times faster than augmentation in the main process (about 0.2 s), so with `num_workers` 0 the GPU idles about 70 % of the time. Measured: 2 workers already keep the GPU busy (0.076 s per batch); 4 workers gave no further gain (0.083 s). Each epoch pays about 4 s to start the workers on Windows. Use `num_workers` 2 with `cache: "none"` in `config/train_cnn.json` ([loader working defaults](roadmap/tools/dataset-loader.md#working-defaults-d35)); the entry point must be under `if __name__ == "__main__":` because Windows starts workers by spawning.
+On the GPU the model step (0.08 s per batch of 64) is about 2.5 times faster than augmentation in the main process (about 0.2 s), so with `num_workers` 0 the GPU idles about 70 % of the time. Measured: 2 workers already keep the GPU busy (0.076 s per batch); 4 workers gave no further gain (0.083 s). Each epoch pays about 4 s to start the workers on Windows. Use `num_workers` 2 with `cache: "none"` for the train loader only (the val loader needs no augmentation; give it 0 workers, or each epoch pays the start-up twice), and only from roughly 5,000 train frames upward; below that, 0 workers is faster. Set it in `config/train_cnn.json` ([loader working defaults](roadmap/tools/dataset-loader.md#working-defaults-d35)); the entry point must be under `if __name__ == "__main__":` because Windows starts workers by spawning.
 
 Peak GPU memory for the default model at batch 64 is about 1.9 GB. Close games and other GPU-heavy programs while training; they share the same 16 GB of video memory.
 
@@ -129,7 +129,7 @@ Peak GPU memory for the default model at batch 64 is about 1.9 GB. Close games a
 | Import error about a missing `.dll` | Install the Microsoft Visual C++ 2015–2022 Redistributable (x64) |
 | `MIOpen: Warning [ParseAndLoadDb] File is unreadable: ...\gfx120140.HIP.fdb.txt` on the first GPU call | Harmless: training, evaluation and the benchmarks all ran correctly with it. The cause was not investigated (the file is a MIOpen tuning database that cannot be read) |
 | GPU reset or crash during training | AMD's documented workaround for RX 9070 series training: `$env:TORCH_BLAS_PREFER_HIPBLASLT = "0"` before training. **Not needed in testing**: no crash, reset or NaN in the 11-minute run or anything else, all without the variable |
-| First epoch much slower than the rest | Kernel selection on first use; later epochs are faster |
+| First epoch much slower than the rest | Kernel selection on first use: about 20 s extra once per process (measured 29 s against 6.4 s per epoch at 2,065 frames); later epochs are faster |
 | Versions without `+rocm` after installing the project | A PyPI `torch` replaced the ROCm one; repeat 2.2 |
 | Anything else unresolved within an hour | Train on CPU and come back later; nothing in the pipeline depends on the GPU |
 
