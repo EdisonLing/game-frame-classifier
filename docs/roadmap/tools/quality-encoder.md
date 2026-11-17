@@ -6,55 +6,84 @@
 
 ## What it does (high level)
 
-Re-encodes frames at controlled quality tiers using an **ffmpeg H.264 CRF round-trip**, producing full / medium / low copies of the same content with tier metadata.
+Builds **full / medium / low** frame sets from one source video by re-encoding the **video** at controlled H.264 CRF, then extracting and downscaling (same sample rate / size as the extractor).
 
 ## Why we need it
 
-1. **Train augmentation** — random CRF in **28–40** on a fraction of train frames (wired later in [augmentation](augmentation.md))  
-2. **Eval** — same frames scored at **full / medium / low** (CRF **0 / 28 / 38**)
+1. **Ops storage** — produce **full** + **low (CRF 45)** stills (D04)  
+2. **Train** — for each example, pick **full or low at random** (not both; avoids ~2× data given small Δ). Probability TBD (default lean ~0.5 / 0.5 or slight full bias).  
+3. **Eval** — score **full** and **low** as separate conditions (report both).  
+4. **Friend handoff** — zip **full + low** so I can sample/eval either way (D25)  
+5. **Docs** — optional **medium (CRF 38)** for README only  
+
+## Method (D22)
+
+```text
+original video ──extract──► full/     (256×144 @ 1/5s)
+       │
+       └─ re-encode CRF 45 ──extract──► low/     ← ops / eval / friend default
+
+optional (docs / reference only):
+       └─ re-encode CRF 38 ──extract──► medium/
+```
+
+**Not** CRF on already-downscaled JPEGs (that was the early proxy; rejected).
+
+## Tier map (current)
+
+| Tier | CRF | Role |
+|---|---:|---|
+| **full** | 0 (original timeline) | Ops + eval |
+| **medium** | **38** | **Docs / reference only** (not required for train/eval/friend packs) |
+| **low** | **45** | Ops + eval: one hard degraded setting |
+
+Code: `TIER_CRF` / `AUGMENT_CRF_*` in `quality_encoder.py` (may still expose medium until the CLI is trimmed to match D04).
+
+## Why full + low=45 (D04)
+
+The classifier sees **256×144**, not 1080p. Downscale removes a lot of visible bitrate damage, so a multi-step “good / ok / bad” eval ladder overstates what the model gets.
+
+**Finding (one scene, README figures):** buy-phase barrier, Δ vs full = mean |RGB diff| / 255.
+
+| | Full | Medium 38 (docs) | Low 45 (ops) |
+|---|---:|---:|---:|
+| 1080p | 0% | 2.9% | 4.9% |
+| 256×144 | 0% | 1.8% | **3.5%** |
+
+Even a harsh encode is only a few percent at model size. **Ops = full + CRF 45.** Medium=38 stays in docs so that gap is visible. Spot-check another game later if needed; do not assume identical %, but the same mechanism applies.
+
+Photos: root README Quality levels, or `docs/examples/quality-ladder/`. Rebuild: `python scripts/ui_ref_model_input_compare.py --publish`.
 
 ## Inputs / outputs
 
 | | |
 |---|---|
-| **In** | `frames_manifest.csv` / `.json` (cleaned frames preferred) |
+| **In** | Source video + `--game` |
 | **Out** | `output_dir/<tier>/` images + manifests; `quality_summary.json` |
-
-## Known design choices (locked for v1)
-
-- **Stack:** Python + ffmpeg `libx264` (same style as extractor)
-- **Method (D22):** still → 1-frame H.264 at CRF → JPEG (not a JPEG-quality-only proxy)
-- **CRF 0 (`full`):** byte-copy of the source (no re-encode)
-- Eval tiers: **full=0, medium=28, low=38**
-- Augmentation range constants: **28–40** (`AUGMENT_CRF_MIN/MAX`)
-- Per-tier folders so degraded copies do not silently mix with originals
 
 ## CLI
 
 ```bash
-gfc-encode-quality data/frames/my_clip_cleaned/frames_manifest.csv -o data/frames/my_clip_quality
-gfc-encode-quality ... -o out --tiers full medium low
+gfc-encode-quality path\to\clip.mp4 -o data/frames/my_clip_quality --game Valorant
+gfc-encode-quality path\to\clip.mp4 -o out --game Valorant --max-duration 20
+gfc-encode-quality path\to\clip.mp4 -o out --game Valorant --keep-proxies
 ```
-
-## Module API
-
-- `crf_for_tier(tier)` / `degrade_frame_ffmpeg(src, dest, crf=…)`
-- `encode_frame_record(...)` / `encode_manifest(...)`
 
 ## Acceptance checks
 
-- [x] Tier → CRF map matches proposal
-- [x] Medium/low encodes exist; low typically smaller than full copy
-- [x] Manifests store `quality_tier` + `crf` + source frame id
-- [x] Optional personal smoke on `valorant_smoke` when present
+- [x] Tier → CRF map: full=0 (original), medium=38, low=45  
+- [x] Medium/low re-encode video then extract  
+- [x] Output frames are 256×144  
+- [x] Manifests store `quality_tier` + `crf`  
+- [x] Tier CRFs chosen so 256×144 same-res distance vs full is material (not 28-as-medium)
 
 ## Testing
 
 | Kind | Cases |
 |---|---|
-| **Unit** | Tier map; unknown tier rejected; CRF bounds |
-| **System** | Synthetic frame encode; manifest multi-tier layout; bad tier fails fast |
-| **Personal** | `valorant_smoke` → 4 frames × 3 tiers when extract exists |
+| **Unit** | Tier → CRF map; validate_crf bounds |
+| **System** | Synthetic video → three tiers + summary; bad tier rejected |
+| **Personal** | Optional short slice of a `data/raw` clip |
 
 ```bash
 pytest tests/unit/test_quality_encoder.py tests/system/test_quality_encoder.py
@@ -62,4 +91,4 @@ pytest tests/unit/test_quality_encoder.py tests/system/test_quality_encoder.py
 
 ## Ties to proposal
 
-“random low-bitrate re-encoding (ffmpeg, CRF 28–40)… evaluated at full, medium, and low quality (CRF 0/28/38).”
+Evaluation at three compression levels (values revised after model-input analysis; see above). Augmentation samples a low-bitrate CRF band aligned with medium→low.

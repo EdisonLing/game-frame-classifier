@@ -54,7 +54,7 @@ This is the graded primary model. Progress report needs an architecture descript
 ## Acceptance checks (final report extras)
 
 - [ ] Unseen-streamer + personal-clip test breakdowns
-- [ ] Quality-tier eval (CRF 0/28/38)
+- [ ] Quality-tier eval (full vs low CRF 45; D04)
 - [ ] Confusion matrix emphasis on OW2 vs Marvel Rivals
 - [ ] Optional unknown threshold
 

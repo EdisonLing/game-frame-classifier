@@ -25,7 +25,7 @@ Called out positively in TA feedback. Treat as decided unless we explicitly reop
 | D01 | Split by **video/session**, not by frame | decided | Leakage fix vs prior work |
 | D02 | Test on **unseen streamers** + **held-out personal sessions** | decided | |
 | D03 | **Augment only after** splitting | decided | |
-| D04 | Eval at **three compression levels** (CRF 0/28/38) | decided | |
+| D04 | Ops stills **full + low (CRF 45)**; medium=38 docs only; **train = random full *or* low per example** (not both); **eval reports full and low** | decided | Small 256×144 Δ → no 2× dataset; dual folders kept for eval + sampling |
 | D05 | Colour-histogram + logistic regression baseline | decided | Exposes what spatial layout adds |
 | D06 | Keep menus/overlays in the data (do not strip as “bad”) | decided | Differs from Trivedi et al. |
 | D07 | Course primary goal = **frame classification**; clip tagging = inference glue | decided | See roadmap |
@@ -54,15 +54,17 @@ Called out positively in TA feedback. Treat as decided unless we explicitly reop
 
 | | |
 |---|---|
-| **Status** | open |
+| **Status** | decided |
 | **Prompt** | TA Data Processing −0.5: no definition of “dominated by non-game content” |
 | **Options** | (A) Hand rules (black/blur + manual quarantine) (B) Simple lobby/menu detector + threshold, validated on a hand-labelled sample (C) Drop only black/blur for v1; defer non-game heuristic (D) Other: ___ |
-| **Decision** | |
-| **Rationale** | |
-| **Date** | |
+| **Decision** | **(B)** Simple lobby / non-game detector with a score threshold, checked on a small hand-labelled sample (TA recommendation). Until that ships: keep black / blur / near-dupe auto-filters; quarantine obvious lobby/desktop frames by hand when reviewing rejects. |
+| **Rationale** | Closes the undefined-filter gap without stripping in-game menus/HUD (D06). Detector is for lobby / desktop / facecam-heavy / browser — not “frame has a menu.” Hand-labelled sample keeps the rule honest before we trust a threshold. |
+| **Date** | 2026-11-15 |
 | **Links** | [tools/frame-cleaner.md](roadmap/tools/frame-cleaner.md) |
 
 **Note:** Proposal keeps menus/HUD as valid gameplay frames (D06). “Non-game” should mean desktop/browser/facecam-heavy/etc., not “has a menu.”
+
+**When:** Progress report can describe the rule + current black/blur/dedupe; implement the detector after first multi-game extract (not blocking the batch runner).
 
 ---
 
@@ -202,10 +204,10 @@ Related open fork from proposal: **flatten vs global average pooling** — decid
 | | |
 |---|---|
 | **Status** | decided |
-| **Options** | ffmpeg video CRF roundtrip · JPEG quality proxy · both |
-| **Decision** | ffmpeg H.264 CRF round-trip for stills; CRF 0 = byte-copy |
-| **Rationale** | Matches proposal CRF numbers; JPEG-only qscale would diverge from eval language |
-| **Date** | 2026-11-13 |
+| **Options** | (A) Still-frame CRF round-trip after 256×144 extract (B) **Video CRF re-encode, then extract/downscale** (C) JPEG qscale proxy |
+| **Decision** | **(B)** Re-encode the **source video** at H.264 CRF, then sample @ 1/5s and scale to 256×144. **Operational tiers:** **full** (original) + **low=CRF 45**. **Medium=CRF 38** is kept for docs / visual reference, not as a required train/eval/friend folder. |
+| **Rationale** | Low-bitrate artifacts must form on the timeline before downscale. At model size, even a harsh encode is only a few % mean abs vs full (README Δ), so a three-way eval ladder costs more than it teaches; one hard degraded setting is enough. Same video-CRF recipe for personal clips and friend machines. |
+| **Date** | 2026-11-16 (ops = full+low; method 2026-11-15) |
 | **Links** | [tools/quality-encoder.md](roadmap/tools/quality-encoder.md) |
 
 ### D23 — Training stack / hardware
@@ -218,12 +220,73 @@ Related open fork from proposal: **flatten vs global average pooling** — decid
 | **Rationale** | |
 | **Date** | |
 
+### D24 — Unknown / other as a seventh output
+
+| | |
+|---|---|
+| **Status** | decided (product); implementation detail leaning |
+| **Prompt** | Auto-tagging / VOD % breakdowns must not force every frame into one of six games |
+| **Options** | (A) 6-way softmax + **unknown** when max confidence is below a threshold (B) True **7-way** trained class (`unknown`/`other`) with held-out non-target frames (C) Both: threshold now, trained other later |
+| **Decision** | Product output vocabulary includes **unknown** alongside the six games (prefer the name **unknown** over “other”). **Lean (C):** ship inference unknown via confidence threshold first (already on the clip-tagger / CNN roadmap); add a trained seventh class only if threshold-alone is too weak once real autotag eval exists. |
+| **Rationale** | Autotag and “% time per game” need an abstain path. Threshold unknown is cheap and matches existing hardening notes; a trained other class needs deliberate non-target data and can wait. |
+| **Date** | 2026-11-16 |
+| **Links** | [tools/clip-tagger.md](roadmap/tools/clip-tagger.md), [tools/cnn-trainer.md](roadmap/tools/cnn-trainer.md), root README “The trained model” |
+
+### D25 — Friend handoff pack (frames zip, not masters)
+
+| | |
+|---|---|
+| **Status** | decided (spec v1; pack not built yet) |
+| **Prompt** | Friends convert clips → frames and zip to me; plug-and-play; what to keep without masters |
+| **Options** | (A) 256×144 only (B) resolution-capped stills (C) **native res, no cap** + optional compact 256 |
+| **Decision** | **(C) No resolution cap.** After video CRF (D22), extract stills at the **source video resolution**. Default tiers: **full + crf45** (D04), set in a shipped `recipe.json` (`crf_list`, `include_full`, `interval_s` = 5), not hardcoded. **Footage budget** `footage_budget_min` = 180 per game per run (editable; `0` = all), clips spread across recording days; rerun sends more. Optional **compact** = 256×144 via the same derive step as my pipeline (D27). **Packaging:** Python embeddable + `.bat` launcher (drag a folder), pinned static ffmpeg (x264 + dav1d + zimg), stdlib-only app; Windows-first. Name and consent asked once (`user.json`), game per run, auto-zip per run (`ZIP_STORED`, verified). Friends do **not** clean. Manifests keep clip SHA-256, file timing, sanitised probe, actual frame timestamps, slot pairing, recipe, tool/ffmpeg/x264 versions, sizes and hashes; uncompressed size + file count for ingest-side bomb checks. **Track** handoff size vs source by resolution. |
+| **Rationale** | Cap was solving a size-anxiety problem; the real need is knowing how much the sparse still pack saves at 1080 / 1440 / 4K. Native stills keep train-size, aspect, HUD-crop (D15) and docs flexibility on my side, so I never have to ask for clips again. Embeddable Python avoids the antivirus friction of an unsigned PyInstaller exe and stays patchable. |
+| **Date** | 2026-11-16 (revised: drop cap; spec v1) |
+| **Links** | [tools/friend-pack.md](roadmap/tools/friend-pack.md); [tools/quality-encoder.md](roadmap/tools/quality-encoder.md) |
+
+### D26 — Frame sources as first-class data (one extraction path)
+
+| | |
+|---|---|
+| **Status** | decided (not built yet) |
+| **Prompt** | Friend frames replace masters, so stills must be usable as sources alongside my own clips |
+| **Options** | (A) Keep extracting personal clips straight to 256×144; treat friend packs as a side format (B) **Every clip, mine or a friend's, goes through the same `sourcing` code into native-res frame sources; train frames are derived from those** |
+| **Decision** | **(B).** `data/frame_sources/<Game>/<source>/<clip_key>/<tier>/` holds native-res stills for every source (`gfc-make-sources` for my clips, `gfc-ingest-pack` for friend zips). One stdlib-only package does probe, sampling and CRF for both. **Sampler `bucket_v1`:** one frame per `interval_s` bucket on the clip timeline, chosen by ffmpeg `select` on real timestamps (VFR-safe), actual `pts_time` recorded; tiers paired by bucket into **slots** (`<clip_key>:b<bucket>`). `clip_key` = `c` + first 12 hex of the clip SHA-256. Tier ids `full` / `crf<N>`. |
+| **Rationale** | Two paths would drift (different samplers, scalers, ffmpeg builds) and become a hidden source-vs-label confound. Content-addressed keys dedupe across people. The old `fps=1/5` + computed timestamps assumed CFR, which game captures often are not. |
+| **Date** | 2026-11-16 |
+| **Links** | [tools/friend-pack.md](roadmap/tools/friend-pack.md), [data-layout.md](data-layout.md) |
+
+### D27 — Derive policy (native stills → 256×144)
+
+| | |
+|---|---|
+| **Status** | decided (not built yet) |
+| **Prompt** | How native-resolution stills of any aspect become model input |
+| **Options** | (A) Stretch to 256×144 (B) Centre-crop to 16:9 (C) **Pad to 16:9 when aspect is off by more than 1 %, then bicubic scale** |
+| **Decision** | **(C)** via ffmpeg (`pad` then `scale=256:144:flags=bicubic`, JPEG q2) from the native JPEG, stored as `data/frames/...`; the dataloader does no resizing. Friend compact mode runs the same function. |
+| **Rationale** | Crop can cut HUD corners (main cue); stretch distorts shapes. Most sources are 16:9 and untouched. Same scaler and source for every frame avoids processing confounds between my clips and friend packs. Re-derivable if train size changes. |
+| **Date** | 2026-11-16 |
+| **Links** | [tools/friend-pack.md](roadmap/tools/friend-pack.md), [tools/frame-extractor.md](roadmap/tools/frame-extractor.md) |
+
 ---
 
 ## Decision log (newest first)
 
 | Date | ID | Change |
 |---|---|---|
+| 2026-11-16 | D25 | Decided: spec v1 (recipe file, embeddable Python + pinned ffmpeg, manifests, ingest checks) |
+| 2026-11-16 | D26 | Frame sources first-class; one `sourcing` path for my clips and friend packs; `bucket_v1` sampler |
+| 2026-11-16 | D27 | Derive: pad to 16:9 (>1 % off) + bicubic 256×144 from native JPEG |
+| 2026-11-16 | D04 | Train: **random full or low** per example (not both); eval still reports both |
+| 2026-11-16 | D04 / D22 | Ops tiers → **full + low (45)**; medium=38 docs/reference only (small 256×144 Δ) |
+| 2026-11-16 | D04 / D22 | Tier CRF map → **0 / 38 / 45** (was 0/28/38); 256×144 MAE showed 28≈full |
+| 2026-11-16 | D25 | Revised: **no res cap** (native × 3); optional 256 compact; track size savings by resolution |
+| 2026-11-16 | D25 | Friend pack lean (superseded same day): had been 1440p-capped × 3 + 256 compact |
+| 2026-11-16 | — | Published `docs/examples/` vs local `docs/examples-library/` (gitignored full catalog) |
+| 2026-11-16 | — | README Going deeper: split **across all games** vs **per-game special considerations** (Valorant table: may affect vs what I did) |
+| 2026-11-16 | D24 | Product: six games + **unknown**; lean threshold first, trained 7th optional later |
+| 2026-11-15 | D22 | Superseded still-CRF: video CRF → then extract/downscale (full/med/low) |
+| 2026-11-15 | D11 | Decided: simple lobby/non-game detector + threshold on hand-labelled sample (TA); interim = black/blur/dedupe + manual quarantine |
 | 2026-11-14 | D20 | Manifests: CSV + JSON side by side |
 | 2026-11-14 | D19 | Game-first `raw/<Game>/<source>/` (final for collection) |
 | 2026-11-14 | D19 | Source-first draft tried same day; superseded |

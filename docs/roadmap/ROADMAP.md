@@ -1,6 +1,6 @@
 # Frame to Game — Roadmap
 
-CNN that maps a single gameplay frame → one of six games (Valorant, League of Legends, CS2, Minecraft, Overwatch 2, Marvel Rivals).
+CNN that maps a single gameplay frame → one of six games (Valorant, League of Legends, CS2, Minecraft, Overwatch 2, Marvel Rivals) or **unknown** (D24; threshold first, optional trained 7th later).
 
 **Focus:** frame classification only. Clip / interval tagging is not a model change — it is deterministic multi-frame inference (sample frames → predict → majority vote / threshold). Defer that until after the model works.
 
@@ -16,11 +16,12 @@ CNN that maps a single gameplay frame → one of six games (Valorant, League of 
 |---|---|---|
 | Planning docs (roadmap, tool pages, design decisions) | **done** | Living docs; open decisions still blank until we decide them |
 | Stage 0 — repo / env / pytest | **done** | See Stage 0 checklist below |
-| Stage 1 — frame extractor | **implemented** | Single-video CLI/API + unit/system/personal tests; **not** batch-over-catalog yet |
-| Stage 1 — frame cleaner | **implemented** | Black / blur / aHash dedupe + reject log; D11 non-game filter **not** included |
-| Stage 1 — quality encoder | **implemented** | CRF tiers full/medium/low (0/28/38) via ffmpeg round-trip; aug range 28–40 exported |
+| Stage 1 — frame extractor | **implemented** | Single-video CLI/API + unit/system/personal tests |
+| Stage 1 — batch extract | **implemented** | `gfc-batch-extract` over catalog → `frames/<Game>/<source>/<stem>/` |
+| Stage 1 — frame cleaner | **implemented** | Black / blur / aHash dedupe + reject log; D11 detector planned (rule decided) |
+| Stage 1 — quality encoder | **implemented** | Video CRF then extract; **ops = full + low(45)**; medium=38 docs/reference (D04) |
 | Stage 1 — clip catalog | **implemented** | Scans `data/raw/<Game>/<source>/` → `clips.csv` + `clips.json`; absolute paths; ffprobe meta |
-| Stages 2–7 | **not started** | Batch-over-catalog still missing; no heavy pipeline framework yet — see note below |
+| Stages 2–7 | **not started** | Split / volume / baseline / CNN still ahead — see note below |
 
 **Verified:** extractor + cleaner tests green; sample under `data/frames/valorant_smoke/` and cleaned output under `data/frames/valorant_smoke_cleaned/`.
 
@@ -38,7 +39,7 @@ Durations are rough working estimates, not calendar dates.
 
 | Phase | Approx. effort | Notes |
 |---|---|---|
-| Stage 1 remainder (batch runner) | ~1 day | Wire catalog → extract → clean → quality |
+| Stage 1 remainder (D11 detector; optional batch clean) | ~0.5–1 day | Lobby/non-game filter after first multi-game extract |
 | Stage 2 — splitter + augmentation | ~2 days | Leak-free splits before any model numbers |
 | Stage 3 — scale volume | ~2 days | Can overlap once tools work |
 | Stage 4 — baseline | ~1–2 days | Histogram + logistic regression + figures |
@@ -75,7 +76,7 @@ raw clips / videos
     → evaluate (accuracy, F1, confusion, quality tiers)
 ```
 
-Quality re-encoding is shared by **augmentation** and **quality-tier eval** (CRF 0 / 28 / 38).
+Quality tiers: on disk **full + low (45)**; train samples one at random; eval reports both (D04).
 
 ---
 
@@ -116,11 +117,13 @@ Prove every data step on clips you already have before caring about volume.
 | Tool | Status | Extent | Detail |
 |---|---|---|---|
 | Clip catalog | **implemented** | Walk `data/raw/<Game>/<source>/` → `clips.csv` + `clips.json`; absolute paths; duration/width/height via ffprobe; CLI `gfc-catalog-clips` | [tools/clip-catalog.md](tools/clip-catalog.md) |
-| Frame extractor | **implemented** | Single video → frames @ 5s, 256×144 JPEG, CSV/JSON manifest, CLI `gfc-extract-frames` / module API; unit + synthetic system + optional personal smoke (20s stream-copy trim). **Gaps:** no catalog-driven batch; full-clip personal runs are manual CLI (not default in pytest); game label still passed by hand | [tools/frame-extractor.md](tools/frame-extractor.md) |
-| Frame cleaner | **implemented** | Manifest in → kept/reject manifests; black + blur + aHash dedupe; reasons logged. **Gaps:** no D11 non-game/lobby detector; thresholds are v1 defaults (tunable via CLI) | [tools/frame-cleaner.md](tools/frame-cleaner.md) |
-| Quality encoder | **implemented** | Manifest → `full`/`medium`/`low` folders (CRF 0/28/38); ffmpeg still round-trip; summary JSON | [tools/quality-encoder.md](tools/quality-encoder.md) |
+| Batch extract | **implemented** | Catalog → `data/frames/<Game>/<source>/<stem>/`; skip-if-done; `--game` / `--limit` / `--force`; summary JSON; CLI `gfc-batch-extract` | — |
+| Frame extractor | **implemented** | Single video → frames @ 5s, 256×144 JPEG, CSV/JSON manifest, CLI `gfc-extract-frames` / module API; unit + synthetic system + optional personal smoke (20s stream-copy trim) | [tools/frame-extractor.md](tools/frame-extractor.md) |
+| Frame cleaner | **implemented** | Manifest in → kept/reject manifests; black + blur + aHash dedupe; reasons logged. **Gaps:** D11 detector not coded yet (rule decided); thresholds are v1 defaults (tunable via CLI) | [tools/frame-cleaner.md](tools/frame-cleaner.md) |
+| Quality encoder | **implemented** | Video CRF then extract; ops **full + low(45)**; medium=38 optional/docs (D04) | [tools/quality-encoder.md](tools/quality-encoder.md) |
+| Friend pack | **spec locked** | Plug-and-play toolset for friends: clips → native-res stills (full + crf45) zip with full metadata; same `sourcing` code as my clips (D25–D27) | [tools/friend-pack.md](tools/friend-pack.md) |
 
-**Stage 1 exit (almost):** catalog + extract + clean + quality tiers work. Still missing a **batch runner** over the catalog.
+**Stage 1 exit (almost):** catalog + batch extract + clean + quality tiers work. Remaining Stage 1 polish: **D11 lobby detector** (after first multi-game volume). Friend pack is optional volume help, not a Stage 1 blocker.
 
 ---
 
@@ -201,10 +204,11 @@ Package what exists; keep text short and figure-heavy.
 
 | # | Tool | Stage | Status | Extent |
 |---|---|---|---|---|
-| 1 | [Clip catalog](tools/clip-catalog.md) | 1 | planned | **next** |
-| 2 | [Frame extractor](tools/frame-extractor.md) | 1 | **implemented** | Single-video extract + tests; no batch catalog yet |
-| 3 | [Frame cleaner](tools/frame-cleaner.md) | 1 | **implemented** | Black/blur/dedupe + reject log; D11 deferred |
-| 4 | [Quality encoder](tools/quality-encoder.md) | 1 | **implemented** | CRF tiers 0/28/38 via ffmpeg round-trip |
+| 1 | [Clip catalog](tools/clip-catalog.md) | 1 | **implemented** | Scan raw → clips.csv/json |
+| 1b | Batch extract | 1 | **implemented** | `gfc-batch-extract` over catalog |
+| 2 | [Frame extractor](tools/frame-extractor.md) | 1 | **implemented** | Single-video extract + tests |
+| 3 | [Frame cleaner](tools/frame-cleaner.md) | 1 | **implemented** | Black/blur/dedupe + reject log; D11 planned |
+| 4 | [Quality encoder](tools/quality-encoder.md) | 1 | **implemented** | Ops full+low(45); medium docs-only (D04) |
 | 5 | [Dataset splitter](tools/dataset-splitter.md) | 2 | planned | — |
 | 6 | [Augmentation pipeline](tools/augmentation.md) | 2 | planned | — |
 | 7 | [Source acquisition](tools/source-acquisition.md) | 3 | planned | — |
@@ -218,15 +222,17 @@ Package what exists; keep text short and figure-heavy.
 
 1. ~~Stage 0 setup~~ ✅  
 2. ~~Frame extractor (single-video + tests)~~ ✅  
-3. ~~Frame cleaner~~ ✅ — D11 non-game rule still open  
+3. ~~Frame cleaner~~ ✅ — D11 detector still to implement (rule decided)  
 4. ~~Quality encoder~~ ✅  
-5. Clip catalog (batch) *(~1–2 days)*  
-6. Optional thin CLI orchestrator (`extract → clean → quality`) once batching hurts  
-7. Splitter + class-count plots *(~2 days)*  
-8. More personal clips / public sources (volume) *(~2 days)*  
+5. ~~Clip catalog~~ ✅  
+6. ~~Batch extract~~ ✅  
+7. Drop more personal/friend clips → catalog → batch extract → clean  
+8. Splitter + class-count plots *(~2 days)*  
 9. Baseline end-to-end *(~1–2 days)*  
 10. First CNN train run *(~2 days)*  
 11. Mid-project figures + writeup *(~1–2 days)*  
+12. D11 lobby detector after first multi-game extract (when label noise shows up)  
+
 
 ---
 
