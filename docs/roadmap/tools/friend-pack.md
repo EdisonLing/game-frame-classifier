@@ -1,7 +1,7 @@
 # Friend pack (clips → frames zip)
 
 **Stage:** 1 / volume (contributor data)  
-**Status:** spec v1 locked; not built  
+**Status:** v1 implemented; release checklist (§13) pending  
 **Back to:** [ROADMAP.md](../ROADMAP.md)  
 **Decisions:** [D25](../../design-decisions.md) (pack), [D26](../../design-decisions.md) (frame sources + one extraction path), [D27](../../design-decisions.md) (derive to 256×144), D04 / D22 (tiers), D21 (JPEG)
 
@@ -77,7 +77,7 @@ Power-user flags (also used by me for testing and for my own clips):
 
 ```text
 START HERE.bat <folder> [--game Valorant] [--other-name Apex_Legends] [--compact]
-               [--budget-hours N] [--yes] [--include-packed] [--no-zip] [--output <dir>]
+               [--budget-hours N] [--yes] [--include-packed] [--no-zip] [--output <dir>] [--no-open]
 ```
 
 ---
@@ -90,7 +90,7 @@ GFC-FriendPack-v1/
   README.txt                     # one page, plain language (template in §14)
   app/                           # pure-stdlib Python source (readable)
     gfc_friendpack.py            # entry point
-    gfc_sourcing/                # shared extraction code, copied from the repo
+    game_frame_classifier/       # sourcing/ + friendpack/ packages, copied from the repo
   runtime/                       # Python 3.13.x amd64 embeddable distribution
     python.exe, python313.dll, python313.zip, vcruntime140.dll, python313._pth, ...
   bin/
@@ -100,7 +100,7 @@ GFC-FriendPack-v1/
     recipe.json                  # extraction recipe (I control; §4.1)
     user.json                    # created on first run (§4.2)
     history.json                 # created on first run: clip hashes already packed
-  LICENSES/                      # FFmpeg (GPL) + source link, Python (PSF), this tool
+  LICENSES/                      # FFmpeg (GPL) license + source link, Python (PSF) license
   output/                        # created on first run: zips + resumable work dirs
 ```
 
@@ -118,7 +118,7 @@ if not exist "runtime\python.exe" (
   pause
   exit /b 1
 )
-"runtime\python.exe" -X utf8 "app\gfc_friendpack.py" %*
+"runtime\python.exe" -B -X utf8 "app\gfc_friendpack.py" %*
 echo.
 pause
 ```
@@ -346,7 +346,7 @@ Extract natively first (§5.4–5.6), then run the **derive** step (D27) on each
 1. If `|w/h − 16/9| > aspect_tolerance × 16/9`: pad to 16:9 with black, centred.
 2. `scale=256:144:flags=bicubic`, JPEG `-q:v <jpeg_qscale>`.
 
-Batched per tier folder through the concat demuxer, falling back to one ffmpeg call per image on error. My pipeline runs the exact same function on native frames, so compact packs and native packs end up identical at train size. Compact packs are flagged `frame_mode: compact` and cannot feed higher-resolution work (other train sizes, D15 high-res HUD crops).
+Batched per tier folder as one image-sequence ffmpeg call, falling back to one ffmpeg call per image on error. My pipeline runs the exact same function on native frames, so compact packs and native packs end up identical at train size. Compact packs are flagged `frame_mode: compact` and cannot feed higher-resolution work (other train sizes, D15 high-res HUD crops).
 
 ### 5.8 Per-clip finish
 
@@ -399,7 +399,7 @@ CSV + JSON side by side (D20). All paths inside manifests are relative to the pa
   "created_utc": "2026-11-20T03:44:12Z",
   "tool": { "name": "gfc-friendpack", "version": "1.0.0", "source_commit": "abc1234" },
   "recipe": { "...": "resolved recipe.json with crf_list as a list, plus sampler: bucket_v1" },
-  "ffmpeg": { "ffmpeg_version": "n8.1.x-...", "ffprobe_version": "n8.1.x-...", "build": "BtbN win64-gpl", "x264_core": "x264 - core 165 r3222 ..." },
+  "ffmpeg": { "ffmpeg_version": "n8.1.x-...", "ffprobe_version": "n8.1.x-...", "build": "bundled", "x264_core": "x264 - core 165 r3222 ..." },
   "host": { "os": "Windows-10.0.26100", "cpu_count": 16, "python": "3.13.x", "tz_name": "Eastern Standard Time", "utc_offset_min": -300 },
   "contributor": { "handle": "alex", "contributor_id": "3b8f...", "consent": { "data_use": true, "public_examples": false, "acknowledged_utc": "2026-11-20T03:10:02Z" } },
   "game": { "label": "Valorant", "other_name": null },
@@ -411,7 +411,7 @@ CSV + JSON side by side (D20). All paths inside manifests are relative to the pa
 }
 ```
 
-`output.uncompressed_bytes` and `file_count` describe every file in the pack except `pack_manifest.json` itself; ingest checks them before extracting. No hostname, username or absolute path appears anywhere.
+`output.uncompressed_bytes` and `file_count` describe every file in the pack except `pack_manifest.json` itself; ingest checks them before extracting. No hostname, username or absolute path appears anywhere. `ffmpeg.build` is `bundled` in a friend pack (`env` or `path` when run from a repo checkout).
 
 ### 6.3 `clips.csv` / `clips.json` (one row per input file)
 
@@ -514,7 +514,9 @@ Zip ≈ unzipped (stored JPEGs).
 ## 10. Privacy, consent, trust
 
 - **Read-only on clips.** The tool never writes next to, renames, or deletes source files. All output goes under the pack's `output/`.
-- **No network access** anywhere in the code (tested by a static check that no networking module is imported).
+- **No network access** anywhere in the code (tested by a static check that no networking module is imported). The bundled Python has its socket and SSL modules removed, and every ffmpeg/ffprobe input is limited to the `file` protocol.
+- **Writes only inside the tool folder.** Everything goes under the pack's `config/` and `output/`; every write path is resolved (junctions and symlinks followed) and refused if it lands outside the tool folder. No temp folder, registry or shortcuts. The one exception is `--output <dir>`, which the friend has to type themselves: the finished zip (written as a `.part` file, then renamed) goes into that folder, which must already exist. Nothing else goes there and existing files are never overwritten. The end-to-end tests check that the clips folder is unchanged, that nothing appears outside the tool folder, and that `--output` adds only the zip.
+- **Runs only what it ships.** In a pack, only `bin\ffmpeg.exe`, `bin\ffprobe.exe` and `%SystemRoot%\explorer.exe` (to show the zip) are started, with argument lists and no shell. The Python code is stdlib-only (static test), and both bundled downloads are pinned by SHA-256 at build time.
 - **No machine details:** no hostname, username, absolute paths or hardware serials. OS version, CPU count and timezone only.
 - **Consent recorded per pack:** data use (required) and public examples (optional, default no). Without public-example consent, that friend's frames never appear in published docs or report figures.
 - **What the notice says:** frames (no audio, no video) are sampled every 5 s; filenames, recording dates and video metadata are included; data stays on my machine for this project's training and evaluation; nothing is redistributed; ask and I delete it.
@@ -557,20 +559,26 @@ src/game_frame_classifier/sourcing/      # stdlib only (enforced by a test)
   labels.py      game list, hint table, Steam app ids
   manifests.py   pack / clip / frame schemas, CSV + JSON writers and readers
   packzip.py     stored-zip writer + verifier; ingest-side validator
+  timeinfo.py    recording time from container, filename and mtime; host timezone
+  budget.py      spread_days_v1 footage budget
 src/game_frame_classifier/friendpack/
-  cli.py         prompts, settings, history, resume, progress, zip
+  cli.py         prompts, game choice, scan summary, confirm, finish
+  scan.py        discovery, quick ids, probing, budget selection
+  run.py         per-clip processing, resume, manifests, zip, history
+  settings.py    user.json and history.json
+  paths.py       tool-folder paths; refuses writes outside the tool folder
 packaging/friendpack/
-  START HERE.bat, README.txt.tmpl, python313._pth, LICENSES/
+  START HERE.bat, README.txt.tmpl, python313._pth, pins.json
 scripts/build_friend_pack.py
 ```
 
 **Pinned dependencies** (exact versions and SHA-256 in `packaging/friendpack/pins.json`; the build script refuses mismatches):
 
-- Python **3.13.x** amd64 embeddable zip from python.org (latest 3.13 binary release at build time). 3.12 no longer ships Windows binaries.
-- FFmpeg **BtbN `n8.1` win64-gpl** static, a dated autobuild asset (not `latest`). Includes libx264, libdav1d (fast AV1 decode) and libzimg (tone-map). Ship `ffmpeg.exe`, `ffprobe.exe`, the build's license and a source link.
+- Python **3.13.17** amd64 embeddable zip from python.org. 3.12 no longer ships Windows binaries. The build removes modules the tool never needs (`_socket`, `select`, `_ssl`, `_asyncio`, `_overlapped`, `_ctypes`, `_sqlite3`, `_multiprocessing`, `pythonw.exe` and their DLLs), so the bundled interpreter cannot open network sockets.
+- FFmpeg **`n8.1.3` win64-gpl** static from FFmpeg-Builds (formerly BtbN), dated autobuild `autobuild-2026-11-16-15-29` (not `latest`). Includes libx264, libdav1d (fast AV1 decode) and libzimg (tone-map). Ship `ffmpeg.exe`, `ffprobe.exe`, the build's license and a source link. Dated builds get pruned upstream, so the build script keeps the verified download in `build/friendpack_cache/`.
 - My local pipeline uses the same pinned build via `GFC_FFMPEG_DIR`, so personal and friend CRF artifacts come from the same x264.
 
-**Build (`scripts/build_friend_pack.py`):** download pins → verify hashes → stage runtime (patch `._pth`), bin, app (copy `sourcing/` + `friendpack/`, stamp version and git commit), config (`recipe.json` copied from the repo's `config/recipe.json`, the same file `gfc-make-sources` uses), README (render template with collector name and contact passed on the command line, never committed), licenses → `dist/GFC-FriendPack-v<version>.zip` (gitignored).
+**Build (`scripts/build_friend_pack.py`):** download pins → verify hashes → stage runtime (patch `._pth`), bin, app (copy `sourcing/` + `friendpack/`, stamp version and git commit), config (`recipe.json` copied from the repo's `config/recipe.json`, the same file `gfc-make-sources` uses), README (render template with collector name and contact passed on the command line, never committed), licenses → smoke test (the bundled Python cannot import `socket`; a synthetic 21 s clip gives 5 slots with the bundled ffmpeg) → `dist/GFC-FriendPack-v<version>.zip` (gitignored).
 
 **Versioning:** tool semver in `friendpack/__init__.py`; `recipe_id` changes whenever any output-affecting field changes; schema ids (`gfc.pack/1` etc.) change only on breaking format changes.
 
