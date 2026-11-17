@@ -362,6 +362,8 @@ def clip_row(
             x264_core=r["x264_core"],
             low_encoder=r.get("low_encoder", ""),
             gpu_fallback=r.get("gpu_fallback", ""),
+            source_keyint_s="" if r.get("source_keyint_s") is None else r["source_keyint_s"],
+            extract_method=r.get("extract_method", ""),
             wall_s=done["wall_s"],
         )
     return row

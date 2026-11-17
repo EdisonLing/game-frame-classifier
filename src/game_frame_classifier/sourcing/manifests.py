@@ -17,7 +17,7 @@ CLIP_COLUMNS = (
     "avg_fps", "r_fps", "nominal_fps", "vfr", "color_range", "color_space",
     "color_transfer", "color_primaries", "hdr", "tonemapped", "even_cropped",
     "audio_streams", "label_hint", "label_hint_conflict", "expected_slots", "slots",
-    "unpaired_dropped", "max_align_err_s", "x264_core", "low_encoder", "gpu_fallback", "wall_s",
+    "unpaired_dropped", "max_align_err_s", "x264_core", "low_encoder", "gpu_fallback", "source_keyint_s", "extract_method", "wall_s",
 )
 FRAME_COLUMNS = (
     "image_id", "slot_id", "clip_key", "tier", "crf", "encoder", "encoder_rc", "bucket",

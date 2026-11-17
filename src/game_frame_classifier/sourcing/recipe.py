@@ -21,7 +21,7 @@ BUDGET_SELECTIONS = ("spread_days_v1",)
 DERIVE_ASPECTS = ("pad_16x9",)
 SCALE_FLAGS = ("bicubic",)
 KNOWN_KEYS = frozenset({
-    "schema", "recipe_id", "interval_s", "include_full", "crf_list", "x264_preset",
+    "schema", "recipe_id", "interval_s", "include_full", "crf_list", "x264_preset", "low_window_s", "low_gop_s",
     "encoder", "gpu_qp", "jpeg_qscale", "frame_mode", "compact_size", "hdr_policy", "derive",
     "video_extensions", "min_duration_s", "footage_budget_min", "budget_selection",
     "games", "questions",
@@ -45,6 +45,8 @@ class Recipe:
     include_full: bool
     crf_list: tuple[int, ...]
     x264_preset: str
+    low_window_s: float  # seconds encoded before each sample for the degraded tier; 0 = whole video
+    low_gop_s: float  # keyframe interval of the degraded-tier encode in seconds; 0 = encoder default
     encoder: str
     gpu_qp: dict[int, int]
     jpeg_qscale: int
@@ -75,6 +77,8 @@ class Recipe:
             "crf_list": list(self.crf_list),
             "tiers": list(self.tiers),
             "x264_preset": self.x264_preset,
+            "low_window_s": self.low_window_s,
+            "low_gop_s": self.low_gop_s,
             "encoder": self.encoder,
             "gpu_qp": {str(crf): qp for crf, qp in sorted(self.gpu_qp.items())},
             "jpeg_qscale": self.jpeg_qscale,
@@ -264,6 +268,8 @@ def recipe_from_dict(data: Any, overrides: dict[str, Any] | None = None) -> Reci
         include_full=d["include_full"],
         crf_list=crf_list,
         x264_preset=_choice(d, "x264_preset", X264_PRESETS),
+        low_window_s=_number(d, "low_window_s", 0, 10),
+        low_gop_s=_number(d, "low_gop_s", 0, 30),
         encoder=_choice(d, "encoder", ENCODERS),
         gpu_qp=_gpu_qp(d["gpu_qp"], crf_list, d["encoder"]),
         jpeg_qscale=_integer(d, "jpeg_qscale", 2, 31),

@@ -14,6 +14,7 @@ from __future__ import annotations
 import os
 import re
 import shutil
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -25,6 +26,12 @@ HW_DEVICE = "d3d12va"
 # with CPU decode; ffmpeg also falls back to software decode by itself when it can't).
 GPU_DECODE = "d3d11va"
 DECODE_CHECK_FRAMES = 8
+# Speed is timed on this much video (each extraction step decodes about this much), twice per
+# decoder, best of two: short samples are dominated by process start-up and flip on noise.
+DECODE_SPEED_S = 1.0
+# GPU decode must also be this much faster than the CPU to be used: copying frames back from the
+# GPU often costs more than the decode saves (1080p and 1440p H.264 decode faster on the CPU).
+DECODE_MIN_SPEEDUP = 1.1
 # Lowest acceptable PSNR (dB) of a GPU-encoded picture against its source. QP 51 lands
 # far above this on real footage; a broken encoder (green, black or garbled frames) far below.
 MIN_PSNR_DB = 18.0
@@ -119,14 +126,17 @@ class DecodeCheck:
     def __init__(self) -> None:
         self.results: dict[str, tuple[bool, str]] = {}
 
-    def allowed(self, tools: FFTools, src: Path, stream_index: int, codec: str, bit_depth: int) -> bool:
-        key = f"{codec}:{'10bit' if bit_depth > 8 else '8bit'}"
+    def allowed(
+        self, tools: FFTools, src: Path, stream_index: int, codec: str, bit_depth: int,
+        width: int = 0, height: int = 0, fps: float = 30.0,
+    ) -> bool:
+        key = f"{codec}:{'10bit' if bit_depth > 8 else '8bit'}:{width}x{height}"
         if key not in self.results:
-            self.results[key] = _check_decode(tools, src, stream_index, bit_depth)
+            self.results[key] = _check_decode(tools, src, stream_index, bit_depth, fps)
         return self.results[key][0]
 
     def summary(self) -> dict[str, str]:
-        """{"h264:8bit": "gpu", "av1:10bit": "cpu: <reason>"} for run records."""
+        """{"h264:8bit:1920x1080": "gpu", "av1:10bit:3840x2160": "cpu: <reason>"} for run records."""
         return {k: ("gpu" if ok else f"cpu: {why}") for k, (ok, why) in sorted(self.results.items())}
 
 
@@ -142,26 +152,56 @@ def _frame_hashes(tools: FFTools, src: Path, stream_index: int, pix_fmt: str, hw
     return [ln.rsplit(",", 1)[-1].strip() for ln in proc.stdout.splitlines() if ln and not ln.startswith("#")]
 
 
-def _check_decode(tools: FFTools, src: Path, stream_index: int, bit_depth: int) -> tuple[bool, str]:
-    """GPU decode is allowed only when its first frames match CPU decode bit for bit."""
+def _decode_seconds(tools: FFTools, src: Path, stream_index: int, frames: int, hw: bool) -> float:
+    start = time.perf_counter()
+    proc = run_capture([
+        tools.ffmpeg, "-hide_banner", "-nostdin", "-loglevel", "error",
+        *(hw_decode_args() if hw else []),
+        "-protocol_whitelist", "file", "-i", src, "-map", f"0:{stream_index}",
+        "-frames:v", str(frames), "-f", "null", "-",
+    ], timeout=120)
+    if proc.returncode != 0:
+        raise ToolError(error_line(proc.stderr), proc.returncode, proc.stderr[-2000:])
+    return time.perf_counter() - start
+
+
+def _check_decode(
+    tools: FFTools, src: Path, stream_index: int, bit_depth: int, fps: float = 30.0,
+) -> tuple[bool, str]:
+    """GPU decode is used only when its first frames match CPU decode bit for bit and it is faster."""
     if os.name != "nt":
         return False, "GPU decoding is only used on Windows"
     pix_fmt = "yuv420p10le" if bit_depth > 8 else "yuv420p"
+    frames = max(30, round(DECODE_SPEED_S * fps))
     try:
         cpu = _frame_hashes(tools, src, stream_index, pix_fmt, hw=False)
         hw = _frame_hashes(tools, src, stream_index, pix_fmt, hw=True)
+        if cpu and hw == cpu:
+            timings = {False: [], True: []}
+            for _ in range(2):
+                for use_hw in (False, True):
+                    timings[use_hw].append(_decode_seconds(tools, src, stream_index, frames, use_hw))
+            cpu_s, hw_s = min(timings[False]), min(timings[True])
     except ToolError as exc:
         return False, first_line(str(exc)) or "decode check failed"
     if not cpu:
         return False, "no frames decoded"
     if hw != cpu:
         return False, "GPU decode differs from CPU decode"
-    return True, ""
+    if hw_s * DECODE_MIN_SPEEDUP > cpu_s:
+        return False, f"CPU decode is faster here ({cpu_s:.2f} s vs {hw_s:.2f} s for {frames} frames)"
+    return True, f"GPU {hw_s:.2f} s vs CPU {cpu_s:.2f} s for {frames} frames"
 
 
-def encode_args(qp: int, width: int = 0, height: int = 0, fps: float = 0.0) -> list[str]:
-    """Codec options for a GPU encode at constant QP (frames arrive through GPU_FILTERS)."""
+def encode_args(qp: int, width: int = 0, height: int = 0, fps: float = 0.0, gop: int = 0) -> list[str]:
+    """Codec options for a GPU encode at constant QP (frames arrive through GPU_FILTERS).
+
+    gop sets the keyframe interval in frames; 0 keeps the driver default (120 frames on the
+    RX 9070 XT, which at 120 fps puts every 5 s sample exactly on a keyframe).
+    """
     args = ["-c:v", GPU_ENCODER, "-rc_mode", "CQP", "-qp", str(qp)]
+    if gop > 0:
+        args += ["-g", str(gop)]
     macroblocks = -(-width // 16) * -(-height // 16)
     if macroblocks * fps > LEVEL_52_MBPS:
         args += ["-level", "5.2"]

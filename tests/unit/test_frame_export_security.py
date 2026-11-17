@@ -15,7 +15,7 @@ EXPECTED = {
     "frame_export/settings.py", "frame_export/scan.py", "frame_export/run.py", "frame_export/cli.py",
 }
 ALLOWED_MODULES = {
-    "__future__", "argparse", "collections", "copy", "csv", "dataclasses", "datetime", "hashlib",
+    "__future__", "argparse", "bisect", "collections", "copy", "csv", "dataclasses", "datetime", "hashlib",
     "json", "math", "os", "pathlib", "platform", "re", "shutil", "struct", "subprocess", "sys",
     "threading", "time", "typing", "uuid", "zipfile", "game_frame_classifier",
 }

@@ -246,6 +246,8 @@ def build_clip_row(
             x264_core=result.x264_core,
             low_encoder=result.low_encoder,
             gpu_fallback=sanitize_text(result.gpu_fallback, source_root)[:300],
+            source_keyint_s="" if result.source_keyint_s is None else result.source_keyint_s,
+            extract_method=result.extract_method,
         )
     if wall_s is not None:
         row["wall_s"] = round(wall_s, 1)
