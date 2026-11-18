@@ -623,13 +623,16 @@ def clean_slots(
                 keep = False
                 reject_reason = f"manual:{quarantine[slot_id]}"
 
-            if not full_path.is_file():
+            low_rel = row["path_low"]
+            low_missing = bool(low_rel) and not (data_root / low_rel).is_file()
+            if not full_path.is_file() or low_missing:
+                missing = full_path if not full_path.is_file() else data_root / low_rel
                 if not skip_missing and slot_id not in quarantine:
-                    raise FileNotFoundError(f"frame not found: {full_path}")
+                    raise FileNotFoundError(f"frame not found: {missing}")
                 if keep:
                     keep = False
                     reject_reason = "missing_file"
-            else:
+            if full_path.is_file():
                 with Image.open(full_path) as im:
                     im.load()
                     image = im.convert("RGB")

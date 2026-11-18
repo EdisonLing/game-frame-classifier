@@ -348,3 +348,23 @@ def test_slot_visit_order_independent_of_input_row_order(tmp_path: Path) -> None
     assert by_id2[early["slot_id"]]["keep"] is True
     assert by_id2[undated["slot_id"]]["reject_reason"] == "duplicate"
     assert by_id2[undated["slot_id"]]["dup_of"] == early["slot_id"]
+
+
+def test_slot_with_missing_low_image_is_rejected_and_quick_mode_slot_is_kept(tmp_path):
+    data_root = tmp_path / "data"
+    paired = fx.write_slot_images(
+        data_root, game="Valorant", source="tester", clip_key="c000000000001", bucket=0,
+        full=fx.sharp_pattern,
+    )
+    (data_root / paired["path_low"]).unlink()
+    quick = fx.write_slot_images(
+        data_root, game="Valorant", source="tester", clip_key="c000000000002", bucket=0,
+        full=fx.sharp_pattern,
+    )
+    (data_root / quick["path_low"]).unlink()
+    quick["path_low"] = ""
+    clips: dict[str, dict[str, str]] = {}  # no recording times: visit order falls back to clip_key
+    rows = {r["slot_id"]: r for r in clean_slots([paired, quick], clips, data_root=data_root)}
+    assert rows[paired["slot_id"]]["keep"] is False
+    assert rows[paired["slot_id"]]["reject_reason"] == "missing_file"
+    assert rows[quick["slot_id"]]["reject_reason"] != "missing_file"
