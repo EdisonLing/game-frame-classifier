@@ -190,3 +190,23 @@ def test_cpu_run_records_encoder_per_frame_and_clip(tmp_path):
     manifest = json.loads((run_dir / "run_manifest.json").read_text(encoding="utf-8"))
     assert manifest["encoder"]["requested"] == "cpu"
     assert manifest["encoder"]["clips_cpu"] == 1
+
+
+@requires_ffmpeg
+def test_budget_hours_spreads_days_and_tops_up(tmp_path):
+    data_root, source_dir = data_tree(tmp_path)
+    for name in ("a_2026.01.01-10.00.mp4", "b_2026.01.01-11.00.mp4", "c_2026.01.02-10.00.mp4"):
+        make_raw_clip(source_dir, name, duration_s=12.0)
+    base = ["--data-root", str(data_root), "--recipe", str(RECIPE), "--cpu"]
+    clips = data_root / "frame_sources" / "Valorant" / "tester"
+
+    assert main(base + ["--budget-hours", str(25 / 3600)]) == 0
+    first = sorted(json.loads((d / "clip.json").read_text(encoding="utf-8"))["original_relpath"] for d in clips.glob("c*"))
+    assert len(first) == 2 and "c_2026.01.02-10.00.mp4" in first
+
+    assert main(base + ["--budget-hours", str(25 / 3600)]) == 0
+    assert len(list(clips.glob("c*"))) == 2
+
+    assert main(base + ["--budget-hours", str(40 / 3600)]) == 0
+    assert len(list(clips.glob("c*"))) == 3
+    assert main(base + ["--budget-hours", "0"]) == 2

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+import json
 import os
 import re
 import shutil
@@ -26,6 +27,7 @@ from game_frame_classifier.ingest_pack import (
     save_index,
 )
 from game_frame_classifier.sourcing import gpu
+from game_frame_classifier.sourcing.budget import Candidate, select_within_budget
 from game_frame_classifier.sourcing.extract import ClipResult, ExtractError, extract_clip
 from game_frame_classifier.sourcing.ffbin import FFmpegNotFoundError, find_tools, version_line
 from game_frame_classifier.sourcing.hashing import quick_id, sha256_file
@@ -38,7 +40,7 @@ from game_frame_classifier.sourcing.manifests import (
 )
 from game_frame_classifier.sourcing.probe import ProbeError, ProbeInfo, probe_file
 from game_frame_classifier.sourcing.recipe import Recipe, RecipeError, load_recipe
-from game_frame_classifier.sourcing.timeinfo import RecordingTimes, recording_times
+from game_frame_classifier.sourcing.timeinfo import RecordingTimes, local_day, recording_times
 
 __version__ = "2.0.0"
 SCHEMA_PERSONAL_RUN = "gfc.personal_run/1"
@@ -279,6 +281,45 @@ def frame_rows_for_clip(result: ClipResult, rel_dir: str) -> list[dict[str, Any]
     return rows
 
 
+def extracted_footage_s(fs_root: Path, game: str, source: str) -> float:
+    """Seconds of footage already in frame_sources for one game and source (from clip.json)."""
+    total = 0.0
+    folder = fs_root / game / source
+    if not folder.is_dir():
+        return 0.0
+    for clip_json in folder.glob("*/clip.json"):
+        try:
+            total += float(json.loads(clip_json.read_text(encoding="utf-8")).get("duration_s") or 0)
+        except (OSError, ValueError, AttributeError):
+            continue
+    return total
+
+
+def apply_footage_budget(
+    pending: list[tuple[Path, ProbeInfo, RecordingTimes, str, str]],
+    budget_s: float | None,
+    already_s: float,
+) -> tuple[list[tuple[Path, ProbeInfo, RecordingTimes, str, str]], list[tuple[Path, ProbeInfo, RecordingTimes, str, str]]]:
+    """Split new clips into (selected, over budget) for one game and source.
+
+    The budget counts footage already extracted, so rerunning with the same value adds nothing and a
+    higher value tops up. Clips are spread across recording days (spread_days_v1, as in the kit).
+    """
+    if budget_s is None:
+        return pending, []
+    remaining = budget_s - already_s
+    if remaining <= 0 or not pending:
+        return [], pending
+    candidates = [Candidate(sha, info.duration_s, times.start) for _, info, times, sha, _ in pending]
+    chosen = set(select_within_budget(candidates, remaining, local_day)[0])
+    selected = [item for item in pending if item[3] in chosen]
+    # select_within_budget takes the shortest clip when none fits; only a first run may overshoot.
+    if already_s > 0 and sum(item[1].duration_s for item in selected) > remaining:
+        selected = []
+    picked = {item[3] for item in selected}
+    return selected, [item for item in pending if item[3] not in picked]
+
+
 def place_clip(frames_root: Path, dest: Path) -> None:
     dest.parent.mkdir(parents=True, exist_ok=True)
     if dest.exists():
@@ -339,6 +380,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--source", help="only this source folder (normalised handle)")
     p.add_argument("--limit", type=int, metavar="N", help="stop after N new clips")
     p.add_argument(
+        "--budget-hours",
+        type=float,
+        metavar="H",
+        help="at most H hours of footage per game and source, counting clips already extracted; "
+        "picked across recording days. Rerun with a higher value to add more",
+    )
+    p.add_argument(
         "--rebuild",
         action="append",
         default=[],
@@ -367,6 +415,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.limit is not None and args.limit < 0:
         print("--limit must be >= 0")
         return EXIT_USAGE
+    if args.budget_hours is not None and args.budget_hours <= 0:
+        print("--budget-hours must be > 0")
+        return EXIT_USAGE
+    budget_s = None if args.budget_hours is None else args.budget_hours * 3600
 
     game_filter = args.game
     if game_filter and game_filter not in recipe.games:
@@ -418,6 +470,7 @@ def main(argv: list[str] | None = None) -> int:
     x264_core = ""
     any_hard_refuse = False
     new_placed = 0
+    clips_over_budget = 0
 
     tmp_run = fs_root / "_tmp" / run_id
     frames_root = tmp_run / "frames"
@@ -441,10 +494,9 @@ def main(argv: list[str] | None = None) -> int:
                     continue
                 if source_filter and source != source_filter:
                     continue
+                pending: list[tuple[Path, ProbeInfo, RecordingTimes, str, str]] = []
                 for path in iter_videos(source_dir, extensions):
                     videos_found += 1
-                    if args.limit is not None and new_placed >= args.limit:
-                        break
                     rel = rel_under(source_dir, path)
                     print(f"  {game}/{source}/{rel}")
                     info: ProbeInfo | None = None
@@ -498,6 +550,35 @@ def main(argv: list[str] | None = None) -> int:
                         ))
                         print(f"    skipped_existing: {clip_key}")
                         continue
+                    if any(item[3] == sha for item in pending):
+                        clip_rows.append(build_clip_row(
+                            path=path, source_root=source_dir, game=game, info=info, times=times,
+                            sha=sha, clip_key=clip_key, status="skipped",
+                            status_detail="duplicate", result=None, wall_s=None,
+                        ))
+                        print(f"    skipped: duplicate of another file ({clip_key})")
+                        continue
+                    pending.append((path, info, times, sha, clip_key))
+
+                already_s = extracted_footage_s(fs_root, game, source) if budget_s is not None else 0.0
+                selected, over = apply_footage_budget(pending, budget_s, already_s)
+                for path, info, times, sha, clip_key in over:
+                    clips_over_budget += 1
+                    clip_rows.append(build_clip_row(
+                        path=path, source_root=source_dir, game=game, info=info, times=times,
+                        sha=sha, clip_key=clip_key, status="skipped", status_detail="over_budget",
+                        result=None, wall_s=None,
+                    ))
+                if budget_s is not None and pending:
+                    take_h = sum(item[1].duration_s for item in selected) / 3600
+                    print(
+                        f"  budget {game}/{source}: {already_s / 3600:.2f} h already extracted, "
+                        f"taking {len(selected)} clip(s) ({take_h:.2f} h), {len(over)} over budget"
+                    )
+                for path, info, times, sha, clip_key in selected:
+                    if args.limit is not None and new_placed >= args.limit:
+                        break
+                    print(f"  extract {game}/{source}/{rel_under(source_dir, path)}")
                     if args.dry_run:
                         print(f"    dry-run: would extract {clip_key}")
                         clip_rows.append(build_clip_row(
@@ -598,7 +679,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.dry_run:
         print(
             f"dry-run: videos={videos_found} would_extract={new_placed} "
-            f"skipped_existing={clips_skipped_existing} failed={clips_failed}"
+            f"skipped_existing={clips_skipped_existing} over_budget={clips_over_budget} failed={clips_failed}"
         )
         if any_hard_refuse or clips_failed:
             return EXIT_FAIL
@@ -629,6 +710,8 @@ def main(argv: list[str] | None = None) -> int:
             "clips_ok": clips_ok,
             "clips_failed": clips_failed,
             "clips_skipped_existing": clips_skipped_existing,
+            "clips_over_budget": clips_over_budget,
+            "budget_hours": args.budget_hours,
             "input_bytes": input_bytes,
             "input_duration_s": round(input_duration_s, 1),
         },
@@ -644,7 +727,7 @@ def main(argv: list[str] | None = None) -> int:
     }
     atomic_write_json(personal / "run_manifest.json", manifest)
     print(
-        f"Done: ok={clips_ok} skipped_existing={clips_skipped_existing} "
+        f"Done: ok={clips_ok} skipped_existing={clips_skipped_existing} over_budget={clips_over_budget} "
         f"failed={clips_failed} -> frame_sources/_personal/{run_id}/"
     )
     if any_hard_refuse or clips_failed:

@@ -30,6 +30,7 @@ gfc-make-sources --game Valorant --source myclips
 gfc-make-sources --limit 1 --dry-run
 gfc-make-sources --rebuild c1a2b3c4d5e6f
 gfc-make-sources --cpu                          # libx264 for this run
+gfc-make-sources --budget-hours 2               # at most 2 h per game and source, in total
 python -m game_frame_classifier.make_sources
 ```
 
@@ -39,6 +40,7 @@ python -m game_frame_classifier.make_sources
 | `--recipe` | Recipe file (default `config/recipe.json`) |
 | `--game`, `--source` | Only this game folder / source folder |
 | `--limit N` | Stop after N new clips |
+| `--budget-hours H` | At most H hours of footage per game and source, counting clips already extracted (see Behaviour 3). Default: no budget |
 | `--rebuild <clip_key>` | Delete that clip's folder and index entry, then extract it again (repeatable) |
 | `--dry-run` | Probe and hash only; print what would be extracted; write nothing |
 | `--cpu` | Decode on the CPU and encode the degraded tier with libx264 even if the GPU works (D28) |
@@ -49,7 +51,7 @@ Exit codes: `0` success (including nothing new), `1` at least one clip failed, `
 
 1. **Scan.** Walk `data/raw/<Game>/<source>/` recursively. `<Game>` must be one of the recipe's `games`; other top-level folders are skipped with a warning. Files are videos when their extension is in `video_extensions`.
 2. **Source name.** `<source>` is the folder name, lower-cased through `normalize_handle`. It must not start with `contributor_` (reserved for ingested packs); such a folder is refused.
-3. **Probe and select.** `sourcing.probe.probe_file`; skip clips shorter than `min_duration_s` or that fail to probe. No footage budget is applied to personal clips.
+3. **Probe and select.** `sourcing.probe.probe_file`; skip clips shorter than `min_duration_s` or that fail to probe. Two files with the same content in one run: the second is `skipped` / `duplicate`. With `--budget-hours H`, the new clips of each game and source are picked with the kit's `spread_days_v1` (spread across recording days) up to H hours minus the footage already in `frame_sources/<Game>/<source>/` (from each `clip.json`); the rest are `skipped` / `over_budget` and stay in `data/raw` for a later run. Rerunning with the same H adds nothing; a higher H tops up; a lower H never deletes anything (use the splitter's `source_slots` to use less). When nothing fits, a first run takes the shortest clip, as the kit does; a top-up never goes over H.
 4. **Identity.** `clip_sha256` over the file, `clip_key = "c" + sha[:12]`. If the SHA is already in `_index/by_sha256.json` (from an earlier run or from a contributor pack), the clip is skipped and listed as `skipped_existing`.
 5. **Extract.** `extract_clip(tools, src, info, recipe, clip_key, stage, frames_root, rel_root)` with `frames_root = frame_sources/_tmp/<run_id>/frames` and `frame_mode` forced to `native`. Tiers come from the recipe (`full` + `crf45`). The degraded tier is encoded on the GPU (`h264_d3d12va`, QP 51) after a startup self-test, with the same picture checks, stall timeout, per-tier libx264 fallback and 3-in-a-row cut-off as the Frame Export Kit, and the same separate per-codec GPU decode check (D28). Each frame row records `encoder` and `encoder_rc`; `clip.json` records `low_encoder` and `gpu_fallback` (local paths scrubbed).
 6. **Place.** Move `<clip_key>/` to `frame_sources/<Game>/<source>/<clip_key>/`. File names are the pack names: `<clip_key>_<tier>_b<bucket:06d>.jpg`.

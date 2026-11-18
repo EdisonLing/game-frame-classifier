@@ -145,3 +145,32 @@ def test_unique_run_id_never_reuses_a_run_record(tmp_path):
     assert unique_run_id(fs_root, "20261117-101500") == "20261117-101500-2"
     (fs_root / "_personal" / "20261117-101500-2").mkdir()
     assert unique_run_id(fs_root, "20261117-101500") == "20261117-101500-3"
+
+
+def _pending(sha: str, duration_s: float, day: int):
+    from datetime import datetime, timezone
+    from types import SimpleNamespace
+
+    start = datetime(2026, 1, day, 12, tzinfo=timezone.utc)
+    return (Path(f"{sha}.mp4"), SimpleNamespace(duration_s=duration_s), SimpleNamespace(start=start), sha, "c" + sha)
+
+
+def test_footage_budget_is_cumulative_and_spread_across_days():
+    from game_frame_classifier.make_sources import apply_footage_budget
+
+    pending = [_pending("a1", 600, 1), _pending("a2", 600, 1), _pending("b1", 600, 2), _pending("c1", 600, 3)]
+    assert apply_footage_budget(pending, None, 0) == (pending, [])
+    selected, over = apply_footage_budget(pending, 1800, 0)
+    assert sorted(item[3] for item in selected) == ["a1", "b1", "c1"]
+    assert [item[3] for item in over] == ["a2"]
+    # Same budget after those were extracted: nothing more; a higher budget tops up.
+    assert apply_footage_budget([pending[1]], 1800, 1800) == ([], [pending[1]])
+    assert apply_footage_budget([pending[1]], 2400, 1800)[0] == [pending[1]]
+
+
+def test_footage_budget_first_run_takes_shortest_but_top_up_never_overshoots():
+    from game_frame_classifier.make_sources import apply_footage_budget
+
+    long_clip = [_pending("x", 900, 1)]
+    assert apply_footage_budget(long_clip, 600, 0)[0] == long_clip
+    assert apply_footage_budget(long_clip, 600, 300) == ([], long_clip)
