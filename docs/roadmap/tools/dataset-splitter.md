@@ -86,8 +86,8 @@ For each session:
 1. **Held-out source.** If the source is listed in `holdout_sources` for that game, the session is `test_source`.
 2. **Known clips.** Otherwise, if any of its clips is already in the ledger, the session takes the most held-out split among them. This matters when a new clip bridges two sessions that were assigned to different splits:
    - **Draft:** clips that were in a less held-out split move up and are listed in `reassigned.csv`.
-   - **Frozen:** no assigned clip moves, because a model trained earlier may already have seen it. The bridging clip is left out (`unused.csv`, reason `bridges_splits`) and the two old sessions stay as they were.
-3. **New session.** Otherwise it is placed by greedy fill. Per game, new sessions are visited in order of `sha256("<seed>:<smallest clip_key in session>")`. Each goes to the split with the largest deficit `target − current share`, where shares count kept slots of that game already assigned to `train`, `val` and `test_session`. Ties go to `train`, then `val`, then `test_session`.
+   - **Frozen:** no assigned clip moves, because a model trained earlier may already have seen it. The bridging clip is left out (`unused.csv`, reason `bridges_splits`) and the two old sessions stay as they were; in the split files each part is labelled `<session>.<split>`, so no session label spans two splits.
+3. **New session.** Otherwise it is placed by greedy fill, after every session with ledger entries has been counted. Per game, new sessions are visited in order of `sha256("<seed>:<smallest clip_key in session>")`. Each goes to the split with the largest deficit `target − current share`, where shares count kept slots of that game already assigned to `train`, `val` and `test_session`. Ties go to `train`, then `val`, then `test_session`.
 
 Every clip of the session is then written to the ledger.
 
@@ -144,7 +144,7 @@ No downsampling. All kept slots are used (subject to the source cap); the traine
 
 `counts.csv` and `sources.csv` are the per-game frames, videos and channels tables for reports (D14).
 
-**Warnings** (in `summary.json` and on the console): a game with an empty split; a game with fewer than three sessions among non-held-out sources; a tier share outside 45–55 % for a game and split with 200 or more slots; any source above 1/15 of a game's train slots (the proposal's cap, reported even when not enforced); low-trust or missing recording times.
+**Warnings** (in `summary.json` and on the console): a game with an empty split (`test_source` only when the game has held-out sources); a game with fewer than three sessions among non-held-out sources; a tier share outside 45–55 % for a game and split with 200 or more slots; any source above 1/15 of a game's train slots (the proposal's cap, reported even when not enforced); low-trust or missing recording times.
 
 ## Gates
 

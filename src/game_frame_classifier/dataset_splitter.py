@@ -156,13 +156,9 @@ def _validate_ledger(ledger: dict[str, dict[str, str]], clips: dict[str, dict[st
             raise SplitterError("ledger contradicts holdout_sources; use a new split_id", 1)
 
 
-def _choose_split(session: dict[str, Any], assigned_slots: list[dict[str, Any]], targets: dict[str, float]) -> str:
-    game = session["game"]
-    current = {split: 0 for split in ASSIGNABLE_SPLITS}
-    for slot in assigned_slots:
-        if slot["game"] == game and slot["split"] in current:
-            current[slot["split"]] += 1
-    total = sum(current.values())
+def _choose_split(current: dict[str, int], targets: dict[str, float]) -> str:
+    """Greedy fill: the split with the largest deficit for this game's kept slots so far."""
+    total = sum(current[split] for split in ASSIGNABLE_SPLITS)
     deficits = {split: targets[split] - (current[split] / total if total else 0.0) for split in ASSIGNABLE_SPLITS}
     return max(ASSIGNABLE_SPLITS, key=lambda split: (deficits[split], -ASSIGNABLE_SPLITS.index(split)))
 
@@ -208,29 +204,49 @@ def _write_sources(output: Path, used: list[dict[str, Any]]) -> list[dict[str, A
 def _apply_source_cap(slots: list[dict[str, Any]], seed: int, requested_cap: float) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Thin only train slots whose source exceeds its feasible configured cap."""
     dropped: list[dict[str, Any]] = []
-    kept = list(slots)
+    removed: set[int] = set()
     for game in GAMES:
-        while True:
-            train = [slot for slot in kept if slot["game"] == game and slot["split"] == "train"]
-            by_source: dict[str, list[dict[str, Any]]] = defaultdict(list)
-            for slot in train:
+        by_source: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        for slot in slots:
+            if slot["game"] == game and slot["split"] == "train":
                 by_source[slot["source"]].append(slot)
-            if not by_source:
-                break
-            cap = max(float(requested_cap), 1 / len(by_source))
-            limit = cap * len(train)
-            offenders = [source for source, source_slots in by_source.items() if len(source_slots) > limit]
+        if not by_source:
+            continue
+        # Highest hash first: each source drops from the front of its list.
+        for source_slots in by_source.values():
+            source_slots.sort(key=lambda slot: _sha256_text(f"{seed}:{slot['slot_id']}"), reverse=True)
+        counts = {source: len(source_slots) for source, source_slots in by_source.items()}
+        total = sum(counts.values())
+        cap = max(float(requested_cap), 1 / len(by_source))
+        while True:
+            offenders = [source for source, count in counts.items() if count > cap * total]
             if not offenders:
                 break
-            source = max(offenders, key=lambda name: (len(by_source[name]), name))
-            candidate = max(by_source[source], key=lambda slot: _sha256_text(f"{seed}:{slot['slot_id']}"))
-            kept.remove(candidate)
+            source = max(offenders, key=lambda name: (counts[name], name))
+            candidate = by_source[source][len(by_source[source]) - counts[source]]
+            counts[source] -= 1
+            total -= 1
+            removed.add(id(candidate))
             dropped.append({
                 "slot_id": candidate["slot_id"], "clip_key": candidate["clip_key"],
                 "game": candidate["game"], "source": candidate["source"],
                 "session": candidate["session"], "split": "train", "reason": "source_cap",
             })
-    return kept, dropped
+    return [slot for slot in slots if id(slot) not in removed], dropped
+
+
+def _print_plan(sessions: list[dict[str, Any]], slot_by_clip: dict[str, list[dict[str, Any]]]) -> None:
+    per_source: dict[tuple[str, str], list[int]] = defaultdict(lambda: [0, 0, 0])
+    for session in sessions:
+        size = sum(len(slot_by_clip[clip["clip_key"]]) for clip in session["clips"])
+        print(f"{session['session']}: {len(session['clips'])} clip(s), {size} kept slot(s)")
+        totals = per_source[(session["game"], session["source"])]
+        totals[0] += 1
+        totals[1] += len(session["clips"])
+        totals[2] += size
+    print("per source:")
+    for (game, source), (n_sessions, n_clips, n_slots) in sorted(per_source.items()):
+        print(f"  {game} / {source}: {n_sessions} session(s), {n_clips} clip(s), {n_slots} kept slot(s)")
 
 
 def run_split(data_root: Path, config_path: Path, *, plan: bool = False, reset: bool = False, freeze: bool = False) -> dict[str, Any]:
@@ -248,6 +264,9 @@ def run_split(data_root: Path, config_path: Path, *, plan: bool = False, reset: 
         slot.update({key: clip.get(key, "") for key in ("game", "source", "public_examples_ok")})
         slot["source_kind"] = clip.get("source_kind") or _source_kind(slot["source"])
         slot["bucket"] = int(slot["bucket"])
+    unknown = sorted({clip["game"] for clip in clips.values()} - set(GAMES))
+    if unknown:
+        raise SplitterError(f"clips_index has games outside the label set: {', '.join(unknown)}", 2)
     sessions = build_sessions(list(clips.values()), float(config["session_gap_min"]))
     slot_by_clip: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for slot in slots:
@@ -258,9 +277,7 @@ def run_split(data_root: Path, config_path: Path, *, plan: bool = False, reset: 
     if reset and frozen:
         raise SplitterError("--reset is refused for a frozen split", 1)
     if plan:
-        for session in sessions:
-            size = sum(len(slot_by_clip[clip["clip_key"]]) for clip in session["clips"])
-            print(f"{session['session']}: {size} kept slot(s)")
+        _print_plan(sessions, slot_by_clip)
         return {"sessions": sessions}
     if reset and ledger_path.exists():
         ledger_path.unlink()
@@ -269,12 +286,19 @@ def run_split(data_root: Path, config_path: Path, *, plan: bool = False, reset: 
     _validate_ledger(ledger, clips, heldout)
     now, reassigned, unused = _now(), [], []
     assigned_slots: list[dict[str, Any]] = []
-    historical_sessions: dict[str, str] = {}
-    prior_sessions = output / "sessions.csv"
-    if frozen and prior_sessions.is_file():
-        historical_sessions = {row["clip_key"]: row["session"] for row in _load_csv(prior_sessions)}
+    session_of: dict[str, str] = {}
+    filled = {game: {split: 0 for split in SPLITS} for game in GAMES}
 
-    visit = sorted(sessions, key=lambda item: (_sha256_text(f"{config['seed']}:{min(clip['clip_key'] for clip in item['clips'])}"), item["game"], item["source"]))
+    def has_known(item: dict[str, Any]) -> bool:
+        return any(clip["clip_key"] in ledger for clip in item["clips"])
+
+    # Sessions with ledger entries first, so new sessions are filled against every existing
+    # assignment; new sessions then in seeded hash order.
+    visit = sorted(sessions, key=lambda item: (
+        not has_known(item),
+        _sha256_text(f"{config['seed']}:{min(clip['clip_key'] for clip in item['clips'])}"),
+        item["game"], item["source"],
+    ))
     for session in visit:
         session_clips = session["clips"]
         known = [ledger[clip["clip_key"]] for clip in session_clips if clip["clip_key"] in ledger]
@@ -286,7 +310,7 @@ def run_split(data_root: Path, config_path: Path, *, plan: bool = False, reset: 
         elif known:
             chosen = max(known_splits, key=SPLIT_RANK.__getitem__)
         else:
-            chosen = _choose_split(session, assigned_slots, config["targets"])
+            chosen = _choose_split(filled[session["game"]], config["targets"])
         for clip in session_clips:
             clip_key = clip["clip_key"]
             old = ledger.get(clip_key)
@@ -303,7 +327,11 @@ def run_split(data_root: Path, config_path: Path, *, plan: bool = False, reset: 
                 split = old["split"] if SPLIT_RANK[old["split"]] >= SPLIT_RANK[chosen] else chosen
             if old is None:
                 ledger[clip_key] = {"clip_key": clip_key, "split": split, "first_assigned_utc": now, "note": ""}
-            assigned_session = historical_sessions.get(clip_key, session["session"]) if frozen else session["session"]
+            # A frozen bridged session keeps its old clips in different splits; label each part
+            # separately so no session label spans two splits.
+            assigned_session = f"{session['session']}.{split}" if frozen and bridge else session["session"]
+            session_of[clip_key] = assigned_session
+            filled[session["game"]][split] += len(slot_by_clip[clip_key])
             for slot in slot_by_clip[clip_key]:
                 row = dict(slot)
                 row.update({"session": assigned_session, "split": split})
@@ -330,7 +358,7 @@ def run_split(data_root: Path, config_path: Path, *, plan: bool = False, reset: 
             entry = ledger.get(clip_key)
             session_rows.append({
                 "clip_key": clip_key, "game": session["game"], "source": session["source"],
-                "session": historical_sessions.get(clip_key, session["session"]) if frozen else session["session"],
+                "session": session_of.get(clip_key, session["session"]),
                 "recorded_start_utc": clip.get("recorded_start_utc", ""),
                 "recorded_start_source": clip.get("recorded_start_source", ""),
                 "duration_s": clip.get("duration_s", ""),
@@ -348,7 +376,7 @@ def run_split(data_root: Path, config_path: Path, *, plan: bool = False, reset: 
             warnings.append(f"{game}: fewer than three non-held-out sessions")
         for split in SPLITS:
             game_slots = [slot for slot in assigned_slots if slot["game"] == game and slot["split"] == split]
-            if not game_slots:
+            if not game_slots and (split != "test_source" or heldout.get(game)):
                 warnings.append(f"{game}: empty {split}")
             elif len(game_slots) >= 200:
                 low_share = sum(slot["tier"] == "crf45" for slot in game_slots) / len(game_slots)
@@ -361,12 +389,19 @@ def run_split(data_root: Path, config_path: Path, *, plan: bool = False, reset: 
                 by_source[slot["source"]] += 1
             if max(by_source.values()) / len(train_slots) > 1 / 15:
                 warnings.append(f"{game}: a source exceeds 1/15 of train slots")
+        game_clips = [clip for clip in clips.values() if clip["game"] == game]
+        untimed = sum(not clip.get("recorded_start_utc") for clip in game_clips)
+        low_trust = sum(clip.get("recorded_start_source") == "mtime" for clip in game_clips)
+        if untimed:
+            warnings.append(f"{game}: {untimed} clip(s) without a recording time (one session each)")
+        if low_trust:
+            warnings.append(f"{game}: {low_trust} clip(s) timed from file modification time (low trust)")
     summary = {
         "config": config, "input_hashes": {"slots_clean.csv": _file_hash(slots_path), "clips_index.csv": _file_hash(clips_path)},
         "split_hashes": {split: _file_hash(output / f"{split}.csv") for split in SPLITS},
         "counts": counts, "sources": sources, "warnings": warnings, "frozen": frozen,
     }
-    if freeze:
+    if freeze and not frozen:
         if not config["test_design"].strip():
             raise SplitterError("--freeze requires a non-empty test_design", 1)
         commit = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=False).stdout.strip()
