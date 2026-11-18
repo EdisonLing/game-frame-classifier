@@ -234,6 +234,7 @@ data/bench_extract/
 data/bench_handoff/
 data/contributor_packs/
 data/archive/
+data/_public_cache/
 *.mp4
 *.mkv
 *.mov
