@@ -15,6 +15,7 @@
 | [roadmap/ROADMAP.md](roadmap/ROADMAP.md) | Project stages, tool list, testing convention |
 | [data-layout.md](data-layout.md) | Official `data/raw` / frames / `frame_sources` / manifests folder scheme |
 | [design-decisions.md](design-decisions.md) | Incremental adopt/reject log |
+| [research/public-game-datasets.md](research/public-game-datasets.md) | Public Minecraft / OW2 / Marvel Rivals dataset research (rights + pipeline fit; no acquisition) |
 | [roadmap/tools/frame-export-kit.md](roadmap/tools/frame-export-kit.md) | Frame Export Kit (contributor clips → zip) |
 | [roadmap/tools/ingest-pack.md](roadmap/tools/ingest-pack.md) | Ingest contributor zip → `frame_sources/` |
 | [roadmap/tools/](roadmap/tools/) | One detail page per tool |
