@@ -115,6 +115,10 @@ def test_replay_label_change_undo_skip(tmp_path):
     append(session, c1, "a.mp4", "label", game="CS2")
     state = replay(session)
     assert state[c1]["game"] == "CS2"
+    # Undo steps back one decision, so the earlier label is in effect again.
+    append(session, c1, "a.mp4", "undo")
+    state = replay(session)
+    assert state[c1]["game"] == "Valorant"
     append(session, c1, "a.mp4", "undo")
     state = replay(session)
     assert c1 not in state

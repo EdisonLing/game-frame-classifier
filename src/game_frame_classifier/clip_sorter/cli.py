@@ -48,6 +48,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    # File and Other names can hold any character; never crash on a narrow console code page.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(errors="replace")
     folder = args.folder.resolve()
     if not folder.is_dir():
         print(f"error: folder not found: {folder}", file=sys.stderr)
@@ -63,7 +67,7 @@ def main(argv: list[str] | None = None) -> int:
     tools = find_tools()
     hints = read_hints(args.hints) if args.hints else {}
     clips = scan(folder, recipe, tools, hints)
-    print(f"scanned {len(clips)} clips → session {session_dir}", flush=True)
+    print(f"scanned {len(clips)} clips -> session {session_dir}", flush=True)
 
     if args.apply:
         actions = plan(session_dir, folder, clips, source, data_root)
@@ -74,7 +78,7 @@ def main(argv: list[str] | None = None) -> int:
             print("(dry-run: nothing written)", flush=True)
             for row in report["rows"]:
                 print(
-                    f"  {row['rel_path']}: {row['decision']} → {row['result']}"
+                    f"  {row['rel_path']}: {row['decision']} -> {row['result']}"
                     + (f"  {row['destination']}" if row["destination"] else ""),
                     flush=True,
                 )

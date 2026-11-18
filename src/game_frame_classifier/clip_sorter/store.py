@@ -52,9 +52,9 @@ def append(
 def replay(session_dir: Path) -> dict[str, dict[str, Any]]:
     """Latest decision per quick_id; undo removes that clip's latest non-undo decision."""
     path = _decisions_path(session_dir)
-    state: dict[str, dict[str, Any]] = {}
+    history: dict[str, list[dict[str, Any]]] = {}
     if not path.is_file():
-        return state
+        return {}
     with open(path, newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
@@ -63,18 +63,20 @@ def replay(session_dir: Path) -> dict[str, dict[str, Any]]:
             if not qid:
                 continue
             if decision == "undo":
-                state.pop(qid, None)
+                # Undo steps back one decision: the one before it is in effect again.
+                if history.get(qid):
+                    history[qid].pop()
                 continue
             if decision not in VALID_DECISIONS:
                 continue
-            state[qid] = {
+            history.setdefault(qid, []).append({
                 "decision": decision,
                 "game": row.get("game") or "",
                 "other_name": row.get("other_name") or "",
                 "rel_path": row.get("rel_path") or "",
                 "utc": row.get("utc") or "",
-            }
-    return state
+            })
+    return {qid: entries[-1] for qid, entries in history.items() if entries}
 
 
 def first_undecided(clips: list[Clip], state: dict[str, dict[str, Any]]) -> int:
