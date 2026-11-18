@@ -13,7 +13,7 @@ Accessed **2026-11-18**. Rights labels:
 
 A public download page or paper is **not** permission. Prefer official project pages over Kaggle/Drive mirrors.
 
-**Related:** [source acquisition](../roadmap/tools/source-acquisition.md) · [data layout](../data-layout.md) · [D12](../design-decisions.md#d12--confirmed-sources-for-lol-overwatch-2-marvel-rivals) · [results](../results.md)
+**Related:** [use plan / justification draft](public-dataset-use-plan.md) · [source acquisition](../roadmap/tools/source-acquisition.md) · [data layout](../data-layout.md) · [D12](../design-decisions.md#d12--confirmed-sources-for-lol-overwatch-2-marvel-rivals) · [results](../results.md)
 
 ---
 
