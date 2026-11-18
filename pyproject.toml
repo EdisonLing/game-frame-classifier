@@ -13,6 +13,7 @@ dependencies = ["Pillow>=10.0"]
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
 train = ["numpy", "torch", "torchvision", "scikit-learn", "matplotlib"]
+fetch = ["yt-dlp"]
 
 [project.scripts]
 gfc-extract-frames = "game_frame_classifier.frame_extractor:main"
@@ -29,6 +30,7 @@ gfc-split = "game_frame_classifier.dataset_splitter:main"
 gfc-evaluate = "game_frame_classifier.evaluation:main"
 gfc-train-baseline = "game_frame_classifier.baseline:main"
 gfc-train-cnn = "game_frame_classifier.train:main"
+gfc-fetch-clips = "game_frame_classifier.clip_fetch.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

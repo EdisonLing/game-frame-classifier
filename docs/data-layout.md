@@ -9,6 +9,7 @@ Raw media stays **local** (`data/raw/`, `data/frames/`, `data/manifests/` are gi
 data/
   README.md          # short pointer (tracked)
   raw/               # source videos/clips (local only) — collect here
+  incoming_clips/    # gfc-fetch-clips downloads (local only), then gfc-sort-clips
   sorting/           # clip sorter sessions (sheets cache, decisions, apply reports)
   frame_sources/     # native-res stills per clip (local only) — D26; from gfc-ingest-pack / gfc-make-sources
   frames/            # 256×144 model-size frames derived from frame_sources (local only)
@@ -17,6 +18,18 @@ data/
 ```
 
 How the folders feed each other: [training-pipeline.md](training-pipeline.md).
+
+## Incoming clips (`data/incoming_clips/`)
+
+Downloads from contributor Medal links (`gfc-fetch-clips`), before labelling with the clip sorter.
+
+```text
+data/incoming_clips/
+  <source>/
+    <slug>__<YYYY-MM-DD>__<HH-MM-SS>__<clip_id>.mp4
+    fetch_log.csv      # one row per attempt
+    hints.csv          # file,game,other_name for gfc-sort-clips --hints
+```
 
 ## Frame sources (`data/frame_sources/`)
 

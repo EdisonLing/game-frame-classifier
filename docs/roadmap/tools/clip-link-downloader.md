@@ -1,7 +1,7 @@
 # Clip link downloader (`gfc-fetch-clips`)
 
 **Stage:** 1 — Data intake  
-**Status:** specified  
+**Status:** implemented  
 **Back to:** [ROADMAP.md](../ROADMAP.md) · [clip sorter](clip-sorter.md) · [make-sources](make-sources.md)
 
 ## What it does (high level)
@@ -97,11 +97,11 @@ No test touches the network: the downloader is called through a small wrapper th
 
 ## Acceptance checks
 
-- [ ] A links file of Medal clips downloads into `data/incoming_clips/<source>/` with game and time in each file name
-- [ ] `hints.csv` gives the sorter a suggestion for every Medal clip with a game in its link
-- [ ] Rerun skips finished links; rate limiting stops cleanly
-- [ ] No network in tests; no credentials anywhere
-- [ ] CLI entry `gfc-fetch-clips` in `pyproject.toml`; `fetch` optional dependency group
+- [x] A links file of Medal clips downloads into `data/incoming_clips/<source>/` with game and time in each file name
+- [x] `hints.csv` gives the sorter a suggestion for every Medal clip with a game in its link
+- [x] Rerun skips finished links; rate limiting stops cleanly
+- [x] No network in tests; no credentials anywhere
+- [x] CLI entry `gfc-fetch-clips` in `pyproject.toml`; `fetch` optional dependency group
 
 ## Build instructions
 

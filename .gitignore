@@ -227,6 +227,7 @@ data/frame_sources/
 data/sorting/
 data/manifests/
 data/runs/
+data/incoming_clips/
 data/bench_extract/
 data/bench_handoff/
 data/contributor_packs/
