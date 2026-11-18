@@ -122,7 +122,13 @@ def test_same_seed_identical_c_search(tmp_path):
     ).read_text(encoding="utf-8")
 
 
-def test_evaluation_missing_exits_zero(tmp_path, capsys):
+def test_evaluation_missing_exits_zero(tmp_path, capsys, monkeypatch):
+    import sys
+
+    monkeypatch.setitem(sys.modules, "game_frame_classifier.evaluation", None)
+    import game_frame_classifier
+
+    monkeypatch.delattr(game_frame_classifier, "evaluation", raising=False)
     data_root, split_dir = _build_colour_split(tmp_path, n_per_game=4)
     run_dir = tmp_path / "run_eval_msg"
     code = main(

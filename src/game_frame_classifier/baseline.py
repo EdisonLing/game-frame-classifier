@@ -289,6 +289,13 @@ def train_baseline(
         raise BaselineError("train split is empty", 2)
     if not val_rows:
         raise BaselineError("val split is empty", 2)
+    train_games = sorted({row.game for row in train_rows})
+    if len(train_games) < 2:
+        raise BaselineError(
+            f"train has only {len(train_games)} game ({', '.join(train_games)}); "
+            "the baseline needs at least two games to fit a classifier",
+            2,
+        )
 
     x_train = _features_for_rows(train_rows, data_root, bins)
     x_val = _features_for_rows(val_rows, data_root, bins)

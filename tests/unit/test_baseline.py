@@ -93,7 +93,14 @@ def test_load_baseline_predictor_round_trip(tmp_path):
     assert np.allclose(got, expected, atol=1e-6)
 
 
-def test_tag_in_run_id(tmp_path, capsys):
+def test_tag_in_run_id(tmp_path, capsys, monkeypatch):
+    import sys
+
+    # Simulate a checkout without evaluation.py: training still succeeds and says what to run.
+    monkeypatch.setitem(sys.modules, "game_frame_classifier.evaluation", None)
+    import game_frame_classifier
+
+    monkeypatch.delattr(game_frame_classifier, "evaluation", raising=False)
     data_root, split_dir = build_split_fixture(tmp_path, n_per_game=1, splits=("train", "val"))
     out = tmp_path / "runs" / "baseline" / "placeholder"
     code = main(
@@ -168,3 +175,33 @@ def test_never_opens_test_split(tmp_path, monkeypatch):
     assert "test_session" not in opened
     assert "test_source" not in opened
     assert opened == ["train", "val"]
+
+
+def test_end_of_training_evaluation_writes_val_results(tmp_path):
+    pytest.importorskip("matplotlib")
+    data_root, split_dir = build_split_fixture(tmp_path, n_per_game=2, splits=("train", "val"))
+    run_dir = tmp_path / "runs" / "baseline" / "r"
+    code = main(["--split-dir", str(split_dir), "--data-root", str(data_root),
+                 "--config", "config/baseline.json", "--out", str(run_dir)])
+    assert code == 0
+    metrics = json.loads((run_dir / "eval" / "val" / "metrics.json").read_text(encoding="utf-8"))
+    assert metrics["provenance"]["model_type"] == "baseline"
+    assert (run_dir / "eval" / "val" / "predictions.csv").is_file()
+
+
+def test_single_game_train_is_a_clear_error(tmp_path, capsys):
+    import csv
+
+    data_root, split_dir = build_split_fixture(tmp_path, n_per_game=2, splits=("train", "val"))
+    path = split_dir / "train.csv"
+    with path.open(encoding="utf-8", newline="") as fh:
+        rows = list(csv.DictReader(fh))
+    keep = [row for row in rows if row["game"] == "Valorant"]
+    with path.open("w", encoding="utf-8", newline="") as fh:
+        writer = csv.DictWriter(fh, fieldnames=list(rows[0]))
+        writer.writeheader()
+        writer.writerows(keep)
+    code = main(["--split-dir", str(split_dir), "--data-root", str(data_root),
+                 "--config", "config/baseline.json", "--out", str(tmp_path / "run")])
+    assert code == 2
+    assert "at least two games" in capsys.readouterr().err
