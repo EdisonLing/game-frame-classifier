@@ -3,6 +3,7 @@
 | Doc | What it is |
 |---|---|
 | [training-pipeline.md](training-pipeline.md) | How the tools connect from clips to model results: step order, files passed between them, shared conventions, open decisions |
+| [results.md](results.md) | Model results by run: data snapshot in general terms, settings, val metrics |
 | [amd-gpu-setup.md](amd-gpu-setup.md) | Training on a Radeon RX 9000 GPU under Windows: requirements, install, checks, troubleshooting |
 | [pipeline-status.md](pipeline-status.md) | What’s done vs missing (interim batch vs D26 frame_sources) |
 | [pipeline-timing.md](pipeline-timing.md) | Measured wall-time rates (extract sec per video-minute) |

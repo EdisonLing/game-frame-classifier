@@ -229,6 +229,7 @@ data/runs/
 data/bench_extract/
 data/bench_handoff/
 data/contributor_packs/
+data/archive/
 *.mp4
 *.mkv
 *.mov
