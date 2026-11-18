@@ -26,7 +26,7 @@ flowchart TD
 |---|---|---|---|---|---|---|
 | 1a | Personal clips to frame sources | `gfc-make-sources` | `data/raw/<Game>/<source>/` | `data/frame_sources/` | [make-sources.md](roadmap/tools/make-sources.md) | implemented |
 | 1b | Contributor packs to frame sources | `gfc-ingest-pack` | contributor zip | `data/frame_sources/` | [ingest-pack.md](roadmap/tools/ingest-pack.md) | implemented |
-| 2 | Derive model-size frames, build the index | `gfc-derive-frames` | `data/frame_sources/` | `data/frames/`, `clips_index`, `slots` | [derive-frames.md](roadmap/tools/derive-frames.md) | planned |
+| 2 | Derive model-size frames, build the index | `gfc-derive-frames` | `data/frame_sources/` | `data/frames/`, `clips_index`, `slots` | [derive-frames.md](roadmap/tools/derive-frames.md) | implemented |
 | 3 | Clean per slot | `gfc-clean-frames --slots` | `slots`, `clips_index`, `quarantine.csv` | `slots_clean` | [frame-cleaner.md](roadmap/tools/frame-cleaner.md) | slot mode planned |
 | 4 | Sessions, splits, tier assignment, data tables | `gfc-split` | `slots_clean`, `clips_index`, `config/split.json` | `splits/<split_id>/` | [dataset-splitter.md](roadmap/tools/dataset-splitter.md) | planned |
 | 5 | Loader and augmentation (library, no command) | — | split manifests, `data/frames/` | tensors / arrays in memory | [dataset-loader.md](roadmap/tools/dataset-loader.md) | implemented |

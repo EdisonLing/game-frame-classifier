@@ -35,7 +35,7 @@ python -m game_frame_classifier.derive_frames
 |---|---|
 | `--data-root` | Data root (default `data`) |
 | `--recipe` | Recipe file (default `config/recipe.json`); supplies `compact_size`, pad tolerance, scaler and JPEG quality |
-| `--game`, `--source` | Only this game / source |
+| `--game`, `--source` | Derive only this game / source; the tables are still rebuilt for every clip |
 | `--force` | Derive again even when the output folder is complete |
 | `--index-only` | Skip image work; rebuild the two tables from what is on disk |
 
@@ -46,8 +46,8 @@ Exit codes: `0` success, `1` at least one clip failed, `2` usage or missing inpu
 1. **Find clips.** Every `frame_sources/<Game>/<source>/<clip_key>/clip.json` where `<Game>` is one of the six games. Folders starting with `_` (`_other`, `_packs`, `_personal`, `_index`, `_stats`, `_tmp`) are not clips. `_other` material is not derived in v1.
 2. **Tiers.** Tier folders present in the clip folder. A clip must have `full` and at most one `crf<N>` tier matching the recipe. A clip with only `full` is a quick-mode clip (D04): it is kept, with `low_tier` empty. Anything else is reported and left out of the tables.
 3. **Slots.** Parse `bucket` from `<clip_key>_<tier>_b<bucket>.jpg`. A slot exists when every tier of the clip has that bucket (for a quick-mode clip, every `full` file is a slot). Unpaired files are counted and ignored.
-4. **Derive.** For each tier folder, `sourcing.derive` pad-then-scale (`pad` to 16:9 when the aspect is off by more than the tolerance, `scale=256:144:flags=bicubic`, JPEG `q2`) into `data/frames/<Game>/<source>/<clip_key>/<tier>/` with the **same file names**. A clip is skipped when its output folders already hold one image per slot per tier.
-5. **Already model-size sources.** When a clip's native size equals `compact_size` (a compact contributor pack), files are copied byte for byte and `derive_id` is `compact_passthrough`.
+4. **Derive.** For each tier folder, `sourcing.derive` pad-then-scale (`pad` to 16:9 when the aspect is off by more than the tolerance, `scale=256:144:flags=bicubic`, JPEG `q2`) into `data/frames/<Game>/<source>/<clip_key>/<tier>/` with the **same file names**. A clip is skipped when its output folders already hold one image per slot per tier. A clip is derived again when any source still is newer than its derived copy (re-extracted clips).
+5. **Already model-size sources.** When a clip's stills are already `compact_size` (a compact contributor pack; decided from the first `full` still, since `clip.json` reports the original video's size), files are copied byte for byte and `derive_id` is `compact_passthrough`.
 6. **Check.** Every derived image is read back with `sourcing.hashing.jpeg_size` and must be exactly 256×144.
 7. **Tables.** Rewritten in full on every run from the files on disk, sorted by game, source, `clip_key`, bucket.
 
