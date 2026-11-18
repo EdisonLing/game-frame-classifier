@@ -96,7 +96,45 @@ def load_config(path: Path) -> dict[str, Any]:
         raise SplitterError(f"invalid split config; missing {sorted(missing)} or unsupported schema", 2)
     if set(config["targets"]) != set(ASSIGNABLE_SPLITS):
         raise SplitterError("targets must contain train, val and test_session", 2)
+    config.setdefault("max_slots_per_source", 0)
+    config.setdefault("source_slots", {})
+    limits = [config["max_slots_per_source"], *config["source_slots"].values()]
+    if not isinstance(config["source_slots"], dict) or any(
+        not isinstance(value, int) or isinstance(value, bool) or value < 0 for value in limits
+    ):
+        raise SplitterError("max_slots_per_source and source_slots values must be whole numbers >= 0", 2)
     return config
+
+
+def source_limit(config: dict[str, Any], source: str) -> int:
+    """Most kept slots one source may contribute to one game; 0 = no limit."""
+    return int(config["source_slots"].get(source, config["max_slots_per_source"]))
+
+
+def apply_source_limits(slots: list[dict[str, Any]], config: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Keep at most the configured number of slots per (game, source), all splits together.
+
+    Slots are ranked by sha256("<seed>:<slot_id>") and the first N kept, so the slots used at a
+    lower limit are always a subset of those used at a higher one, and every clip is thinned
+    about evenly.
+    """
+    groups: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
+    for slot in slots:
+        groups[(slot["game"], slot["source"])].append(slot)
+    dropped_ids: set[str] = set()
+    dropped: list[dict[str, Any]] = []
+    for (game, source), group in groups.items():
+        limit = source_limit(config, source)
+        if not limit or len(group) <= limit:
+            continue
+        ranked = sorted(group, key=lambda slot: _sha256_text(f"{config['seed']}:{slot['slot_id']}"))
+        for slot in ranked[limit:]:
+            dropped_ids.add(slot["slot_id"])
+            dropped.append({
+                "slot_id": slot["slot_id"], "clip_key": slot["clip_key"], "game": game,
+                "source": source, "session": "", "split": "", "reason": "source_limit",
+            })
+    return [slot for slot in slots if slot["slot_id"] not in dropped_ids], dropped
 
 
 def build_sessions(clips: list[dict[str, str]], gap_min: float) -> list[dict[str, Any]]:
@@ -271,6 +309,7 @@ def run_split(data_root: Path, config_path: Path, *, plan: bool = False, reset: 
     unknown = sorted({clip["game"] for clip in clips.values()} - set(GAMES))
     if unknown:
         raise SplitterError(f"clips_index has games outside the label set: {', '.join(unknown)}", 2)
+    slots, limited = apply_source_limits(slots, config)
     sessions = build_sessions(list(clips.values()), float(config["session_gap_min"]))
     slot_by_clip: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for slot in slots:
@@ -288,7 +327,7 @@ def run_split(data_root: Path, config_path: Path, *, plan: bool = False, reset: 
     ledger = _load_ledger(ledger_path)
     heldout = {game: set(sources) for game, sources in config["holdout_sources"].items()}
     _validate_ledger(ledger, clips, heldout)
-    now, reassigned, unused = _now(), [], []
+    now, reassigned, unused = _now(), [], list(limited)
     assigned_slots: list[dict[str, Any]] = []
     session_of: dict[str, str] = {}
     filled = {game: {split: 0 for split in SPLITS} for game in GAMES}

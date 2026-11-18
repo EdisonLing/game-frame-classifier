@@ -262,3 +262,39 @@ def test_first_three_sessions_of_a_game_land_in_three_splits(tmp_path) -> None:
     write_split_inputs(data, [{"source": "a", "recorded_start_utc": f"2026-01-0{day}T00:00:00Z"} for day in range(1, 4)])
     run_split(data, write_split_config(tmp_path / "split.json"))
     assert sorted(row["split"] for row in _read(data / "manifests/splits/v1/ledger.csv")) == ["test_session", "train", "val"]
+
+
+def _used(out):
+    return {row["slot_id"]: row for split in ("train", "val", "test_session", "test_source") for row in _read(out / f"{split}.csv")}
+
+
+def test_source_limits_blanket_and_override_are_nested(tmp_path) -> None:
+    data = tmp_path / "data"
+    clips = [{"source": src, "recorded_start_utc": f"2026-01-0{day}T00:00:00Z"} for src in ("me", "friend") for day in range(1, 6)]
+    write_split_inputs(data, clips, slots_per_clip=10)
+    out = data / "manifests/splits/v1"
+    used = {}
+    for name, limit, override in (("all", 0, {}), ("wide", 30, {}), ("tight", 12, {}), ("mine", 12, {"me": 40})):
+        run_split(data, write_split_config(tmp_path / f"{name}.json", max_slots_per_source=limit, source_slots=override), reset=True)
+        used[name] = _used(out)
+    per_source = lambda rows, src: sum(row["source"] == src for row in rows.values())
+    assert per_source(used["all"], "me") == per_source(used["all"], "friend") == 50
+    assert per_source(used["wide"], "me") == per_source(used["wide"], "friend") == 30
+    assert per_source(used["tight"], "friend") == 12
+    assert (per_source(used["mine"], "me"), per_source(used["mine"], "friend")) == (40, 12)
+    assert set(used["tight"]) <= set(used["wide"]) <= set(used["all"])
+    reasons = {row["reason"] for row in _read(out / "unused.csv")}
+    assert reasons == {"source_limit"}
+
+
+def test_source_limits_are_validated_and_optional(tmp_path) -> None:
+    from game_frame_classifier.dataset_splitter import load_config
+
+    config = json.loads(write_split_config(tmp_path / "old.json").read_text(encoding="utf-8"))
+    config.pop("max_slots_per_source", None)
+    (tmp_path / "old.json").write_text(json.dumps(config), encoding="utf-8")
+    assert load_config(tmp_path / "old.json")["max_slots_per_source"] == 0
+    with pytest.raises(SplitterError, match="whole numbers"):
+        load_config(write_split_config(tmp_path / "bad.json", source_slots={"me": -1}))
+    with pytest.raises(SplitterError, match="whole numbers"):
+        load_config(write_split_config(tmp_path / "bad2.json", max_slots_per_source=1.5))

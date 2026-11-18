@@ -51,6 +51,8 @@ Exit codes: `0` success, `1` policy conflict (see Ledger rules), `2` usage or mi
   "session_gap_min": 30,
   "holdout_sources": {},
   "max_source_share": 1.0,
+  "max_slots_per_source": 0,
+  "source_slots": {},
   "test_design": ""
 }
 ```
@@ -62,6 +64,8 @@ Exit codes: `0` success, `1` policy conflict (see Ledger rules), `2` usage or mi
 | `session_gap_min` | Session rule (below) |
 | `holdout_sources` | `{ "<Game>": ["<source>", ...] }`; every clip of those sources for that game goes to `test_source` |
 | `max_source_share` | Largest share of one game's **train** slots a single source may hold; `1.0` = no cap |
+| `max_slots_per_source` | Most kept slots one source may contribute to one game, all splits together; `0` = no limit (section 3a). Optional, default `0` |
+| `source_slots` | `{ "<source>": N }`: a per-source limit that replaces `max_slots_per_source` for that source in every game (`0` = no limit). Optional, default `{}` |
 | `test_design` | One line stating the agreed held-out design (gate G1). Empty until agreed; `--freeze` refuses while empty |
 
 ## Behaviour
@@ -99,6 +103,10 @@ Every clip of the session is then written to the ledger.
 - A source with no ledger entries yet can be added to `holdout_sources` at any time, including after freezing.
 - `--reset` exists only for drafts.
 
+### 3a. Source limits (D33)
+
+Applied first, before sessions are assigned. For each `(game, source)` with a limit N (`source_slots[source]`, else `max_slots_per_source`; `0` = none) and more than N kept slots, the slots are ranked by `sha256("<seed>:<slot_id>")` and the first N used; the rest go to `unused.csv` with reason `source_limit`. Because the ranking is fixed, the slots used at a lower limit are always a subset of those used at a higher one, every clip is thinned about evenly, and the limit can be changed and the splitter rerun at any time without re-extracting. It is a count, so it gives every person the same weight regardless of how much footage they sent; ledger assignments are unaffected, since they are per clip.
+
 ### 3. Source cap (D33)
 
 Applied to `train` only, after assignment. The effective cap for a game is `max(max_source_share, 1 / k)`, where `k` is the number of sources with train slots in that game; a tighter cap cannot be met and would drop everything. While any source holds more than the effective cap of a game's used train slots, that source's slots are thinned by dropping those with the highest `sha256("<seed>:<slot_id>")` until it fits. Dropped slots are listed in `unused.csv` with reason `source_cap`. `val` and the test splits are never thinned. With the default `1.0` nothing is dropped and shares are only reported.
@@ -125,7 +133,7 @@ No downsampling. All kept slots are used (subject to the source cap); the traine
 | `sessions.csv` | `clip_key, game, source, session, recorded_start_utc, recorded_start_source, duration_s, slots_kept, split` |
 | `counts.csv` | `game, split, slots, slots_full, slots_low, slots_quick, clips, sessions, sources`, with `ALL` rows per game and per split |
 | `sources.csv` | `game, source, source_kind, split, slots, share` (share of that game's slots in that split) |
-| `unused.csv` | Kept slots not used, with reason (`source_cap`, `bridges_splits`) |
+| `unused.csv` | Kept slots not used, with reason (`source_limit`, `source_cap`, `bridges_splits`) |
 | `reassigned.csv` | Clips moved to a more held-out split, with the run time and reason |
 | `summary.json` | Resolved config, input file hashes, `split_hashes` (`{split name: SHA-256 of its CSV}`, read by `split_manifest.split_hashes`), counts, warnings, `frozen` |
 | `freeze.json` | Written by `--freeze`: time, git commit, `test_design` text |
