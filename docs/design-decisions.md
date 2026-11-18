@@ -340,10 +340,10 @@ Related open fork from proposal: **flatten vs global average pooling** — decid
 
 | | |
 |---|---|
-| **Status** | provisional — confirm before writing a report's data section |
+| **Status** | decided 2026-11-18 |
 | **Prompt** | Proposal: 15+ channels per game, each capped at about 1/15 of the game's frames. With a few sources per game that cap would discard most of the data |
 | **Options** | (A) Enforce 1/15 (needs public sources first, D12) (B) Enforce a relaxed cap (C) **No cap; report every source's share, warn above 1/15, report per-source accuracy** |
-| **Decision** | **(C) for now**, `max_source_share = 1.0`. Added 2026-11-17: optional per-source slot limits in `gfc-split` (`max_slots_per_source` for everyone, `source_slots` per person, all splits, nested by a seeded slot hash) to use a fixed amount from each person and change it without re-extracting; and `gfc-make-sources --budget-hours` to bound how much of my own footage is extracted. Both off by default. |
+| **Decision** | **Cap train only, never delete.** `max_source_share = 1/15` (proposal) on each game's train slots; when a game has fewer than 15 sources (1/15 < 1/k), each source is capped at the median of the game's per-source train counts instead of the equal share, so a source with one video does not trim everyone to its size. Optional `train_slots_per_source` caps each person's train slots by count; the stricter cap wins. Capped slots go to `unused.csv` and come back when a cap is raised; val and test are never thinned (2026-11-18). Earlier (2026-11-17), superseding (C) no cap: optional per-source slot limits in `gfc-split` (`max_slots_per_source` for everyone, `source_slots` per person, all splits, nested by a seeded slot hash) to use a fixed amount from each person and change it without re-extracting; and `gfc-make-sources --budget-hours` to bound how much of my own footage is extracted. Both off by default. |
 | **Rationale** | The cap thins `train` only, so it can be tightened at any time without touching a held-out set. Reporting the shares keeps the deviation from the proposal visible. |
 | **Date** | 2026-11-17 |
 | **Links** | [tools/dataset-splitter.md](roadmap/tools/dataset-splitter.md), D12 |
@@ -407,6 +407,7 @@ Related open fork from proposal: **flatten vs global average pooling** — decid
 |---|---|---|
 | 2026-11-17 | D23 | Hardware decided: **local RX 9070 XT (ROCm build of PyTorch) primary, local CPU fallback**, after measured setup, stability and timing on the GPU ([amd-gpu-setup.md](amd-gpu-setup.md)) |
 | 2026-11-17 | D32 | Opened as a **gate**: held-out test design must be agreed before the split is frozen or any test split is evaluated |
+| 2026-11-18 | D33 | **Decided:** 1/15 share cap on train with a median fallback below 15 sources, plus optional `train_slots_per_source`; train only, nothing deleted |
 | 2026-11-17 | D33 | Per-source slot limits in `gfc-split` (blanket and per source) and `gfc-make-sources --budget-hours` (cumulative, spread across days); off by default |
 | 2026-11-17 | D31 | Greedy fill seeds each split first: a game's first three sessions go to `train`, `val`, `test_session`, then fill by deficit |
 | 2026-11-17 | D29–D31, D38 | Decided: training reads only split manifests from frame sources; ledger-based split; shared evaluation and run layout |

@@ -11,6 +11,7 @@ import csv
 import datetime as dt
 import hashlib
 import json
+import statistics
 import subprocess
 import sys
 from collections import defaultdict
@@ -98,11 +99,12 @@ def load_config(path: Path) -> dict[str, Any]:
         raise SplitterError("targets must contain train, val and test_session", 2)
     config.setdefault("max_slots_per_source", 0)
     config.setdefault("source_slots", {})
-    limits = [config["max_slots_per_source"], *config["source_slots"].values()]
+    config.setdefault("train_slots_per_source", 0)
+    limits = [config["max_slots_per_source"], config["train_slots_per_source"], *config["source_slots"].values()]
     if not isinstance(config["source_slots"], dict) or any(
         not isinstance(value, int) or isinstance(value, bool) or value < 0 for value in limits
     ):
-        raise SplitterError("max_slots_per_source and source_slots values must be whole numbers >= 0", 2)
+        raise SplitterError("max_slots_per_source, train_slots_per_source and source_slots values must be whole numbers >= 0", 2)
     return config
 
 
@@ -243,10 +245,31 @@ def _write_sources(output: Path, used: list[dict[str, Any]]) -> list[dict[str, A
     return rows
 
 
-def _apply_source_cap(slots: list[dict[str, Any]], seed: int, requested_cap: float) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Thin only train slots whose source exceeds its feasible configured cap."""
+def _apply_source_cap(
+    slots: list[dict[str, Any]], seed: int, requested_cap: float, train_slots_cap: int = 0,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Thin train slots only, per game, so no source dominates (D33). Nothing else is touched.
+
+    1. ``train_slots_cap`` (when > 0): at most that many train slots per source.
+    2. Share cap: with k sources, ``requested_cap`` when it is at least 1/k. A lower cap cannot be
+       met (it would trim everyone to the smallest source), so each source is instead capped at
+       the median of the game's per-source train counts.
+
+    Within a source, the slots with the highest sha256("<seed>:<slot_id>") are dropped first.
+    """
     dropped: list[dict[str, Any]] = []
     removed: set[int] = set()
+
+    def drop(source_slots: list[dict[str, Any]], counts: dict[str, int], source: str) -> None:
+        candidate = source_slots[len(source_slots) - counts[source]]
+        counts[source] -= 1
+        removed.add(id(candidate))
+        dropped.append({
+            "slot_id": candidate["slot_id"], "clip_key": candidate["clip_key"],
+            "game": candidate["game"], "source": candidate["source"],
+            "session": candidate["session"], "split": "train", "reason": "source_cap",
+        })
+
     for game in GAMES:
         by_source: dict[str, list[dict[str, Any]]] = defaultdict(list)
         for slot in slots:
@@ -258,22 +281,25 @@ def _apply_source_cap(slots: list[dict[str, Any]], seed: int, requested_cap: flo
         for source_slots in by_source.values():
             source_slots.sort(key=lambda slot: _sha256_text(f"{seed}:{slot['slot_id']}"), reverse=True)
         counts = {source: len(source_slots) for source, source_slots in by_source.items()}
-        total = sum(counts.values())
-        cap = max(float(requested_cap), 1 / len(by_source))
-        while True:
-            offenders = [source for source, count in counts.items() if count > cap * total]
-            if not offenders:
-                break
-            source = max(offenders, key=lambda name: (counts[name], name))
-            candidate = by_source[source][len(by_source[source]) - counts[source]]
-            counts[source] -= 1
-            total -= 1
-            removed.add(id(candidate))
-            dropped.append({
-                "slot_id": candidate["slot_id"], "clip_key": candidate["clip_key"],
-                "game": candidate["game"], "source": candidate["source"],
-                "session": candidate["session"], "split": "train", "reason": "source_cap",
-            })
+        if train_slots_cap > 0:
+            for source in counts:
+                while counts[source] > train_slots_cap:
+                    drop(by_source[source], counts, source)
+        k = len(counts)
+        if float(requested_cap) >= 1 / k:
+            total = sum(counts.values())
+            while True:
+                offenders = [source for source, count in counts.items() if count > requested_cap * total]
+                if not offenders:
+                    break
+                source = max(offenders, key=lambda name: (counts[name], name))
+                drop(by_source[source], counts, source)
+                total -= 1
+        else:
+            limit = int(statistics.median(counts.values()))
+            for source in counts:
+                while counts[source] > limit:
+                    drop(by_source[source], counts, source)
     return [slot for slot in slots if id(slot) not in removed], dropped
 
 
@@ -388,7 +414,9 @@ def run_split(data_root: Path, config_path: Path, *, plan: bool = False, reset: 
                 row["label"] = GAMES.index(row["game"])
                 assigned_slots.append(row)
 
-    assigned_slots, capped_unused = _apply_source_cap(assigned_slots, int(config["seed"]), float(config["max_source_share"]))
+    assigned_slots, capped_unused = _apply_source_cap(
+        assigned_slots, int(config["seed"]), float(config["max_source_share"]), int(config["train_slots_per_source"]),
+    )
     unused.extend(capped_unused)
     output.mkdir(parents=True, exist_ok=True)
     for split in SPLITS:

@@ -199,14 +199,48 @@ def _train(source, count):
 
 
 def test_source_cap_default_and_infeasible_cap() -> None:
-    slots = _train("a", 8) + _train("b", 2) + [dict(_train("c", 1)[0], split="val")] * 1
+    slots = _train("a", 8) + _train("b", 2) + [dict(_train("c", 1)[0], split="val")]
     kept, dropped = _apply_source_cap(slots, 360, 1.0)
     assert kept == slots and dropped == []
-    # Two train sources: a cap of 0.1 is raised to 1/2.
+    # Two train sources: 0.1 is below 1/2, so each source is capped at the median count (5).
     kept, dropped = _apply_source_cap(slots, 360, 0.1)
-    assert sum(row["source"] == "a" for row in kept) == 2 and len(dropped) == 6
+    assert sum(row["source"] == "a" for row in kept) == 5 and len(dropped) == 3
+    assert sum(row["source"] == "b" for row in kept) == 2
     assert any(row["split"] == "val" for row in kept)
     assert _apply_source_cap(slots, 360, 0.1)[1] == dropped
+
+
+def test_median_fallback_ignores_one_tiny_source() -> None:
+    # 1/15 with three sources: capped at the median (40), not at the one-clip source's 3.
+    slots = _train("big", 100) + _train("mid", 40) + _train("tiny", 3)
+    kept, dropped = _apply_source_cap(slots, 360, 1 / 15)
+    count = lambda src: sum(row["source"] == src for row in kept)
+    assert (count("big"), count("mid"), count("tiny")) == (40, 40, 3)
+    assert {row["reason"] for row in dropped} == {"source_cap"}
+
+
+def test_train_frame_cap_per_source_leaves_other_splits() -> None:
+    slots = _train("a", 30) + _train("b", 10) + [dict(row, split="test_session") for row in _train("c", 50)]
+    kept, dropped = _apply_source_cap(slots, 360, 1.0, 12)
+    count = lambda src: sum(row["source"] == src for row in kept)
+    assert (count("a"), count("b"), count("c")) == (12, 10, 50)
+    assert len(dropped) == 18
+    # A tighter share cap still applies after the frame cap (0.5 of 22 -> a trimmed to b's 10).
+    kept, _ = _apply_source_cap(slots, 360, 0.5, 12)
+    assert sum(row["source"] == "a" for row in kept) == 10
+
+
+def test_raising_the_cap_brings_slots_back(tmp_path) -> None:
+    data = tmp_path / "data"
+    clips = [{"source": src, "recorded_start_utc": f"2026-01-0{day}T00:00:00Z"} for src, days in (("me", range(1, 9)), ("friend", range(1, 3))) for day in days]
+    write_split_inputs(data, clips, slots_per_clip=10)
+    out = data / "manifests/splits/v1"
+    run_split(data, write_split_config(tmp_path / "tight.json", max_source_share=1 / 15))
+    tight = {row["slot_id"] for row in _read(out / "train.csv")}
+    run_split(data, write_split_config(tmp_path / "open.json", max_source_share=1.0))
+    open_ = {row["slot_id"] for row in _read(out / "train.csv")}
+    assert tight < open_
+    assert (data / "manifests/slots_clean.csv").is_file()
 
 
 def test_tiers_do_not_change_when_clips_are_added(tmp_path) -> None:

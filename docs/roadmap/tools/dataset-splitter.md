@@ -50,8 +50,9 @@ Exit codes: `0` success, `1` policy conflict (see Ledger rules), `2` usage or mi
   "targets": { "train": 0.70, "val": 0.15, "test_session": 0.15 },
   "session_gap_min": 30,
   "holdout_sources": {},
-  "max_source_share": 1.0,
+  "max_source_share": 0.0667,
   "max_slots_per_source": 0,
+  "train_slots_per_source": 0,
   "source_slots": {},
   "test_design": ""
 }
@@ -63,7 +64,8 @@ Exit codes: `0` success, `1` policy conflict (see Ledger rules), `2` usage or mi
 | `targets` | Share of each game's slots per split, among sources that are not held out |
 | `session_gap_min` | Session rule (below) |
 | `holdout_sources` | `{ "<Game>": ["<source>", ...] }`; every clip of those sources for that game goes to `test_source` |
-| `max_source_share` | Largest share of one game's **train** slots a single source may hold; `1.0` = no cap |
+| `max_source_share` | Largest share of one game's **train** slots a single source may hold (section 3). Default `0.0667` (1/15, the proposal); `1.0` = no cap |
+| `train_slots_per_source` | Most **train** slots one source may hold in one game (section 3); `0` = no limit. Optional, default `0` |
 | `max_slots_per_source` | Most kept slots one source may contribute to one game, all splits together; `0` = no limit (section 3a). Optional, default `0` |
 | `source_slots` | `{ "<source>": N }`: a per-source limit that replaces `max_slots_per_source` for that source in every game (`0` = no limit). Optional, default `{}` |
 | `test_design` | One line stating the agreed held-out design (gate G1). Empty until agreed; `--freeze` refuses while empty |
@@ -109,7 +111,14 @@ Applied first, before sessions are assigned. For each `(game, source)` with a li
 
 ### 3. Source cap (D33)
 
-Applied to `train` only, after assignment. The effective cap for a game is `max(max_source_share, 1 / k)`, where `k` is the number of sources with train slots in that game; a tighter cap cannot be met and would drop everything. While any source holds more than the effective cap of a game's used train slots, that source's slots are thinned by dropping those with the highest `sha256("<seed>:<slot_id>")` until it fits. Dropped slots are listed in `unused.csv` with reason `source_cap`. `val` and the test splits are never thinned. With the default `1.0` nothing is dropped and shares are only reported.
+Applied to `train` only, after assignment, per game. `val` and the test splits are never thinned, and nothing is deleted: capped slots are listed in `unused.csv` with reason `source_cap`, and raising a cap and rerunning `gfc-split` uses them again. Within a source, the slots with the highest `sha256("<seed>:<slot_id>")` are dropped first.
+
+1. **Frame cap** (`train_slots_per_source` > 0): each source keeps at most that many train slots. A fixed number does not depend on how many people a game has.
+2. **Share cap.** With `k` sources with train slots in the game:
+   - `max_source_share` ≥ 1/k: while a source holds more than `max_source_share` of the game's used train slots, it is thinned until it fits.
+   - `max_source_share` < 1/k (for the default 1/15, any game with fewer than 15 sources): the share cannot be met without trimming every source down to the smallest one, so each source is instead capped at the **median** of the game's per-source train counts (after step 1). A source that sent a single video does not pull everyone down to its size.
+
+With both set, the stricter result applies. `max_source_share = 1.0` and `train_slots_per_source = 0` drop nothing.
 
 ### 4. Quality tier (D04)
 
@@ -178,7 +187,7 @@ Until G1 is recorded in `test_design`:
 
 ### Not a gate, but confirm before writing a report's data section (D33)
 
-The proposal promised 15 or more channels per game with each capped at 1/15. Current footage is a few people per game, where that cap would discard most of the data. Default now: no cap, shares reported, per-source accuracy in evaluation. Because the cap only thins `train`, it can be tightened later (for example once public sources are added under D12) without touching any held-out set.
+Decided 2026-11-18: the proposal's 1/15 share cap on `train`, with the median fallback while a game has fewer than 15 sources, plus an optional per-source train frame cap (section 3). The caps never touch a held-out set and never delete data, so they can be relaxed for a run with a larger cap. Shares are still reported and evaluation reports per-source accuracy.
 
 ## Working defaults
 
@@ -187,7 +196,7 @@ The proposal promised 15 or more channels per game with each capped at 1/15. Cur
 | Targets | 70 / 15 / 15 per game | Proposal's 60–70 % train for personal clips with a larger held-out share |
 | Session gap (D30) | 30 min | Per recording day; longer gap for long-match games |
 | Fill scope | Balance per game across all sources | Balance per game and source |
-| Source cap (D33) | Off (`1.0`) | `0.0667` (proposal) or a relaxed value |
+| Source cap (D33) | 1/15 on train, median fallback below 15 sources | `1.0` (off), a relaxed share, or `train_slots_per_source` |
 | Balance (D34) | Class weights | Downsample to the smallest class |
 
 ## Testing

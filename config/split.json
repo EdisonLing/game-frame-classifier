@@ -9,8 +9,9 @@
   },
   "session_gap_min": 30,
   "holdout_sources": {},
-  "max_source_share": 1.0,
+  "max_source_share": 0.0667,
   "max_slots_per_source": 0,
+  "train_slots_per_source": 0,
   "source_slots": {},
   "test_design": ""
 }
