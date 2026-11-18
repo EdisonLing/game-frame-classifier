@@ -40,7 +40,30 @@ Tiers half full, half CRF 45 in every split (D04). Test splits not opened (split
 - P2-a: Person 2, Frame Export Kit packs
 - P3: Person 3, Frame Export Kit packs
 
-**Run.** `gfc-train-baseline` with the default config: 16-bin RGB histograms, standardised, logistic regression, `C` picked on val (`C = 1.0`).
+**Extraction, recording properties and cleaning** (videos in train and val):
+
+- Native resolutions (videos): CS2: 1920x1080 27, 3840x2160 3; League_of_Legends: 1920x1080 5, 3840x2160 4; Valorant: 1920x1080 28, 2560x1440 28, 3620x2036 2, 3840x2160 5
+- Video codecs: CS2: av1 3, h264 27; League_of_Legends: av1 9; Valorant: av1 5, h264 58
+- Frame rate: CS2: variable 30; League_of_Legends: variable 9; Valorant: variable 63
+- Low-tier encoder (D28): CS2: h264_d3d12va 3, libx264 27; League_of_Legends: h264_d3d12va 9; Valorant: h264_d3d12va 5, libx264 58
+- Recording time taken from: CS2: container 27, filename 3; League_of_Legends: filename 9; Valorant: container 58, filename 5 (mtime is low trust)
+- Derive: pad16x9_bicubic_256x144_q2
+- Extraction recipe `2026-11-17b`: one sample per 5 s bucket, low tier CRF/QP 45, low-tier encode window 1.0 s
+- Cleaning (all frames at the time of the split): kept 2346 of 2705; rejected by reason {'duplicate': 359}; by game CS2 447 kept / 125 rejected, League_of_Legends 284 kept / 95 rejected, Valorant 1615 kept / 139 rejected; by person P1-a 615 / 159, P2-a 780 / 117, P2-b 12 / 0, P3 939 / 83
+- Cleaning rules: black if mean < 8.0 and std < 4.0; blurred if Laplacian variance < 400.0; near-duplicate if the 8x8 aHash is within 6 bits of an earlier kept frame of the same source; slots on the hand quarantine list
+
+**Possible shortcut.** Recording properties line up partly with the class: every League of Legends video is from P1-a (AV1, GPU-encoded low tier), while most Valorant and CS2 videos are contributor H.264 with a CPU-encoded low tier. A model could learn encoder or codec traces instead of the game. Checks: Valorant and CS2 each have both low-tier encoders, and `by_encoder` reports accuracy per encoder; the unseen-person check below uses a different person's recordings. League of Legends from another source is needed to rule it out for that class.
+
+**Never-seen test data.** `test_session` (365 slots, held-out recording sessions) exists and was not opened. The report's held-out design (G1: held-out sessions and held-out people, with source groups) is open; footage recorded after the split and an older PC's recordings (P1-b) are the planned new data.
+
+**Run.** `gfc-train-baseline` with the default config (`config/baseline.json`): 16-bin RGB histograms per channel (48 values, each channel summing to 1) of the 256×144 frame, standardised, multinomial logistic regression (lbfgs, `class_weight="balanced"`, max 2,000 iterations, seed 360), `C` picked on val from {0.01, 0.1, 1, 10} by macro-F1, ties to the smaller `C`.
+
+| C | Val accuracy | Val macro-F1 |
+|---:|---:|---:|
+| 0.01 | 0.694 | 0.644 |
+| 0.1 | 0.724 | 0.683 |
+| **1.0** | **0.732** | **0.697** |
+| 10 | 0.727 | 0.692 |
 
 **Val results.**
 
@@ -55,6 +78,13 @@ Tiers half full, half CRF 45 in every split (D04). Test splits not opened (split
 - League of Legends is separated by its palette. Valorant and CS2, two tactical shooters, are mostly confused with each other (53 Valorant frames called CS2, 17 CS2 frames called Valorant).
 - Example errors: a dark CS2 buy menu called League of Legends; gold-tinted Valorant frames called CS2; sandy CS2 maps called Valorant. These are the cases a colour histogram cannot separate and spatial layout should.
 - By tier: full 0.71, CRF 45 0.75 accuracy; the low tier does not hurt this model.
+- By low-tier encoder: GPU-encoded 0.848 (46 slots, mostly League of Legends), CPU-encoded 0.721 (136); within Valorant both are 0.722, so the gap follows the game, not the encoder.
+
+**Challenges.** One contributor pack was first refused at ingest (one video one frame short at its end; ingest now accepts this with a warning). Three games have no footage yet. Valorant is 70 % of val, which makes accuracy misleading on its own.
+
+**Reproduce.** `gfc-make-sources --budget-hours 0.5`, `gfc-ingest-pack` for each pack, `gfc-derive-frames`, `gfc-clean-frames --slots data/manifests/slots.csv`, `gfc-split` (`config/split.json`, split `v1`), `gfc-train-baseline --split-dir data/manifests/splits/v1 --tag first3games` at commit `d2a997c` (scikit-learn 1.8.0, NumPy 2.3.5); evaluation runs at the end of training.
+
+**Archive.** `data/archive/2026-11-18_baseline_first3games/` (local): run, split, manifests, figures (confusion matrix, example grid, class counts, example frames per class), README.
 
 The run folder, the split snapshot, figures (confusion matrix, example grid, class counts, example frames) and per-source tables are archived locally for the reports; the figures contain gameplay frames and stay out of the repo until they are checked for personal details.
 
@@ -68,10 +98,22 @@ The run folder, the split snapshot, figures (confusion matrix, example grid, cla
 
 | | |
 |---|---|
-| Model | FrameCNN: four blocks of 3×3 conv (no bias), batch norm, ReLU, 2×2 max pool (32, 64, 128, 256 channels); flatten (256×9×16 = 36,864 features), FC 256, ReLU, dropout 0.5, FC 6. 9,827,878 parameters, random initialisation |
+| Model | FrameCNN, below; random initialisation (PyTorch defaults), no pretrained weights |
 | Training | Adam, lr 1e-3, weight decay 1e-4, batch 64, cross-entropy with class weights from train (D34); augmentation on train only: zoom 0.85–1.15 and shift up to 2 % on half the frames, colour jitter on 80 %, no flips (D35) |
 | Selection | Best val macro-F1, early stop after 6 epochs without improvement; seed 360 |
 | Hardware | AMD RX 9070 XT, ROCm build of PyTorch 2.14; 30 s for the first epoch (kernel warm-up), 4.6 s for each later one, about 76 s in total |
+
+| Layer | Output (C×H×W) | Parameters |
+|---|---|---:|
+| Input: RGB 256×144, scaled to [-1, 1] | 3×144×256 | 0 |
+| Block 1: conv 3×3, 3→32 (no bias), batch norm, ReLU, max pool 2×2 | 32×72×128 | 928 |
+| Block 2: conv 3×3, 32→64, batch norm, ReLU, max pool | 64×36×64 | 18,560 |
+| Block 3: conv 3×3, 64→128, batch norm, ReLU, max pool | 128×18×32 | 73,984 |
+| Block 4: conv 3×3, 128→256, batch norm, ReLU, max pool | 256×9×16 | 295,424 |
+| Flatten (keeps where on screen each feature fired) | 36,864 | 0 |
+| FC 36,864→256, ReLU, dropout 0.5 | 256 | 9,437,440 |
+| FC 256→6 (logits; softmax for reporting only) | 6 | 1,542 |
+| **Total** | | **9,827,878** |
 
 **Training history.**
 
@@ -93,6 +135,8 @@ Best epoch 5 (first to reach 1.000); stopped after epoch 11. Train accuracy stay
 
 **Val results.** Accuracy 1.000 and macro-F1 1.000 (366 of 366); every game F1 1.00; full and CRF 45 tiers both 1.000. Against the baseline on the same rows: accuracy +0.268, macro-F1 +0.303, CS2 F1 +0.47 (`gfc-evaluate --compare`, same split hash).
 
+**Encoder check.** By low-tier encoder: CPU-encoded 1.000 (136 slots), GPU-encoded 1.000 (46); Valorant and CS2 each score 1.000 with both encoders, so the encoder is not what separates them. League of Legends comes from one person and one recorder only (see the baseline entry), so for that class the check is still open.
+
 **Why 1.000 is not a leak.** Checked after the run:
 
 | Check | Result |
@@ -101,6 +145,12 @@ Best epoch 5 (first to reach 1.000); stopped after epoch 11. Train accuracy stay
 | Val used in training | No; only train frames produce gradients. Val picks the best epoch and the stopping point only, and every epoch from 3 to 11 scores 0.98–1.00, so the choice adds almost no optimism |
 | Clips, sessions or slots shared between splits | 0 for every pair of train, val and test_session |
 | Near-duplicate frames across train and val | None: the closest train frame of the same source is at aHash distance 7 or more for every val frame (duplicates are ≤ 6); 247 of 366 are above 10 |
+
+**Challenges.** The first epoch takes 30 s for GPU kernel selection; a known MIOpen database warning on this GPU is harmless. A perfect val score had to be checked for leaks (table above) before it could be trusted.
+
+**Reproduce.** `.venv-rocm` Python: `python -m game_frame_classifier.train --split-dir data/manifests/splits/v1 --tag first3games` (`config/train_cnn.json`, seed 360) at commit `b3d9259`; evaluation on val runs at the end; `gfc-evaluate --compare <baseline run> <cnn run> --split val`.
+
+**Archive.** Same folder as the baseline: `cnn_run/` (run, history, curves, checkpoints, val evaluation) and `compare/`.
 
 **How to read it.** Three games with very different screen layouts (a top-down MOBA and two shooters with distinct HUDs) are an easy task for a model that sees layout; the CNN fixes exactly the cases the colour histogram could not separate. Val shares people with train (different sessions), and League of Legends has a single source, so this run does not show generalisation to new people or the hard pair (Overwatch 2 and Marvel Rivals). The next entry tests the first point.
 
@@ -161,3 +211,8 @@ Best epoch 5 (first to reach 1.000); stopped after epoch 11. Train accuracy stay
 - The CNN keeps 97 % on a person it never saw (best epoch 9 of 15); errors are mostly Valorant called CS2, the other shooter. Full and CRF 45 frames score the same (0.970 / 0.971). The weakest held-out videos are at 0.89–0.93; one single-frame video is wrong.
 - The baseline drops from 0.72 on val to 0.57 on the unseen person: palette depends more on a person's settings and maps than layout does.
 - One held-out person and one game: evidence against "it learned the recording setup", not yet a general result. The report's held-out test (G1) should hold out sources in several games, with source groups so one person cannot sit on both sides.
+- The held-out person's low tier is entirely CPU-encoded (475 slots, 0.971), the same encoder as most training Valorant, so this check does not separate encoder from person; it does show a different player, settings and recording hardware are handled.
+
+**Reproduce.** `gfc-split --config <split config>` with `split_id = "dev-srcout-1"`, `holdout_sources = {"Valorant": [<P3's source>]}` and a `test_design` marking it as a development check, then `gfc-split --config ... --freeze`; train both models with `--split-dir data/manifests/splits/dev-srcout-1`; `gfc-evaluate --run <run> --split test_source --reason "development check: ..."`. Commit `b3d9259`.
+
+**Archive.** `data/archive/2026-11-18_baseline_first3games/dev_srcout_1/` (local): split, config, both runs, access log.
