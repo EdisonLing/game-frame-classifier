@@ -9,7 +9,7 @@ What’s built vs missing for turning `data/raw/` (and contributor packs) into t
 | Path | Status | What it does |
 |---|---|---|
 | **Interim personal** | **Done** | `gfc-catalog-clips` → `gfc-batch-extract` → `data/frames/...` at **256×144** (plus optional `gfc-encode-quality`) |
-| **Target (D26)** | **Partial** | Same `sourcing` code: Frame Export Kit / `gfc-make-sources` → `data/frame_sources/` (native, full + crf45) → `gfc-derive-frames` 256×144 (D27) → slot-mode clean → split → models. **Ingest**, **`gfc-make-sources`** and **`gfc-derive-frames`** are implemented; everything after them is specified in [training-pipeline.md](training-pipeline.md) and not built yet |
+| **Target (D26)** | **Partial** | Same `sourcing` code: Frame Export Kit / `gfc-make-sources` → `data/frame_sources/` (native, full + crf45) → `gfc-derive-frames` 256×144 (D27) → slot-mode clean → split → models. **Ingest**, **`gfc-make-sources`** and **`gfc-derive-frames`** and slot-mode clean are implemented; everything after them is specified in [training-pipeline.md](training-pipeline.md) and not built yet |
 
 Batch extract is useful now; it is **not** the long-term personal path once `gfc-make-sources` lands.
 
@@ -28,10 +28,10 @@ flowchart LR
     Ing[Ingest pack → frame_sources]
     Make[gfc-make-sources]
     Der[gfc-derive-frames + slot index]
+    CS[Clean per slot]
   end
 
   subgraph later ["Specified, not built"]
-    CS[Clean per slot]
     S[gfc-split]
     L[Loader + augmentation]
     M[Baseline + CNN]
@@ -62,7 +62,7 @@ The interim branch (catalog → batch extract → clean → quality) ends at sin
 | Ingest pack | **Done** | `gfc-ingest-pack` → `data/frame_sources/` |
 | `gfc-make-sources` | **Done** | Personal clips into the same `frame_sources` layout (D26) |
 | `gfc-derive-frames` | **Done** | 256×144 frames + `clips_index` / `slots` tables (D27, D29) |
-| Clean, slot mode | **Specified** | One verdict per slot; dedupe across a source; quarantine list |
+| Clean, slot mode | **Done** | One verdict per slot; dedupe across a source; quarantine list (`gfc-clean-frames --slots`) |
 | `gfc-split` | **Specified** | Sessions, ledger splits, tier per slot, data tables; freeze gated on D32 |
 | Loader + augmentation | **Done** | `split_manifest` + `dataset`: one decode path for both models, train-only augmentation, test splits gated |
 | Baseline, CNN, evaluation | **Specified** | See [training-pipeline.md](training-pipeline.md) |
@@ -87,7 +87,7 @@ Ops quality on a single clip: `gfc-encode-quality … --tiers full low` (D04). M
 
 ## In short
 
-**Usable now:** catalog + batch extract + clean + quality + Frame Export Kit + ingest + `gfc-make-sources` + `gfc-derive-frames` + loader. **Specified and next to build:** slot-mode clean, `gfc-split`, evaluation, baseline, CNN. **Later:** D11 detector.
+**Usable now:** catalog + batch extract + clean + quality + Frame Export Kit + ingest + `gfc-make-sources` + `gfc-derive-frames` + slot-mode clean + loader. **Specified and next to build:** `gfc-split`, evaluation, baseline, CNN. **Later:** D11 detector.
 
 ## Related
 

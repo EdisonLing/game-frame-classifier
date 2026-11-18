@@ -81,7 +81,7 @@ Flags: `--slots` (required for this mode), `--data-root` (default: parent of the
 | Column | Notes |
 |---|---|
 | `keep` | `true` / `false` |
-| `reject_reason` | empty, `black`, `blur`, `duplicate`, `missing_file`, `manual:<reason>`; later `non_game` (D11 detector) |
+| `reject_reason` | empty, `black`, `blur`, `duplicate`, `missing_file` (the `full` image, or a non-empty `path_low`, is not on disk), `manual:<reason>`; later `non_game` (D11 detector) |
 | `dup_of` | `slot_id` of the kept twin for duplicates |
 | `luma_mean`, `luma_std`, `edge_var` | Measured values on the `full` image |
 | `ahash` | 16 hex digits |
