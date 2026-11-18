@@ -89,7 +89,7 @@ Ops quality on a single clip: `gfc-encode-quality … --tiers full low` (D04). M
 
 ## In short
 
-**Usable now:** catalog + batch extract + clean + quality + Frame Export Kit + ingest + `gfc-make-sources` + `gfc-derive-frames` + slot-mode clean + `gfc-split` + loader + `gfc-evaluate` + `gfc-train-baseline` + `gfc-train-cnn`. **Next:** Other as a seventh class (D24), source groups, held-out test design (G1). **Later:** D11 detector.
+**Usable now:** catalog + batch extract + clean + quality + Frame Export Kit + ingest + `gfc-make-sources` + `gfc-derive-frames` + slot-mode clean + `gfc-split` + loader + `gfc-evaluate` + `gfc-train-baseline` + `gfc-train-cnn`. **Next:** Other as a seventh class (D24), held-out test design (G1). **Later:** D11 detector.
 
 ## Related
 
