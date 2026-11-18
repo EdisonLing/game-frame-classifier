@@ -90,7 +90,7 @@ Quality tier is **not** an augmentation. It is fixed per slot by the splitter (D
 | Colour | Mild jitter as above | Stronger jitter; per-game gamma shifts |
 | Normalisation | Fixed 0.5 / 0.5 | Train-set mean and standard deviation |
 | Cache | RAM | None; or a single `.npy` memmap |
-| Workers | 0: decode is cached, and on CPU the model step (about 1 s per batch) dwarfs augmentation (about 0.1–0.15 s per batch of 64, measured) | On a GPU the step drops below the augmentation time, so the main process becomes the bottleneck. Then use 2–4 workers with `cache="none"` (each Windows worker would hold its own RAM cache), or a shared `.npy` memmap cache |
+| Workers | 0: decode is cached, and on CPU the model step (about 1 s per batch) dwarfs augmentation (about 0.1–0.15 s per batch of 64, measured) | On the GPU (D23) the step (0.078 s) is faster than augmentation, so the main process becomes the bottleneck. Measured: 2 workers on the **train** loader keep the GPU busy (4 gave no gain); the val loader stays at 0 (no augmentation, and Windows restarts workers every epoch, about 3–4 s). Worth it from roughly 5,000 train frames; below that 0 is faster. Use `cache="none"` with workers (each Windows worker would hold its own RAM cache), or a shared `.npy` memmap cache. See [CNN trainer, Training time](cnn-trainer.md#training-time) |
 
 ## Testing
 
@@ -106,7 +106,7 @@ Quality tier is **not** an augmentation. It is fixed per slot by the splitter (D
 
 ## Acceptance checks
 
-- [x] Baseline and CNN load frames through `split_manifest` only
+- [ ] Baseline and CNN load frames through `split_manifest` only (checked when they are built)
 - [x] Val and test pipelines contain no random step
 - [x] No resize anywhere in the loader
 - [x] Test splits cannot be opened by training code

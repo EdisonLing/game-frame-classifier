@@ -127,7 +127,7 @@ No downsampling. All kept slots are used (subject to the source cap); the traine
 | `sources.csv` | `game, source, source_kind, split, slots, share` (share of that game's slots in that split) |
 | `unused.csv` | Kept slots not used, with reason (`source_cap`, `bridges_splits`) |
 | `reassigned.csv` | Clips moved to a more held-out split, with the run time and reason |
-| `summary.json` | Resolved config, input file hashes, SHA-256 of each split file, counts, warnings, `frozen` |
+| `summary.json` | Resolved config, input file hashes, `split_hashes` (`{split name: SHA-256 of its CSV}`, read by `split_manifest.split_hashes`), counts, warnings, `frozen` |
 | `freeze.json` | Written by `--freeze`: time, git commit, `test_design` text |
 
 **Split file columns**
