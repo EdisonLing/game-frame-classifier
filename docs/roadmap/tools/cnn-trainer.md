@@ -1,7 +1,7 @@
 # CNN trainer (`gfc-train-cnn`)
 
 **Stage:** 5 — Primary model  
-**Status:** planned  
+**Status:** implemented  
 **Back to:** [ROADMAP.md](../ROADMAP.md) · [training pipeline](../../training-pipeline.md)
 
 ## What it does (high level)
@@ -177,7 +177,7 @@ The code is the same on every device; only the installed PyTorch build changes.
 
 Before trusting a GPU environment, run the system overfit test and one smoke run (`--epochs 2 --limit 256`) on it and compare the loss curve with the CPU run. Results are not bit-identical across devices.
 
-The RX 9070 XT environment was checked with a standalone script that builds the model from the layer table above (9,827,878 and 390,438 parameters, asserted), because the trainer is not implemented yet: the overfit setup (3 classes × 8 synthetic frames, 30 epochs, no augmentation, seed 360) reached train accuracy 1.0 on both GPU and CPU. With identical weights, eval-mode logits differ between devices by 1.6e-7 and per-layer gradients by at most 0.3 % relative; the epoch-by-epoch loss curves of the tiny overfit run differ in the first epochs (one optimiser step per epoch amplifies the float differences) and both reach a loss near 0 by epoch 4–6. The trainer's own smoke run on the GPU still has to be done once it exists.
+The RX 9070 XT environment was checked with a standalone script that builds the model from the layer table above (9,827,878 and 390,438 parameters, asserted) before the trainer landed: the overfit setup (3 classes × 8 synthetic frames, 30 epochs, no augmentation, seed 360) reached train accuracy 1.0 on both GPU and CPU. With identical weights, eval-mode logits differ between devices by 1.6e-7 and per-layer gradients by at most 0.3 % relative; the epoch-by-epoch loss curves of the tiny overfit run differ in the first epochs (one optimiser step per epoch amplifies the float differences) and both reach a loss near 0 by epoch 4–6. The trainer's own smoke run (`--epochs 2 --limit 256`, no augmentation, seed 360, synthetic six-class frames) on 2026-11-18 reported `device: cuda` under `.venv-rocm` (ROCm 10.1.0 / PyTorch 2.14); epoch 1 took about 20 s (warm-up) and epoch 2 about 0.5 s, against about 7.5 s then 5.0 s on CPU for the same command. Train loss fell on both devices (CPU 5.46 → 3.55; GPU 5.93 → 3.38); curves are close, not bit-identical.
 
 ## Config (`config/train_cnn.json`)
 
@@ -248,7 +248,7 @@ Checkpoints are loaded with `weights_only=True` plus the config stored beside th
 - [ ] Qualitative: correct and failure examples, look-alike pair included
 - [ ] Parameter count and layer table in the report
 - [ ] Challenges noted
-- [ ] CLI entry `gfc-train-cnn` in `pyproject.toml`
+- [x] CLI entry `gfc-train-cnn` in `pyproject.toml`
 
 ## Acceptance checks (final report extras)
 
