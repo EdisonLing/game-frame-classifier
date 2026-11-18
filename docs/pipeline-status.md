@@ -61,6 +61,7 @@ The interim branch (catalog → batch extract → clean → quality) ends at sin
 | Frame Export Kit | **Done** | Friends: clips → contributor zip (native full + crf45); v2.1.2: mixed-game folders (one pack per game from Medal-style names); GPU encode without B-frames, confirmed on an NVIDIA RTX 3060; total time printed and recorded in the pack (`timing.run_wall_s`, `estimated_s`) |
 | Ingest pack | **Done** | `gfc-ingest-pack` → `data/frame_sources/` |
 | `gfc-make-sources` | **Done** | Personal clips into the same `frame_sources` layout (D26) |
+| Clip link downloader (`gfc-fetch-clips`) | **Done (Medal only)** | Medal clip links → `data/incoming_clips/<source>/` + `hints.csv` for the sorter; only Medal is supported and tested; other sites refused (YouTube and others possible later) |
 | Clip sorter (`gfc-sort-clips`) | **Done** | Contact sheets + local page; label, disable or trash; apply copies into `data/raw/` and archives trash |
 | `gfc-derive-frames` | **Done** | 256×144 frames + `clips_index` / `slots` tables (D27, D29) |
 | Clean, slot mode | **Done** | One verdict per slot; dedupe across a source; quarantine list (`gfc-clean-frames --slots`) |
