@@ -109,7 +109,7 @@ For each pack manifest returned by the validator, open the zip again (or the ext
 2. **Contributor:** `contributor.handle` non-empty and normalises to itself; `contributor.contributor_id` is a non-empty string; `consent.data_use` is true (refuse otherwise).
 3. **Game:** `game.label` is one of the recipe games or `Other`. If `Other`, `game.other_name` must be a non-empty normalised other-name.
 4. **Recipe:** pack `recipe` is a dict with `recipe_id`. Diff against `--recipe` (field-by-field on the resolved recipe keys the export kit embeds). Record adds/changes in `ingest.json` as `recipe_diff`; do not fail.
-5. **Clips:** every `clips.json` row with `status == "ok"` has `clip_key`, `clip_sha256` (64 hex), `expected_slots` / `slots` ints with `slots >= 1`, and `slots == expected_slots` unless `unpaired_dropped` explains attrition — for v1 require `slots == expected_slots` and `unpaired_dropped == 0` (export kit already aims for this; refuse odd packs).
+5. **Clips:** every `clips.json` row with `status == "ok"` has `clip_key`, `clip_sha256` (64 hex), `expected_slots` / `slots` ints with `slots >= 1`, `slots <= expected_slots` and `unpaired_dropped == 0`. Fewer slots than expected is accepted with a warning (decided 2026-11-18): a bucket can have no frame, most often the last one when the video stream ends just before the container's duration; the kit marks such clips `ok`, and every slot present has both tiers. More slots than expected, or unpaired frames, refuse the pack.
 6. **Frames:** every `frames.json` row for those ok clips:
    - `rel_path` is under `frames/<clip_key>/<tier>/` and exists in the zip
    - file bytes length == `bytes`

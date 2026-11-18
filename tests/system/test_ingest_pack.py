@@ -63,7 +63,9 @@ def _minimal_jpeg(width: int = 8, height: int = 8) -> bytes:
     return bytes(patched)
 
 
-def make_pack_dir(tmp_path: Path, *, game: str = "Valorant", other_name: str | None = None) -> Path:
+def make_pack_dir(
+    tmp_path: Path, *, game: str = "Valorant", other_name: str | None = None, expected_slots: int = 1,
+) -> Path:
     jpeg = _minimal_jpeg(16, 9)
     sha = __import__("hashlib").sha256(jpeg).hexdigest()
     pack = tmp_path / PACK_ROOT
@@ -87,7 +89,7 @@ def make_pack_dir(tmp_path: Path, *, game: str = "Valorant", other_name: str | N
         "original_relpath": "clip.mp4",
         "aliases": [],
         "file_bytes": 1000,
-        "expected_slots": 1,
+        "expected_slots": expected_slots,
         "slots": 1,
         "unpaired_dropped": 0,
         "width": 16,
@@ -228,3 +230,26 @@ def test_bad_zip_writes_nothing(tmp_path):
     before = snapshot(data)
     assert main([str(z), "--data-root", str(data), "--recipe", str(ROOT / "config" / "recipe.json")]) == 1
     assert snapshot(data) == before
+
+
+def test_fewer_slots_than_expected_ingests_with_warning(tmp_path, capsys):
+    # The last bucket of a clip can have no frame; the slots present are all paired.
+    pack = make_pack_dir(tmp_path / "src", expected_slots=2)
+    z = tmp_path / "pack.zip"
+    write_pack_zip(pack, z)
+    data = tmp_path / "data"
+    assert main([str(z), "--data-root", str(data), "--recipe", str(ROOT / "config" / "recipe.json")]) == 0
+    out = capsys.readouterr().out
+    assert "1 of 2 slots" in out
+    assert "Valorant / contributor_alex" in out
+    record = json.loads((data / "frame_sources" / "_packs" / PACK_ID / "ingest.json").read_text(encoding="utf-8"))
+    assert any("1 of 2 slots" in w for w in record["warnings"])
+
+
+def test_more_slots_than_expected_is_refused(tmp_path):
+    pack = make_pack_dir(tmp_path / "src", expected_slots=0)
+    z = tmp_path / "pack.zip"
+    write_pack_zip(pack, z)
+    data = tmp_path / "data"
+    assert main([str(z), "--data-root", str(data), "--recipe", str(ROOT / "config" / "recipe.json")]) == 1
+    assert not (data / "frame_sources" / "Valorant").exists()

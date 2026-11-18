@@ -219,8 +219,13 @@ def check_pack_content(
         unpaired = clip.get("unpaired_dropped")
         if not isinstance(slots, int) or not isinstance(expected, int) or slots < 1:
             raise IngestError(f"bad slots for {clip_key}")
-        if slots != expected or unpaired not in (0, "0", "", None):
+        if slots > expected or unpaired not in (0, "0", "", None):
             raise IngestError(f"incomplete slots for {clip_key}")
+        if slots < expected:
+            # A bucket with no frame, usually the last one when the video stream ends just
+            # before the container's duration. Every slot that exists is paired, so the clip
+            # is usable; the gap is recorded.
+            warnings.append(f"{clip_key}: {slots} of {expected} slots (buckets without a frame)")
 
     ok_keys = {str(c["clip_key"]) for c in ok_clips}
     frames_ok = [f for f in frames if isinstance(f, dict) and str(f.get("clip_key")) in ok_keys]
@@ -401,6 +406,8 @@ def place_pack(
             "tool": {"name": "gfc-ingest-pack", "version": __version__},
             "source_zip": source_basename,
             "pack_id": pack_id,
+            "game": game,
+            "handle": handle,
             "recipe_diff": diffs,
             "warnings": warnings,
             "clips_placed": len(placed),
