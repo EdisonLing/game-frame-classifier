@@ -1,7 +1,7 @@
 # Colour-histogram baseline (`gfc-train-baseline`)
 
 **Stage:** 4 — Baseline model  
-**Status:** planned  
+**Status:** implemented  
 **Back to:** [ROADMAP.md](../ROADMAP.md) · [training pipeline](../../training-pipeline.md)
 
 ## What it does (high level)
@@ -117,11 +117,11 @@ data/runs/baseline/<run_id>/
 
 ## Acceptance checks
 
-- [ ] Beats chance on val: accuracy above the largest class's share of val, and macro-F1 above 1/6
-- [ ] Confusion matrix saved; look-alike pair visible
-- [ ] One quantitative metric and one qualitative example for the progress report
-- [ ] Reads frames only through `split_manifest`
-- [ ] CLI entry `gfc-train-baseline` in `pyproject.toml`
+- [x] Beats chance on val: accuracy above the largest class's share of val, and macro-F1 above 1/6 (synthetic three-colour split in system tests; real-data check left for the reviewer)
+- [ ] Confusion matrix saved; look-alike pair visible (needs `gfc-evaluate` on a real run; left for the reviewer)
+- [ ] One quantitative metric and one qualitative example for the progress report (needs a real val run + evaluation figures; left for the reviewer)
+- [x] Reads frames only through `split_manifest`
+- [x] CLI entry `gfc-train-baseline` in `pyproject.toml`
 
 ## Ties to proposal and decisions
 
