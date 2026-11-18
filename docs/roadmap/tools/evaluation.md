@@ -80,7 +80,7 @@ Evaluation knows nothing else about a model. A new model type only has to provid
 | `by_clip` | Accuracy and n per `clip_key`, worst first (per-video error breakdown) |
 | `provenance` | Run id, model type, split id, split hash, hash-changed flag, time |
 
-A class with no rows in the split gets `null` scores and is left out of macro-F1; this is stated in the file.
+A class with no rows in the split gets `null` scores and is left out of macro-F1; this is stated in the file. A class with rows that the model never predicts gets precision 0 and F1 0 and stays in macro-F1. `provenance.split_hash` is the hash of the split file actually scored (comparisons pair runs on it); `train_time_split_hash` is the one stored in `run.json`.
 
 ### Tier diagnostic (`tier_diagnostic.json`)
 

@@ -170,14 +170,13 @@ def _require_test_access(
 
 
 def _precision_recall_f1(tp: int, fp: int, fn: int) -> tuple[float | None, float | None, float | None]:
-    if tp + fp == 0 and tp + fn == 0:
+    """Scores for one class. No support: all null. A class with rows that is never predicted
+    gets precision 0 (not null), so it counts as F1 0 in macro-F1 instead of being dropped."""
+    if tp + fn == 0:
         return None, None, None
-    precision = (tp / (tp + fp)) if (tp + fp) > 0 else None
-    recall = (tp / (tp + fn)) if (tp + fn) > 0 else None
-    if precision is None or recall is None or (precision + recall) == 0:
-        f1 = None if (precision is None or recall is None) else 0.0
-    else:
-        f1 = 2.0 * precision * recall / (precision + recall)
+    precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+    recall = tp / (tp + fn)
+    f1 = 0.0 if precision + recall == 0 else 2.0 * precision * recall / (precision + recall)
     return precision, recall, f1
 
 
@@ -422,7 +421,9 @@ def build_metrics(
             "model_type": run["model_type"],
             "split_id": run["split_id"],
             "split": split,
-            "split_hash": dict(run["split_hashes"]).get(split),
+            # Hash of the split file actually scored; compare pairs runs on this.
+            "split_hash": split_hashes(split_dir).get(split),
+            "train_time_split_hash": dict(run["split_hashes"]).get(split),
             "hash_changed": hash_changed,
             "time": _utc_now(),
         },
@@ -585,7 +586,10 @@ def write_examples_png(
                 f"{row.game} → {LABELS[int(y_pred[i])]}\n{float(conf[i]):.2f}",
                 fontsize=7,
             )
-        row_axes[0].set_ylabel(title, fontsize=9)
+        # Axes are off, so a y-label would not show; label the row in axes coordinates.
+        label = title if picks else f"{title}: none"
+        row_axes[0].text(-0.08, 0.5, label, transform=row_axes[0].transAxes, rotation=90,
+                         ha="right", va="center", fontsize=9)
 
     _draw(axes[0], correct_pick, "correct")
     _draw(axes[1], wrong_pick, "wrong")

@@ -32,6 +32,16 @@ def _clear_registry():
     clear_predictor_registry()
 
 
+def test_class_never_predicted_counts_as_zero_f1():
+    # Class 1 has rows but is never predicted: F1 0, included in macro-F1 (not dropped).
+    y_true = np.asarray([0, 0, 1, 1], dtype=np.int64)
+    y_pred = np.asarray([0, 0, 0, 0], dtype=np.int64)
+    m = compute_classification_metrics(y_true, y_pred, labels=LABELS)
+    assert m["per_class"][LABELS[1]] == {"precision": 0.0, "recall": 0.0, "f1": 0.0, "support": 2}
+    f1_0 = 2 * 0.5 * 1.0 / 1.5
+    assert m["macro_f1"] == pytest.approx((f1_0 + 0.0) / 2)
+
+
 def test_metrics_hand_built_three_class():
     # 3 classes using first three labels; rest have zero support.
     y_true = np.asarray([0, 0, 1, 1, 2, 2], dtype=np.int64)
