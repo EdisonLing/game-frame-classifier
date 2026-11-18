@@ -242,12 +242,12 @@ Related open fork from proposal: **flatten vs global average pooling** — decid
 
 | | |
 |---|---|
-| **Status** | decided (product); implementation detail leaning |
+| **Status** | decided 2026-11-18: (C) both, trained class now |
 | **Prompt** | Auto-tagging / VOD % breakdowns must not force every frame into one of six games |
 | **Options** | (A) 6-way softmax + **unknown** when max confidence is below a threshold (B) True **7-way** trained class (`unknown`/`other`) with held-out non-target frames (C) Both: threshold now, trained other later |
-| **Decision** | Product output vocabulary includes **unknown** alongside the six games (prefer the name **unknown** over “other”). **Lean (C):** ship inference unknown via confidence threshold first (already on the clip-tagger / CNN roadmap); add a trained seventh class only if threshold-alone is too weak once real autotag eval exists. |
-| **Rationale** | Autotag and “% time per game” need an abstain path. Threshold unknown is cheap and matches existing hardening notes; a trained other class needs deliberate non-target data and can wait. |
-| **Date** | 2026-11-16 |
+| **Decision** | **(C), trained class now.** `Other` is a seventh trained class (label index 6, after the six games), trained on footage of anything that is not one of the six (other games, desktop, video), kept per content type as `_other/<name>/<source>/`. The confidence threshold stays on top of it (tuned on val, after first results): Other covers the kinds of non-target content seen in training, the threshold catches the rest. Evaluation tests Other on **held-out other content** (whole `_other/<name>` sources never trained on), so the score measures generalisation, not memorisation, and compares threshold-only with Other + threshold. Menus and lobbies of the six games stay with their game (D06); Other data must never contain the six games. Earlier lean (2026-11-16): threshold first, trained class only if needed. |
+| **Rationale** | A threshold on a 6-way softmax has never seen a negative example; CNNs are often confidently wrong on unfamiliar inputs (Nguyen et al. 2015), and maximum-softmax thresholding is only a baseline for detecting them (Hendrycks & Gimpel 2017). Training with broad examples of non-target content improves detection of unfamiliar inputs and carries over to kinds not seen in training (outlier exposure, Hendrycks et al. 2019); an explicit background class is a simple, standard form of it (Dhamija et al. 2018). Other games share the HUD cues the model uses (minimap, crosshair, weapon), so without counter-examples they would be confidently labelled as one of the six. Non-target footage is cheap to collect. |
+| **Date** | 2026-11-16; revised 2026-11-18 |
 | **Links** | [tools/clip-tagger.md](roadmap/tools/clip-tagger.md), [tools/cnn-trainer.md](roadmap/tools/cnn-trainer.md), root README “The trained model” |
 
 ### D25 — Frame Export Kit / contributor packs (frames zip, not masters)
@@ -407,6 +407,7 @@ Related open fork from proposal: **flatten vs global average pooling** — decid
 |---|---|---|
 | 2026-11-17 | D23 | Hardware decided: **local RX 9070 XT (ROCm build of PyTorch) primary, local CPU fallback**, after measured setup, stability and timing on the GPU ([amd-gpu-setup.md](amd-gpu-setup.md)) |
 | 2026-11-17 | D32 | Opened as a **gate**: held-out test design must be agreed before the split is frozen or any test split is evaluated |
+| 2026-11-18 | D24 | **Revised:** `Other` becomes a trained seventh class (anything not one of the six), with the confidence threshold kept on top; Other is evaluated on held-out other content |
 | 2026-11-18 | D33 | **Decided:** 1/15 share cap on train with a median fallback below 15 sources, plus optional `train_slots_per_source`; train only, nothing deleted |
 | 2026-11-17 | D33 | Per-source slot limits in `gfc-split` (blanket and per source) and `gfc-make-sources --budget-hours` (cumulative, spread across days); off by default |
 | 2026-11-17 | D31 | Greedy fill seeds each split first: a game's first three sessions go to `train`, `val`, `test_session`, then fill by deficit |
