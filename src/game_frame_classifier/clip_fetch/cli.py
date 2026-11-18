@@ -16,7 +16,7 @@ from .links import read_links
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="gfc-fetch-clips",
-        description="Download Medal clip links into data/incoming_clips/<source>/.",
+        description="Download Medal clip links into data/incoming_clips/<source>/. Only Medal clip links (medal.tv/games/<game>/clips/<id>) are supported for now; other sites are refused.",
     )
     p.add_argument("links", type=Path, help="Text file of links (one per line)")
     p.add_argument(

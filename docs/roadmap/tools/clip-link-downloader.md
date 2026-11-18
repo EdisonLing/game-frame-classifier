@@ -1,7 +1,7 @@
 # Clip link downloader (`gfc-fetch-clips`)
 
 **Stage:** 1 — Data intake  
-**Status:** implemented  
+**Status:** implemented (Medal only)  
 **Back to:** [ROADMAP.md](../ROADMAP.md) · [clip sorter](clip-sorter.md) · [make-sources](make-sources.md)
 
 ## What it does (high level)
@@ -14,10 +14,14 @@ Some contributors keep clips only in Medal's cloud. They have given permission t
 
 ## Scope and limits
 
-- **Medal clip links only.** Other links (Insights.gg and others) are attempted through yt-dlp's generic handling and reported as failed if that does not work; those clips are downloaded by hand or exported by the contributor.
+- **Medal clip links only, and only Medal has been tested.** Links to any other site are refused without a download attempt (status `failed`, error "unsupported site: only Medal clip links are supported for now"); those clips are downloaded by hand or exported by the contributor, then sorted with the [clip sorter](clip-sorter.md).
 - **No account access.** No logins, cookies or auth tokens; only clips that can be viewed through their link. Profile-wide downloads are out of scope.
 - **Permission is per contributor.** The link list is what the contributor shared; the tool does not discover other clips.
 - **Polite.** One download at a time, a pause between downloads, and a stop on rate limiting (HTTP 429).
+
+## Later: other sites
+
+YouTube, Insights.gg, Twitch clips and other video sites may be added later. Each needs its own link parsing, a way to get the game (from the link, the title or the page's category, or none and rely on the sorter), its own tests with a fake downloader, a check of that site's terms, and a real-link test with permission before it is enabled. Not built; until then the tool refuses those links.
 
 ## Spike results (2026-11-18, yt-dlp 2026.10.26, three permitted Medal links)
 

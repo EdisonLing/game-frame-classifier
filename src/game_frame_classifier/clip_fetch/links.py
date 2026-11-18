@@ -23,6 +23,9 @@ SLUG_GAMES: dict[str, str] = {
 }
 
 OLD_MEDAL_ERROR = "old Medal link form; ask for the full medal.tv/games/... link"
+# Only Medal clip links are supported and tested. Other sites (YouTube, Insights.gg, Twitch, ...)
+# may be added later, each with its own link parsing, game mapping and tests.
+UNSUPPORTED_SITE_ERROR = "unsupported site: only Medal clip links are supported for now"
 
 
 @dataclass(frozen=True)

@@ -13,6 +13,7 @@ from game_frame_classifier.clip_fetch.cli import main as cli_main
 from game_frame_classifier.clip_fetch.download import RateLimited, run
 from game_frame_classifier.clip_fetch.links import (
     OLD_MEDAL_ERROR,
+    UNSUPPORTED_SITE_ERROR,
     game_for_slug,
     parse_link,
     read_links,
@@ -310,6 +311,26 @@ def test_run_old_medal_form_failed(tmp_path: Path):
         row = next(csv.DictReader(f))
     assert row["status"] == "failed"
     assert row["error"] == OLD_MEDAL_ERROR
+
+
+def test_run_refuses_non_medal_links(tmp_path: Path):
+    calls = []
+
+    def downloader(*args, **kwargs):
+        calls.append(args)
+        raise AssertionError("must not download")
+
+    summary = run(
+        ["https://www.youtube.com/watch?v=AbCdEf12345", "https://example.com/v/1"],
+        tmp_path / "src",
+        downloader=downloader,
+        pause_s=0,
+        sleep=lambda _s: None,
+    )
+    assert summary.exit_code == 1 and calls == []
+    with open(tmp_path / "src" / "fetch_log.csv", encoding="utf-8", newline="") as f:
+        rows = list(csv.DictReader(f))
+    assert {row["error"] for row in rows} == {UNSUPPORTED_SITE_ERROR}
 
 
 def test_dry_run_no_download(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):

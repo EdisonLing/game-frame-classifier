@@ -14,7 +14,7 @@ from typing import Callable
 
 from game_frame_classifier.sourcing.hashing import sha256_file
 
-from .links import OLD_MEDAL_ERROR, LinkInfo, game_for_slug, parse_link
+from .links import OLD_MEDAL_ERROR, UNSUPPORTED_SITE_ERROR, LinkInfo, game_for_slug, parse_link
 from .naming import clip_file_name
 
 LOG_NAME = "fetch_log.csv"
@@ -226,10 +226,14 @@ def run(
         game, other_name = game_for_slug(info.slug)
         key = _skip_key(info)
 
-        if info.site == "medal" and info.clip_id and not info.slug:
-            # Old /clips/<id> form: never download
+        refusal = ""
+        if info.site != "medal":
+            refusal = UNSUPPORTED_SITE_ERROR
+        elif info.clip_id and not info.slug:
+            refusal = OLD_MEDAL_ERROR  # old /clips/<id> form: never download
+        if refusal:
             if dry_run:
-                print(f"dry-run fail  {url}  ({OLD_MEDAL_ERROR})")
+                print(f"dry-run fail  {url}  ({refusal})")
             else:
                 _append_log(
                     log_path,
@@ -242,7 +246,7 @@ def run(
                         "game": game,
                         "other_name": other_name,
                         "status": "failed",
-                        "error": OLD_MEDAL_ERROR,
+                        "error": refusal,
                     },
                 )
             summary.by_status["failed"] += 1
