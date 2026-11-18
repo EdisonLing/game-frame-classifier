@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import importlib
 import json
 import random
 import subprocess
@@ -71,18 +72,139 @@ def default_config_path() -> Path:
     return Path(__file__).resolve().parents[2] / "config" / "train_cnn.json"
 
 
-def _deep_update(base: dict[str, Any], updates: dict[str, Any], path: str = "") -> None:
-    """Merge updates into base; reject unknown keys."""
-    for key, value in updates.items():
-        full = f"{path}.{key}" if path else key
-        if key not in base:
-            raise TrainError(f"unknown config key: {full}")
-        if isinstance(value, dict):
-            if not isinstance(base[key], dict):
-                raise TrainError(f"cannot set object on non-object key: {full}")
-            _deep_update(base[key], value, full)
-        else:
-            base[key] = value
+def _require_keys(value: Any, expected: set[str], path: str) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise TrainError(f"{path} must be an object")
+    actual = set(value)
+    missing = expected - actual
+    unknown = actual - expected
+    if missing:
+        raise TrainError(f"{path} missing config keys: {sorted(missing)}")
+    if unknown:
+        raise TrainError(f"unknown config keys in {path}: {sorted(unknown)}")
+    return value
+
+
+def _whole_number(value: Any, path: str, minimum: int) -> int:
+    if type(value) is not int or value < minimum:
+        raise TrainError(f"{path} must be a whole number >= {minimum}")
+    return value
+
+
+def _probability(value: Any, path: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise TrainError(f"{path} must be a number in [0, 1]")
+    number = float(value)
+    if not 0.0 <= number <= 1.0:
+        raise TrainError(f"{path} must be a number in [0, 1]")
+    return number
+
+
+def _nonnegative_number(value: Any, path: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise TrainError(f"{path} must be a number >= 0")
+    number = float(value)
+    if number < 0:
+        raise TrainError(f"{path} must be a number >= 0")
+    return number
+
+
+def validate_config(config: dict[str, Any]) -> None:
+    """Validate the resolved config before constructing data or model objects."""
+    root = _require_keys(
+        config,
+        {
+            "schema",
+            "seed",
+            "model",
+            "optim",
+            "batch_size",
+            "epochs",
+            "early_stop_patience",
+            "class_weights",
+            "device",
+            "cache",
+            "num_workers",
+            "augment",
+        },
+        "config",
+    )
+    if root["schema"] != SCHEMA:
+        raise TrainError(f"config schema must be {SCHEMA!r}")
+    _whole_number(root["seed"], "seed", 0)
+    _whole_number(root["batch_size"], "batch_size", 1)
+    _whole_number(root["epochs"], "epochs", 1)
+    _whole_number(root["early_stop_patience"], "early_stop_patience", 1)
+    _whole_number(root["num_workers"], "num_workers", 0)
+    if root["class_weights"] != "balanced":
+        raise TrainError("class_weights must be 'balanced'")
+    if root["device"] not in ("auto", "cpu", "cuda", "mps"):
+        raise TrainError("device must be one of auto, cpu, cuda or mps")
+    if root["cache"] not in ("ram", "none"):
+        raise TrainError("cache must be 'ram' or 'none'")
+
+    model = _require_keys(
+        root["model"], {"channels", "fc_dim", "dropout", "head"}, "model"
+    )
+    channels = model["channels"]
+    if (
+        not isinstance(channels, list)
+        or len(channels) != 4
+        or any(type(channel) is not int or channel < 1 for channel in channels)
+    ):
+        raise TrainError("model.channels must contain four positive whole numbers")
+    _whole_number(model["fc_dim"], "model.fc_dim", 1)
+    _probability(model["dropout"], "model.dropout")
+    if model["head"] not in ("flatten", "gap"):
+        raise TrainError("model.head must be 'flatten' or 'gap'")
+
+    optim = _require_keys(root["optim"], {"name", "lr", "weight_decay"}, "optim")
+    if str(optim["name"]).lower() != "adam":
+        raise TrainError("optim.name must be 'adam'")
+    for key, minimum in (("lr", 0.0), ("weight_decay", 0.0)):
+        value = optim[key]
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TrainError(f"optim.{key} must be a number >= {minimum}")
+        if float(value) < minimum or (key == "lr" and float(value) == 0.0):
+            comparator = "> 0" if key == "lr" else ">= 0"
+            raise TrainError(f"optim.{key} must be {comparator}")
+
+    augment = _require_keys(
+        root["augment"],
+        {
+            "affine_p",
+            "scale",
+            "translate",
+            "jitter_p",
+            "brightness",
+            "contrast",
+            "saturation",
+            "hue",
+        },
+        "augment",
+    )
+    _probability(augment["affine_p"], "augment.affine_p")
+    _probability(augment["jitter_p"], "augment.jitter_p")
+    for key in ("brightness", "contrast", "saturation"):
+        _nonnegative_number(augment[key], f"augment.{key}")
+    hue = _probability(augment["hue"], "augment.hue")
+    if hue > 0.5:
+        raise TrainError("augment.hue must be in [0, 0.5]")
+    for key in ("scale", "translate"):
+        pair = augment[key]
+        if (
+            not isinstance(pair, list)
+            or len(pair) != 2
+            or any(
+                isinstance(value, bool) or not isinstance(value, (int, float))
+                for value in pair
+            )
+        ):
+            raise TrainError(f"augment.{key} must contain two numbers")
+    if not 0 < float(augment["scale"][0]) <= float(augment["scale"][1]):
+        raise TrainError("augment.scale must be positive and ordered")
+    if any(not 0 <= float(value) <= 1 for value in augment["translate"]):
+        raise TrainError("augment.translate values must be in [0, 1]")
 
 
 def _parse_set_value(raw: str) -> Any:
@@ -126,6 +248,7 @@ def apply_set_overrides(config: dict[str, Any], sets: Sequence[str]) -> dict[str
         if isinstance(cursor[leaf], dict) and not isinstance(value, dict):
             raise TrainError(f"cannot replace object key with scalar: {'.'.join(parts)}")
         cursor[leaf] = value
+    validate_config(out)
     return out
 
 
@@ -136,8 +259,7 @@ def load_config(path: Path) -> dict[str, Any]:
         data = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
         raise TrainError(f"invalid JSON config: {path}") from exc
-    if not isinstance(data, dict) or data.get("schema") != SCHEMA:
-        raise TrainError(f"config schema must be {SCHEMA!r}")
+    validate_config(data)
     return data
 
 
@@ -174,6 +296,7 @@ def git_commit() -> str | None:
     try:
         proc = subprocess.run(
             ["git", "rev-parse", "HEAD"],
+            cwd=Path(__file__).resolve().parents[2],
             capture_output=True,
             text=True,
             check=False,
@@ -323,33 +446,48 @@ def _run_eval(
 
 
 def plot_curves(history_rows: list[dict[str, Any]], best_epoch: int, out_path: Path) -> bool:
-    """Write curves.png; return False if matplotlib is missing."""
+    """Write curves.png without a GUI backend; plotting can never fail training."""
     try:
-        import matplotlib.pyplot as plt
-    except ImportError:
-        print("matplotlib not available; skipping curves.png")
+        from matplotlib.backends.backend_agg import FigureCanvasAgg
+        from matplotlib.figure import Figure
+
+        epochs = [int(r["epoch"]) for r in history_rows]
+        fig = Figure(figsize=(10, 4))
+        FigureCanvasAgg(fig)
+        axes = fig.subplots(1, 2)
+        axes[0].plot(
+            epochs, [float(r["train_loss"]) for r in history_rows], label="train"
+        )
+        axes[0].plot(
+            epochs, [float(r["val_loss"]) for r in history_rows], label="val"
+        )
+        axes[0].axvline(
+            best_epoch, color="gray", linestyle="--", label=f"best {best_epoch}"
+        )
+        axes[0].set_xlabel("epoch")
+        axes[0].set_ylabel("loss")
+        axes[0].legend()
+        axes[0].set_title("Loss")
+        axes[1].plot(
+            epochs, [float(r["train_acc"]) for r in history_rows], label="train"
+        )
+        axes[1].plot(
+            epochs, [float(r["val_acc"]) for r in history_rows], label="val"
+        )
+        axes[1].axvline(
+            best_epoch, color="gray", linestyle="--", label=f"best {best_epoch}"
+        )
+        axes[1].set_xlabel("epoch")
+        axes[1].set_ylabel("accuracy")
+        axes[1].legend()
+        axes[1].set_title("Accuracy")
+        fig.tight_layout()
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(out_path, dpi=150)
+        return True
+    except Exception as exc:  # plotting is an optional run artifact
+        print(f"could not write curves.png; skipping figure ({exc})")
         return False
-    epochs = [int(r["epoch"]) for r in history_rows]
-    fig, axes = plt.subplots(1, 2, figsize=(10, 4))
-    axes[0].plot(epochs, [float(r["train_loss"]) for r in history_rows], label="train")
-    axes[0].plot(epochs, [float(r["val_loss"]) for r in history_rows], label="val")
-    axes[0].axvline(best_epoch, color="gray", linestyle="--", label=f"best {best_epoch}")
-    axes[0].set_xlabel("epoch")
-    axes[0].set_ylabel("loss")
-    axes[0].legend()
-    axes[0].set_title("Loss")
-    axes[1].plot(epochs, [float(r["train_acc"]) for r in history_rows], label="train")
-    axes[1].plot(epochs, [float(r["val_acc"]) for r in history_rows], label="val")
-    axes[1].axvline(best_epoch, color="gray", linestyle="--", label=f"best {best_epoch}")
-    axes[1].set_xlabel("epoch")
-    axes[1].set_ylabel("accuracy")
-    axes[1].legend()
-    axes[1].set_title("Accuracy")
-    fig.tight_layout()
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out_path, dpi=150)
-    plt.close(fig)
-    return True
 
 
 def _checkpoint_payload(
@@ -360,7 +498,11 @@ def _checkpoint_payload(
     val_metrics: dict[str, float],
 ) -> dict[str, Any]:
     return {
-        "model_state": {k: v.detach().cpu() for k, v in model.state_dict().items()},
+        # clone() is required on CPU: detach().cpu() alone can share model storage,
+        # allowing later optimiser steps to overwrite the selected best epoch.
+        "model_state": {
+            k: v.detach().cpu().clone() for k, v in model.state_dict().items()
+        },
         "config": deepcopy(config),
         "labels": list(labels),
         "normalisation": deepcopy(NORMALISATION),
@@ -431,10 +573,7 @@ class CnnPredictor:
         out = np.zeros_like(stacked)
         for pos, row_i in enumerate(order):
             out[row_i] = stacked[pos]
-        # rows should already sum to ~1; renormalise lightly for float safety
-        row_sums = out.sum(axis=1, keepdims=True)
-        row_sums = np.where(row_sums == 0, 1.0, row_sums)
-        return out / row_sums
+        return out
 
 
 def load_cnn_predictor(run_dir: Path) -> CnnPredictor:
@@ -474,10 +613,14 @@ def train_run(
     run_id: str,
     limit: int | None = None,
 ) -> dict[str, Any]:
+    validate_config(config)
     split_dir = Path(split_dir).resolve()
     data_root = Path(data_root).resolve()
     run_dir = Path(run_dir)
-    run_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        run_dir.mkdir(parents=True, exist_ok=False)
+    except FileExistsError as exc:
+        raise TrainError(f"run folder already exists: {run_dir}") from exc
 
     seed = int(config["seed"])
     seed_everything(seed)
@@ -487,6 +630,8 @@ def train_run(
     val_rows = load_split(split_dir, "val")
     if limit is not None:
         n = int(limit)
+        if n < 1:
+            raise TrainError("limit must be a whole number >= 1")
         train_rows = train_rows[:n]
         val_rows = val_rows[:n]
     if not train_rows:
@@ -543,6 +688,9 @@ def train_run(
     epochs = int(config["epochs"])
     patience = int(config["early_stop_patience"])
     history_rows: list[dict[str, Any]] = []
+    history_path = run_dir / "history.csv"
+    with history_path.open("w", encoding="utf-8", newline="") as f:
+        csv.DictWriter(f, fieldnames=list(HISTORY_COLUMNS)).writeheader()
     best_f1 = -1.0
     best_epoch = 0
     best_state: dict[str, Any] | None = None
@@ -573,6 +721,9 @@ def train_run(
             "seconds": seconds,
         }
         history_rows.append(row)
+        with history_path.open("a", encoding="utf-8", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=list(HISTORY_COLUMNS))
+            writer.writerow({k: row[k] for k in HISTORY_COLUMNS})
         print(
             f"epoch {epoch:02d}  train_loss={train_loss:.4f} train_acc={train_acc:.4f}  "
             f"val_loss={val_loss:.4f} val_acc={val_acc:.4f} val_macro_f1={val_f1:.4f}  "
@@ -619,13 +770,6 @@ def train_run(
     save_checkpoint(run_dir / "best.pt", best_state)
     save_checkpoint(run_dir / "last.pt", last_payload)
 
-    history_path = run_dir / "history.csv"
-    with history_path.open("w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=list(HISTORY_COLUMNS))
-        writer.writeheader()
-        for row in history_rows:
-            writer.writerow({k: row[k] for k in HISTORY_COLUMNS})
-
     plot_curves(history_rows, best_epoch, run_dir / "curves.png")
 
     # Restore best weights into model for optional end-of-run evaluation
@@ -655,15 +799,18 @@ def train_run(
         json.dumps(run_meta, indent=2) + "\n", encoding="utf-8"
     )
 
+    module_name = "game_frame_classifier.evaluation"
     try:
-        from game_frame_classifier import evaluation  # type: ignore
-
-        evaluation.evaluate_run(run_dir, "val", data_root=data_root)
-    except ImportError:
+        evaluation = importlib.import_module(module_name)
+    except ModuleNotFoundError as exc:
+        if exc.name != module_name:
+            raise
         print(
             "evaluation not available yet; "
             "run gfc-evaluate --run <run_dir> --split val later"
         )
+    else:
+        evaluation.evaluate_run(run_dir, "val", data_root=data_root)
 
     return run_meta
 

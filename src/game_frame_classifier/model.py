@@ -21,7 +21,7 @@ def _conv_block(in_ch: int, out_ch: int) -> nn.Sequential:
 
 
 class FrameCNN(nn.Module):
-    """Four conv blocks then either flatten+FC or global average pooling."""
+    """Conv blocks then either flatten+FC or global average pooling."""
 
     def __init__(
         self,
@@ -37,6 +37,12 @@ class FrameCNN(nn.Module):
         if len(channels) < 1:
             raise ValueError("channels must be non-empty")
         self.channels = tuple(int(c) for c in channels)
+        if any(channel < 1 for channel in self.channels):
+            raise ValueError("channels must contain positive values")
+        pooled_h = 144 // (2 ** len(self.channels))
+        pooled_w = 256 // (2 ** len(self.channels))
+        if pooled_h < 1 or pooled_w < 1:
+            raise ValueError("too many channel blocks for a 144x256 input")
         self.fc_dim = int(fc_dim)
         self.dropout_p = float(dropout)
         self.head = head
@@ -51,8 +57,7 @@ class FrameCNN(nn.Module):
 
         last_ch = self.channels[-1]
         if head == "flatten":
-            # 144×256 → /16 after four pools → 9×16; channels[-1] × 9 × 16
-            flat_dim = last_ch * 9 * 16
+            flat_dim = last_ch * pooled_h * pooled_w
             self.classifier = nn.Sequential(
                 nn.Flatten(),
                 nn.Linear(flat_dim, self.fc_dim),

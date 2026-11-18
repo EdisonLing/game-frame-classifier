@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import csv
+import importlib.util
 import json
+import sys
+import types
 from pathlib import Path
 
 import pytest
@@ -16,6 +19,7 @@ from game_frame_classifier.dataset import FrameDataset, eval_transform, make_loa
 from game_frame_classifier.model import FrameCNN
 from game_frame_classifier.split_manifest import LABELS, load_split
 from game_frame_classifier.train import (
+    TrainError,
     load_cnn_predictor,
     load_config,
     main,
@@ -114,14 +118,15 @@ def test_overfit_and_run_folder(tmp_path):
     # Train accuracy of the final epoch should be high
     with (run_dir / "history.csv").open(encoding="utf-8", newline="") as f:
         rows = list(csv.DictReader(f))
-    assert len(rows) == int(meta["best_epoch"]) or len(rows) >= 1
+    assert 1 <= int(meta["best_epoch"]) <= len(rows)
     assert len(rows) == int(rows[-1]["epoch"])
     final_train_acc = float(rows[-1]["train_acc"])
     assert final_train_acc >= 0.95
 
     for name in ("run.json", "history.csv", "best.pt", "last.pt"):
         assert (run_dir / name).is_file(), name
-    # curves.png may be present when matplotlib is installed
+    if importlib.util.find_spec("matplotlib") is not None:
+        assert (run_dir / "curves.png").is_file()
     assert meta["model_type"] == "cnn"
     assert meta["param_count"] == 9_827_878
     assert Path(meta["split_dir"]).is_absolute()
@@ -188,7 +193,19 @@ def test_limit_flag(tmp_path):
     assert meta["n_val"] == 5
 
 
-def test_evaluation_missing_message(tmp_path, capsys):
+def test_evaluation_missing_message(tmp_path, capsys, monkeypatch):
+    import game_frame_classifier.train as train_mod
+
+    module_name = "game_frame_classifier.evaluation"
+
+    def _missing_evaluation(name):
+        assert name == module_name
+        raise ModuleNotFoundError(
+            f"No module named {module_name!r}",
+            name=module_name,
+        )
+
+    monkeypatch.setattr(train_mod.importlib, "import_module", _missing_evaluation)
     data_root, split_dir = _overfit_fixture(tmp_path, n_per_class=4, n_val=1)
     config = _no_aug_config(Path("config/train_cnn.json"))
     config["epochs"] = 1
@@ -229,9 +246,131 @@ def test_curves_skipped_without_matplotlib(tmp_path, monkeypatch, capsys):
     assert not (run_dir / "curves.png").exists()
     assert (run_dir / "history.csv").is_file()
     out = capsys.readouterr().out
-    assert "matplotlib not available" in out
+    assert "skipping figure" in out
     # restore is automatic via monkeypatch; ensure module still importable
     assert train_mod is not None
+
+
+def test_history_is_appended_before_later_epoch_failure(tmp_path, monkeypatch):
+    import game_frame_classifier.train as train_mod
+
+    data_root, split_dir = _overfit_fixture(tmp_path, n_per_class=4, n_val=1)
+    config = _no_aug_config(Path("config/train_cnn.json"))
+    config["epochs"] = 2
+    run_dir = tmp_path / "run-interrupted"
+    eval_calls = 0
+
+    monkeypatch.setattr(
+        train_mod,
+        "_run_train_epoch",
+        lambda *_args, **_kwargs: (1.25, 0.5),
+    )
+
+    def _eval_then_fail(*_args, **_kwargs):
+        nonlocal eval_calls
+        eval_calls += 1
+        if eval_calls == 2:
+            raise RuntimeError("simulated epoch failure")
+        empty = np.array([], dtype=np.int64)
+        return 1.0, 0.5, 0.5, empty, empty
+
+    monkeypatch.setattr(train_mod, "_run_eval", _eval_then_fail)
+    with pytest.raises(RuntimeError, match="simulated epoch failure"):
+        train_run(
+            split_dir=split_dir,
+            data_root=data_root,
+            config=config,
+            run_dir=run_dir,
+            run_id="interrupted",
+        )
+
+    with (run_dir / "history.csv").open(encoding="utf-8", newline="") as f:
+        rows = list(csv.DictReader(f))
+    assert len(rows) == 1
+    assert rows[0]["epoch"] == "1"
+
+
+def test_best_checkpoint_keeps_selected_epoch_weights(tmp_path, monkeypatch):
+    import game_frame_classifier.train as train_mod
+
+    data_root, split_dir = _overfit_fixture(tmp_path, n_per_class=2, n_val=1)
+    config = _no_aug_config(Path("config/train_cnn.json"))
+    config["epochs"] = 5
+    config["early_stop_patience"] = 2
+    f1_values = iter((0.8, 0.3, 0.2))
+
+    def _mutate_model(model, *_args, **_kwargs):
+        with torch.no_grad():
+            next(model.parameters()).add_(1.0)
+        return 1.0, 0.5
+
+    def _controlled_eval(*_args, **_kwargs):
+        empty = np.array([], dtype=np.int64)
+        return 1.0, 0.5, next(f1_values), empty, empty
+
+    monkeypatch.setattr(train_mod, "_run_train_epoch", _mutate_model)
+    monkeypatch.setattr(train_mod, "_run_eval", _controlled_eval)
+    run_dir = tmp_path / "run-best"
+    train_run(
+        split_dir=split_dir,
+        data_root=data_root,
+        config=config,
+        run_dir=run_dir,
+        run_id="best",
+    )
+
+    best = torch.load(run_dir / "best.pt", map_location="cpu", weights_only=True)
+    last = torch.load(run_dir / "last.pt", map_location="cpu", weights_only=True)
+    assert best["epoch"] == 1
+    assert last["epoch"] == 3
+    first_key = next(iter(best["model_state"]))
+    assert not torch.equal(
+        best["model_state"][first_key],
+        last["model_state"][first_key],
+    )
+
+
+def test_import_error_inside_evaluation_is_not_hidden(tmp_path, monkeypatch):
+    data_root, split_dir = _overfit_fixture(tmp_path, n_per_class=4, n_val=1)
+    config = _no_aug_config(Path("config/train_cnn.json"))
+    config["epochs"] = 1
+
+    fake = types.ModuleType("game_frame_classifier.evaluation")
+
+    def _raise_import_error(*_args, **_kwargs):
+        raise ImportError("evaluation dependency is broken")
+
+    fake.evaluate_run = _raise_import_error
+    monkeypatch.setitem(sys.modules, "game_frame_classifier.evaluation", fake)
+
+    with pytest.raises(ImportError, match="evaluation dependency is broken"):
+        train_run(
+            split_dir=split_dir,
+            data_root=data_root,
+            config=config,
+            run_dir=tmp_path / "run-broken-eval",
+            run_id="broken-eval",
+        )
+
+
+def test_existing_run_folder_is_refused(tmp_path):
+    data_root, split_dir = _overfit_fixture(tmp_path, n_per_class=2, n_val=1)
+    config = _no_aug_config(Path("config/train_cnn.json"))
+    config["epochs"] = 1
+    run_dir = tmp_path / "existing-run"
+    run_dir.mkdir()
+    marker = run_dir / "keep.txt"
+    marker.write_text("do not overwrite\n", encoding="utf-8")
+
+    with pytest.raises(TrainError, match="run folder already exists"):
+        train_run(
+            split_dir=split_dir,
+            data_root=data_root,
+            config=config,
+            run_dir=run_dir,
+            run_id="existing",
+        )
+    assert marker.read_text(encoding="utf-8") == "do not overwrite\n"
 
 
 def test_cli_set_gap_and_main(tmp_path):
