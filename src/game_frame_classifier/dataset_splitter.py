@@ -24,6 +24,9 @@ from game_frame_classifier.sourcing.manifests import write_json, write_table
 SPLITS = ("train", "val", "test_session", "test_source")
 ASSIGNABLE_SPLITS = SPLITS[:3]
 SPLIT_RANK = {name: index for index, name in enumerate(SPLITS)}
+# Below this many groups in a game the median of their counts is just their mean, so one small
+# source would cut a large one in half; with one or two groups the share cap is not applied.
+MEDIAN_MIN_GROUPS = 3
 SPLIT_COLUMNS = (
     "slot_id", "clip_key", "bucket", "target_time_s", "game", "label", "source",
     "source_kind", "session", "split", "tier", "path", "path_full", "path_low",
@@ -337,7 +340,8 @@ def _apply_source_cap(
     1. ``train_slots_cap`` (when > 0): at most that many train slots per group.
     2. Share cap: with k groups, ``requested_cap`` when it is at least 1/k. A lower cap cannot be
        met (it would trim everyone to the smallest group), so each group is instead capped at
-       the median of the game's per-group train counts.
+       the median of the game's per-group train counts, when k >= 3; with one or two groups no
+       share cap applies (the median of two counts is their mean).
 
     Within a group, slots are pooled across its sources and the highest sha256("<seed>:<slot_id>")
     are dropped first. With an empty ``source_groups`` each source is its own group.
@@ -382,7 +386,7 @@ def _apply_source_cap(
                 group = max(offenders, key=lambda name: (counts[name], name))
                 drop(by_group[group], counts, group)
                 total -= 1
-        else:
+        elif k >= MEDIAN_MIN_GROUPS:
             limit = int(statistics.median(counts.values()))
             for group in counts:
                 while counts[group] > limit:

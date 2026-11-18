@@ -205,12 +205,17 @@ def test_source_cap_default_and_infeasible_cap() -> None:
     slots = _train("a", 8) + _train("b", 2) + [dict(_train("c", 1)[0], split="val")]
     kept, dropped = _apply_source_cap(slots, 360, 1.0)
     assert kept == slots and dropped == []
-    # Two train sources: 0.1 is below 1/2, so each source is capped at the median count (5).
+    # Two train sources: 0.1 is below 1/2, and the median of two counts is their mean, so no
+    # share cap applies with fewer than three groups.
     kept, dropped = _apply_source_cap(slots, 360, 0.1)
+    assert kept == slots and dropped == []
+    # Three train sources: capped at the median count (5), deterministically.
+    slots3 = slots + _train("d", 5)
+    kept, dropped = _apply_source_cap(slots3, 360, 0.1)
     assert sum(row["source"] == "a" for row in kept) == 5 and len(dropped) == 3
     assert sum(row["source"] == "b" for row in kept) == 2
     assert any(row["split"] == "val" for row in kept)
-    assert _apply_source_cap(slots, 360, 0.1)[1] == dropped
+    assert _apply_source_cap(slots3, 360, 0.1)[1] == dropped
 
 
 def test_median_fallback_ignores_one_tiny_source() -> None:
@@ -235,7 +240,7 @@ def test_train_frame_cap_per_source_leaves_other_splits() -> None:
 
 def test_raising_the_cap_brings_slots_back(tmp_path) -> None:
     data = tmp_path / "data"
-    clips = [{"source": src, "recorded_start_utc": f"2026-01-0{day}T00:00:00Z"} for src, days in (("me", range(1, 9)), ("friend", range(1, 3))) for day in days]
+    clips = [{"source": src, "recorded_start_utc": f"2026-01-0{day}T00:00:00Z"} for src, days in (("me", range(1, 9)), ("friend", range(1, 3)), ("pal", range(1, 4))) for day in days]
     write_split_inputs(data, clips, slots_per_clip=10)
     out = data / "manifests/splits/v1"
     run_split(data, write_split_config(tmp_path / "tight.json", max_source_share=1 / 15))
@@ -363,12 +368,15 @@ def test_source_cap_per_group_share_and_median() -> None:
     assert sum(row["source"] in {"tester", "tester_oldpc"} for row in kept) == 20
     assert sum(row["source"] == "friend" for row in kept) == 20
     assert {row["reason"] for row in dropped} == {"source_cap"}
-    # Median fallback: 1/15 with three groups would use median; with two groups (pair + friend)
-    # and counts 80 and 20, median is 50 — pair trimmed to 50, friend untouched.
+    # 1/15 with two groups (pair + friend): below three groups no share cap applies.
     kept, dropped = _apply_source_cap(slots, 360, 1 / 15, source_to_group=mapping)
-    assert sum(row["source"] in {"tester", "tester_oldpc"} for row in kept) == 50
+    assert kept == slots and dropped == []
+    # A third group brings the median fallback back: counts 80, 20, 30 -> median 30.
+    slots3 = slots + _train("pal", 30)
+    kept, dropped = _apply_source_cap(slots3, 360, 1 / 15, source_to_group=mapping)
+    assert sum(row["source"] in {"tester", "tester_oldpc"} for row in kept) == 30
     assert sum(row["source"] == "friend" for row in kept) == 20
-    assert len(dropped) == 30
+    assert len(dropped) == 50
 
 
 def test_train_frame_cap_and_nested_raising_per_group() -> None:

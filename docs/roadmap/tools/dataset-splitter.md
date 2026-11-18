@@ -118,7 +118,7 @@ Applied to `train` only, after assignment, per game. `val` and the test splits a
 1. **Frame cap** (`train_slots_per_source` > 0): each group keeps at most that many train slots. A fixed number does not depend on how many people a game has.
 2. **Share cap.** With `k` groups with train slots in the game:
    - `max_source_share` ≥ 1/k: while a group holds more than `max_source_share` of the game's used train slots, it is thinned until it fits.
-   - `max_source_share` < 1/k (for the default 1/15, any game with fewer than 15 groups): the share cannot be met without trimming every group down to the smallest one, so each group is instead capped at the **median** of the game's per-group train counts (after step 1). A person that sent a single video does not pull everyone down to their size.
+   - `max_source_share` < 1/k (for the default 1/15, any game with fewer than 15 groups): the share cannot be met without trimming every group down to the smallest one, so each group is instead capped at the **median** of the game's per-group train counts (after step 1), when the game has at least three groups. A person that sent a single video does not pull everyone down to their size. With one or two groups no share cap applies: the median of two counts is their mean, so one small group would halve a large one (decided 2026-11-18). `train_slots_per_source` still applies.
 
 With both set, the stricter result applies. `max_source_share = 1.0` and `train_slots_per_source = 0` drop nothing. A source listed in two groups, or a group name equal to a source name that is not that group's only member, is an input error (exit 2).
 
