@@ -189,6 +189,10 @@ Until G1 is recorded in `test_design`:
 
 Decided 2026-11-18: the proposal's 1/15 share cap on `train`, with the median fallback while a game has fewer than 15 sources, plus an optional per-source train frame cap (section 3). The caps never touch a held-out set and never delete data, so they can be relaxed for a run with a larger cap. Shares are still reported and evaluation reports per-source accuracy.
 
+## Later: source groups
+
+One person can appear as several sources (their own clips from different years or PCs, or a contributor who sent both a kit pack and raw clips). Planned config key `source_groups`: `{ "<group>": ["<source>", ...] }`. Grouped sources count as one source for the train cap (D33) and for held-out sources (`holdout_sources` names a group), so one person cannot hold several shares or sit on both sides of a held-out test. Sources keep their own names in every table. Run with and without the grouping to see whether one person's larger share changes the results. Not built yet.
+
 ## Working defaults
 
 | | Default | Alternative |
