@@ -216,3 +216,103 @@ Best epoch 5 (first to reach 1.000); stopped after epoch 11. Train accuracy stay
 **Reproduce.** `gfc-split --config <split config>` with `split_id = "dev-srcout-1"`, `holdout_sources = {"Valorant": [<P3's source>]}` and a `test_design` marking it as a development check, then `gfc-split --config ... --freeze`; train both models with `--split-dir data/manifests/splits/dev-srcout-1`; `gfc-evaluate --run <run> --split test_source --reason "development check: ..."`. Commit `b3d9259`.
 
 **Archive.** `data/archive/2026-11-18_baseline_first3games/dev_srcout_1/` (local): split, config, both runs, access log.
+
+## 2026-11-18 — Baseline and CNN, 6-way vs 7-way (a fourth contributor; Other)
+
+**Question.** With a fourth contributor (P4: five games and Other footage), how do the baseline and the CNN do on more varied data, and does a trained Other class (7-way) detect non-target content better than a 6-way model with a confidence threshold, at what cost to the six games (D24)?
+
+**Data.** Split `v1`, extended (the ledger kept every earlier assignment): train 4,166 / val 1,250 / test_session 1,252 slots, about 3.3 times the first run. League of Legends now comes from three people (it was one), so the earlier recording-setup concern for that class can be checked. Other (67 videos) comes from one person, P4, under a single content name. Overwatch 2 and Marvel Rivals have one video each (train only; not in val or test); Minecraft has none. The train cap (1/15 with the median fallback from three groups up) left out 1,590 train slots, almost all P4's Valorant and CS2.
+
+| Game | train slots | val slots | Videos | Footage (min) |
+|---|---:|---:|---:|---:|
+| CS2 | 517 | 303 | 74 | 193 |
+| League_of_Legends | 1173 | 251 | 65 | 179 |
+| Marvel_Rivals | 55 | 0 | 1 | 5 |
+| Other | 902 | 197 | 58 | 146 |
+| Overwatch_2 | 40 | 0 | 1 | 5 |
+| Valorant | 1479 | 499 | 96 | 268 |
+
+- Native resolutions (videos): CS2: 1280x720 22, 1280x960 3, 1920x1080 39, 3840x2160 3, 960x720 7; League_of_Legends: 1280x720 33, 1920x1080 28, 3840x2160 4; Marvel_Rivals: 1920x1080 1; Other: 1280x720 26, 1920x1024 1, 1920x1032 1, 1920x1080 29, 800x600 1; Overwatch_2: 1280x720 1; Valorant: 1280x720 26, 1920x1080 35, 2560x1440 28, 3620x2036 2, 3840x2160 5
+- Video codecs: CS2: av1 3, h264 71; League_of_Legends: av1 9, h264 56; Marvel_Rivals: h264 1; Other: h264 58; Overwatch_2: h264 1; Valorant: av1 5, h264 91
+- Frame rate: CS2: constant 42, variable 32; League_of_Legends: constant 56, variable 9; Marvel_Rivals: constant 1; Other: constant 58; Overwatch_2: constant 1; Valorant: constant 33, variable 63
+- Low-tier encoder (D28): CS2: h264_d3d12va 47, libx264 27; League_of_Legends: h264_d3d12va 65; Marvel_Rivals: h264_d3d12va 1; Other: h264_d3d12va 58; Overwatch_2: h264_d3d12va 1; Valorant: h264_d3d12va 38, libx264 58
+- Recording time taken from: CS2: container 27, filename 47; League_of_Legends: filename 65; Marvel_Rivals: filename 1; Other: filename 58; Overwatch_2: filename 1; Valorant: container 58, filename 38 (mtime is low trust)
+- Derive: pad16x9_bicubic_256x144_q2
+- Extraction recipe `2026-11-17b`: one sample per 5 s bucket, low tier CRF/QP 45, low-tier encode window 1.0 s
+- Cleaning (all frames at the time of the split): kept 8258 of 11528; rejected by reason {'blur': 100, 'duplicate': 3170}; by game CS2 1912 kept / 859 rejected, League_of_Legends 1717 kept / 868 rejected, Marvel_Rivals 55 kept / 5 rejected, Other 1293 kept / 919 rejected, Overwatch_2 40 kept / 21 rejected, Valorant 3241 kept / 598 rejected; by person P1-a 615 / 159, P2-a 780 / 117, P2-b 12 / 0, P3 939 / 83, P4 5912 / 2911
+- Cleaning rules: black if mean < 8.0 and std < 4.0; blurred if Laplacian variance < 400.0; near-duplicate if the 8x8 aHash is within 6 bits of an earlier kept frame of the same source; slots on the hand quarantine list
+
+**Possible shortcuts.** League of Legends low-tier copies are all GPU-encoded and P1-a's League videos are AV1; Valorant and CS2 have both encoders (`by_encoder` below). Other is entirely P4's footage, so a model could in principle learn "P4's recording setup → Other"; but P4 also contributes 2,000+ train frames of four games recorded the same way, which pushes the model away from that shortcut. A held-out Other source would settle it.
+
+**By person and source** (train and val; slots / videos / sessions):
+
+| Person / source | Kind | Game | train slots / videos / sessions | val slots / videos / sessions | Left out (cap) |
+|---|---|---|---:|---:|---:|
+| P1-a | personal | CS2 | 65 / 2 / 2 | 5 / 1 / 1 | 0 |
+| P1-a | personal | League_of_Legends | 191 / 7 / 7 | 50 / 2 / 2 | 0 |
+| P1-a | personal | Valorant | 141 / 4 / 4 | 37 / 1 / 1 | 0 |
+| P2-a | contributor | CS2 | 226 / 22 / 19 | 56 / 5 / 5 | 0 |
+| P2-a | contributor | Valorant | 358 / 25 / 23 | 44 / 4 / 4 | 0 |
+| P3 | contributor | Valorant | 490 / 22 / 19 | 174 / 7 / 6 | 132 |
+| P4 | contributor | CS2 | 226 / 38 / 38 | 242 / 6 / 6 | 798 |
+| P4 | contributor | League_of_Legends | 982 / 49 / 49 | 201 / 7 / 7 | 0 |
+| P4 | contributor | Marvel_Rivals | 55 / 1 / 1 | – | 0 |
+| P4 | contributor | Other | 902 / 47 / 47 | 197 / 11 / 11 | 0 |
+| P4 | contributor | Overwatch_2 | 40 / 1 / 1 | – | 0 |
+| P4 | contributor | Valorant | 490 / 27 / 19 | 244 / 6 / 4 | 660 |
+| **All** | | | **4166 / 245 / 229** | **1250 / 50 / 47** | **1590** |
+
+- P1-a: Person 1 (the author), current PC, own recordings
+- P2-a: Person 2, Frame Export Kit packs
+- P3: Person 3, Frame Export Kit packs
+- P4: Person 4, Frame Export Kit packs (mixed-game folder: six games plus Other)
+
+**Method.** Same configs as the earlier runs (`config/baseline.json`, `config/train_cnn.json`, seed 360), once with `label_set = "six"` (Other frames left out of training and val) and once with `"seven"` (default). CNNs on the RX 9070 XT: about 15 s per epoch (6-way) and 19 s (7-way). Commands: `gfc-train-baseline --split-dir data/manifests/splits/v1 --tag p4-six --config <six>` and `--tag p4-seven`; `.venv-rocm` `-m game_frame_classifier.train --split-dir data/manifests/splits/v1 --set label_set=six --tag p4-six` and `--tag p4-seven`; then `gfc-evaluate --compare`. Commit `9bc09b9`.
+
+**Results on val** (development numbers: val chose the best epoch or `C`).
+
+| Run | Best | Six-game accuracy | Six-game macro-F1 | Other flagged at 5 % false alarms | AUROC (Other vs six games) |
+|---|---|---:|---:|---:|---:|
+| Baseline 6-way | C = 10 | 0.681 | 0.704 | 0.046 | 0.443 |
+| Baseline 7-way | C = 1 | 0.626 | 0.679 | 0.325 | 0.706 |
+| CNN 6-way | epoch 3 of 9 | 0.979 | 0.986 | 0.508 | 0.927 |
+| CNN 7-way | epoch 14 of 20 | 0.959 | 0.977 | **0.904** | **0.984** |
+
+Per game F1 (CNN 6-way / 7-way): Valorant 0.99 / 0.97, League of Legends 1.00 / 0.99, CS2 0.98 / 0.95, Other – / 0.86. Baseline 6-way: Valorant 0.73, League of Legends 0.84, CS2 0.53.
+
+**6-way vs 7-way CNN** (`gfc-evaluate --compare`, paired bootstrap over 1,000 resamples of videos, 95 % intervals):
+
+| Difference (7-way − 6-way) | Value | 95 % interval |
+|---|---:|---:|
+| Other flagged at 5 % false alarms | +0.396 | [+0.275, +0.564] |
+| AUROC | +0.057 | [+0.033, +0.093] |
+| Six-game macro-F1 | −0.008 | [−0.025, +0.003] |
+
+**Baseline vs CNN, 6-way:** six-game macro-F1 +0.282 [+0.236, +0.360]; Other detection +0.462 [+0.198, +0.592].
+
+- The trained Other class roughly doubles the share of non-target frames caught at the same false-alarm rate (51 % to 90 %), with a small, not clearly different cost on the six games. Against the D24 rule, the detection gain is clearly above zero, but the six-game interval reaches −0.025, just past the −0.02 limit, so the rule is not met yet; more val footage narrows it, and the rule is meant for a frozen, held-out test.
+- This reading is optimistic for 7-way: val Other is the same person and the same content name as train Other (different sessions). Held-out Other content (`holdout_other`) is the real test.
+- The CNN's six-game scores stay near the ceiling on three distinct games; the baseline still confuses Valorant and CS2 (CS2 F1 0.53).
+- Tiers: CNN 6-way full and CRF 45 both 0.979; 7-way 0.952 / 0.941. Encoders: CNN 6-way 0.985 CPU-encoded vs 0.977 GPU-encoded low tier.
+
+**Integrity.**
+
+| Pair | Shared clips | Shared sessions | Shared slots |
+|---|---:|---:|---:|
+| train / val | 0 | 0 | 0 |
+
+| Pair | Frames compared | aHash ≤ 6 (duplicate) | Smallest distance | Distance > 10 |
+|---|---:|---:|---:|---:|
+| val vs train | 1250 | 0 | 7 | 766 |
+
+- `test_session.csv` matches the hash stored at training time
+- `test_source.csv` matches the hash stored at training time
+- `train.csv` matches the hash stored at training time
+- `val.csv` matches the hash stored at training time
+- Held-out access for this run: none
+
+**Challenges.** A Windows GPU timeout (driver reset, recovered) occurred once, at the hand-over between the 6-way and 7-way CNN runs; both runs completed and no second timeout occurred. 28 % of frames were near-duplicates (mostly overlapping saves in one contributor's clips) and were removed before splitting.
+
+**Limits and next.** Overwatch 2 and Marvel Rivals (one video each) and Minecraft (none) cannot be evaluated; Other from one person and one content name; no held-out test yet. Next: footage for the missing games, Other from more people and more content names, held-out Other names and the frozen split (G1), then the D24 rule on `test_source`.
+
+**Archive.** `data/archive/2026-11-18_p4_six_vs_seven/` (local): the four runs, both comparisons, the split, manifests, data figures.
