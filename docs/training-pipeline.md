@@ -197,7 +197,7 @@ Each is a config value or a small code switch. Changing one means rerunning a st
 
 | ID | Default now | Main alternative | Revisit when |
 |---|---|---|---|
-| D13 | Strict: test splits untouched until the final evaluation; report development numbers on `val` | Allow one logged look at `test_session` for the progress report | Writing the progress report |
+| D13 | Strict: test splits untouched until the final evaluation; report development numbers on `val` | Allow one logged look at `test_session` for the interim write-up | Writing the interim write-up |
 | D15 | Single-stream CNN | Two-stream with HUD crops from native stills, as primary or as an ablation | After first CNN results on the look-alike pair |
 | D16 | Conv 32-64-128-256, one FC of 256, dropout 0.5; 9,828,135 parameters at seven outputs (9,827,878 at six) | FC 128, FC 512, two FC layers, or GAP head | Train vs val gap is known |
 | D30 | Session = clips of one source and game whose start is within 30 min of the previous clip's end | Different gap, or one session per recording day | Session report on real data looks wrong |
@@ -212,7 +212,7 @@ One decision is hard to undo: once a held-out set has been evaluated or a number
 
 | Gate | Question | Blocks |
 |---|---|---|
-| **G1** (D32) | What are the held-out test sets: held-out sessions only, held-out whole sources, or both; which sources are held out per game; is the session rule right; and does the progress report show any test number? | `gfc-split --freeze`; any `test_session` / `test_source` evaluation; any reported test number |
+| **G1** (D32) | What are the held-out test sets: held-out sessions only, held-out whole sources, or both; which sources are held out per game; is the session rule right; and does the interim write-up show any test number? | `gfc-split --freeze`; any `test_session` / `test_source` evaluation; any reported test number |
 
 Options and a suggestion are in [dataset-splitter.md](roadmap/tools/dataset-splitter.md#gates).
 

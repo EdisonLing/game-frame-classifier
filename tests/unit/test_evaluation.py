@@ -276,14 +276,14 @@ def test_guards_accepted_appends_one_log_line(tmp_path):
         run_dir,
         "test_session",
         data_root=data_root,
-        reason="final report",
+        reason="final evaluation",
     )
     log_path = data_root / "runs" / "holdout_access.jsonl"
     lines = log_path.read_text(encoding="utf-8").strip().splitlines()
     assert len(lines) == 1
     entry = json.loads(lines[0])
     assert entry["split"] == "test_session"
-    assert entry["reason"] == "final report"
+    assert entry["reason"] == "final evaluation"
     assert entry["run"] == "r1"
     assert "utc" in entry and "git_commit" in entry
 
@@ -304,7 +304,7 @@ def test_test_split_refuses_before_val_threshold_exists(tmp_path):
             run_dir,
             "test_session",
             data_root=data_root,
-            reason="final report",
+            reason="final evaluation",
         )
 
 

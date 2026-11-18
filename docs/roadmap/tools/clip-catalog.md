@@ -10,7 +10,7 @@ Builds a table of every source video/clip: filesystem path, game label, channel/
 
 ## Why we need it
 
-Without a catalog, labels live in folder names or memory and break as soon as you add friends’ clips or public VODs. The progress report also needs reproducible “where did this frame come from?” answers (video id, channel, timestamp).
+Without a catalog, labels live in folder names or memory and break as soon as you add friends’ clips or public VODs. The interim write-up also needs reproducible “where did this frame come from?” answers (video id, channel, timestamp).
 
 ## Inputs / outputs
 

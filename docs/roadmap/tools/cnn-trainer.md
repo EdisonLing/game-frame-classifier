@@ -10,7 +10,7 @@ Defines the from-scratch CNN that maps one 256×144 RGB frame to either six game
 
 ## Why we need it
 
-This is the primary model. The progress report needs the architecture in more detail than the proposal, a parameter count, training curves and at least one quantitative and one qualitative result.
+This is the primary model. The interim write-up needs the architecture in more detail than the proposal, a parameter count, training curves and at least one quantitative and one qualitative result.
 
 ## Connections
 
@@ -171,7 +171,7 @@ The code is the same on every device; only the installed PyTorch build changes.
 | Option | Setup | Notes |
 |---|---|---|
 | AMD Radeon RX 9000 on Windows (primary) | Separate `.venv-rocm` with AMD's ROCm build of `torch` / `torchvision`; step by step in [AMD GPU setup](../../amd-gpu-setup.md) | Check with `torch.cuda.is_available()` and `torch.version.hip`. Tested working on an RX 9070 XT (overfit test, an 11-minute training run and the timings above, with no crash and no workaround). About 7× faster per epoch than the CPU |
-| CPU (fallback) | `pip install -e ".[dev,train]"` in the normal environment, or `--device cpu` | Use when the GPU environment is broken or busy. Still enough for the progress report: one run in an evening |
+| CPU (fallback) | `pip install -e ".[dev,train]"` in the normal environment, or `--device cpu` | Use when the GPU environment is broken or busy. Still enough for the interim write-up: one run in an evening |
 | AMD Radeon on Linux or WSL2 | ROCm build of PyTorch | Most mature AMD path |
 | Colab GPU | Upload `data/frames/` and the split folder as a zip | Same command; mind session limits |
 
@@ -242,7 +242,7 @@ Checkpoints are loaded with `weights_only=True` plus the config stored beside th
 
 **How to run:** `pytest tests/unit/test_model.py tests/system/test_train.py` (skips without PyTorch)
 
-## Acceptance checks (progress report)
+## Acceptance checks (interim write-up)
 
 - [ ] Train and val curves plotted
 - [ ] Val accuracy and macro-F1 reported, next to the baseline's
@@ -251,7 +251,7 @@ Checkpoints are loaded with `weights_only=True` plus the config stored beside th
 - [ ] Challenges noted
 - [x] CLI entry `gfc-train-cnn` in `pyproject.toml`
 
-## Acceptance checks (final report extras)
+## Acceptance checks (final write-up extras)
 
 - [ ] `test_source` and `test_session` results, after the split is frozen
 - [ ] Per-tier diagnostic (full vs CRF 45)

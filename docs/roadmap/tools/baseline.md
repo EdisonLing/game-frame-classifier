@@ -10,7 +10,7 @@ Reduces each frame to a 48-number colour histogram and fits a multinomial logist
 
 ## Why we need it
 
-A colour histogram throws away all spatial layout, so this model can only use palette and art style. It sets the bar the CNN has to clear and shows what layout adds, most of all on the look-alike pair Overwatch 2 and Marvel Rivals. The progress report needs a non-deep baseline with one quantitative and one qualitative result.
+A colour histogram throws away all spatial layout, so this model can only use palette and art style. It sets the bar the CNN has to clear and shows what layout adds, most of all on the look-alike pair Overwatch 2 and Marvel Rivals. The interim write-up needs a non-deep baseline with one quantitative and one qualitative result.
 
 ## Connections
 
@@ -120,7 +120,7 @@ data/runs/baseline/<run_id>/
 
 - [x] Beats chance on val: accuracy above the largest class's share of val, and macro-F1 above 1/6 (synthetic three-colour split in system tests; real-data check left for the reviewer)
 - [ ] Confusion matrix saved; look-alike pair visible (needs `gfc-evaluate` on a real run; left for the reviewer)
-- [ ] One quantitative metric and one qualitative example for the progress report (needs a real val run + evaluation figures; left for the reviewer)
+- [ ] One quantitative metric and one qualitative example for the interim write-up (needs a real val run + evaluation figures; left for the reviewer)
 - [x] Reads frames only through `split_manifest`
 - [x] CLI entry `gfc-train-baseline` in `pyproject.toml`
 

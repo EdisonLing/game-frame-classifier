@@ -29,7 +29,7 @@ Both models must be measured by the same code on the same rows, or their compari
 ```text
 gfc-evaluate --run data/runs/cnn/<run_id> --split val
 gfc-evaluate --run data/runs/cnn/<run_id> --split val --tier-diagnostic
-gfc-evaluate --run data/runs/cnn/<run_id> --split test_source --reason "final report"
+gfc-evaluate --run data/runs/cnn/<run_id> --split test_source --reason "final evaluation"
 gfc-evaluate --compare data/runs/baseline/<run_id> data/runs/cnn/<run_id> --split val
 gfc-evaluate --data-report --split-dir data/manifests/splits/v1
 python -m game_frame_classifier.evaluation ...

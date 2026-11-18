@@ -104,7 +104,7 @@ Every clip of the session is then written to the ledger.
 **Ledger rules**
 
 - A clip never moves to a less held-out split. After freezing, it never moves at all.
-- Freezing locks the policy and every existing assignment, not the contents: new footage still lands in all splits, so the test sets grow. Every result records the split hashes, and [`--compare`](evaluation.md#comparison---compare) only pairs runs scored on the same snapshot. For the final report, all models are scored on one snapshot.
+- Freezing locks the policy and every existing assignment, not the contents: new footage still lands in all splits, so the test sets grow. Every result records the split hashes, and [`--compare`](evaluation.md#comparison---compare) only pairs runs scored on the same snapshot. For the final write-up, all models are scored on one snapshot.
 - A ledger entry that contradicts the config (a clip in `train` or `val` whose source is now held out, or a `test_source` clip whose source is no longer held out) is a policy change: the run stops with exit code `1` and asks for a new `split_id`. Contradiction checks use the expanded held-out source list. A clip contradicting `holdout_other` is handled the same way.
 - A source with no ledger entries yet can be added to `holdout_sources` at any time, including after freezing.
 - `--reset` exists only for drafts.
@@ -180,7 +180,7 @@ The mechanism above is fixed. What it should hold out is not, and it cannot be c
 | Which sources are held out, per game | Chosen from `gfc-split --plan` once most footage is in. Guideline for (B): games with at least three sources; hold out about 10–20 % of the game's slots; never the largest source |
 | How the proposal's two test sets map | Proposal: unseen streamers, and held-out personal sessions. Contributors are separate people with their own settings and overlays, so a held-out contributor plays the role of an unseen streamer until public sources exist |
 | Session rule | Confirm `session_gap_min` (30) or switch to one session per recording day after reading the session report |
-| Test numbers in the progress report | Default (D13): none; report `val`. Alternative: one logged evaluation of `test_session` |
+| Test numbers in the interim write-up | Default (D13): none; report `val`. Alternative: one logged evaluation of `test_session` |
 
 Suggested: (B). It keeps both test sets from the proposal and directly measures whether the model has learned a person's overlay or settings instead of the game.
 

@@ -13,15 +13,15 @@ Living log of choices for Frame to Game. Fill in **Decision** / **Rationale** / 
 
 ## How to use
 
-1. When something comes up (TA suggestion, implementation fork, report rewrite), add or update a row/section here.
-2. Do **not** auto-adopt TA suggestions — park them as `open` / `leaning` until we pick.
+1. When something comes up (review suggestion, implementation fork, write-up revision), add or update a row/section here.
+2. Do **not** auto-adopt review suggestions — park them as `open` / `leaning` until we pick.
 3. Link out to the tool page or roadmap stage that implements the decision once locked.
 
 ---
 
 ## Already strong (default keep)
 
-Called out positively in TA feedback. Treat as decided unless we explicitly reopen.
+Called out positively in the proposal review. Treat as decided unless we explicitly reopen.
 
 | ID | Decision | Status | Notes |
 |---|---|---|---|
@@ -31,25 +31,25 @@ Called out positively in TA feedback. Treat as decided unless we explicitly reop
 | D04 | Ops stills **full + low (CRF 45)**; medium=38 docs only; **every frame used (train, val, test, baseline, CNN) is one tier: half full, half low**, fixed per slot by bucket parity with a per-clip offset (not both tiers per slot); **per-tier eval is a diagnostic on top**. **Quick mode** (opt-in per contributor, kit only): a clip with no low tier uses `full` for every slot; its slots are counted and reported, so the drift above half full stays visible | decided (revised 2026-11-17) | Small 256×144 Δ → no 2× dataset; dual folders kept for sampling + per-tier diagnostics. Was: random full *or* low per train example |
 | D05 | Colour-histogram + logistic regression baseline | decided | Exposes what spatial layout adds |
 | D06 | Keep menus/overlays in the data (do not strip as “bad”) | decided | Differs from Trivedi et al. |
-| D07 | Course primary goal = **frame classification**; clip tagging = inference glue | decided | See roadmap |
+| D07 | Primary goal = **frame classification**; clip tagging = inference glue | decided | See roadmap |
 
 ---
 
-## Open decisions (from TA + gaps)
+## Open decisions (from the proposal review + gaps)
 
 ### D10 — Progress/final figure redo
 
 | | |
 |---|---|
 | **Status** | open |
-| **Prompt** | TA Illustration −0.5: small labels; CNN drawn right→left |
-| **Options** | (A) Redraw for progress report only (B) Also update proposal archive figure (C) Defer polish to final report |
+| **Prompt** | Review (illustration): small labels; CNN drawn right→left |
+| **Options** | (A) Redraw for interim write-up only (B) Also update proposal archive figure (C) Defer polish to final write-up |
 | **Decision** | |
 | **Rationale** | |
 | **Date** | |
 | **Links** | Architecture figure lives in local proposal materials (not in git) |
 
-**Suggested fix (TA, not adopted):** enlarge labels under Deduplicate / Auto Filter; simplify data-pipeline half; CNN left→right.
+**Suggested fix (review, not adopted):** enlarge labels under Deduplicate / Auto Filter; simplify data-pipeline half; CNN left→right.
 
 ---
 
@@ -58,16 +58,16 @@ Called out positively in TA feedback. Treat as decided unless we explicitly reop
 | | |
 |---|---|
 | **Status** | decided |
-| **Prompt** | TA Data Processing −0.5: no definition of “dominated by non-game content” |
+| **Prompt** | Review (data processing): no definition of “dominated by non-game content” |
 | **Options** | (A) Hand rules (black/blur + manual quarantine) (B) Simple lobby/menu detector + threshold, validated on a hand-labelled sample (C) Drop only black/blur for v1; defer non-game heuristic (D) Other: ___ |
-| **Decision** | **(B)** Simple lobby / non-game detector with a score threshold, checked on a small hand-labelled sample (TA recommendation). Until that ships: keep black / blur / near-dupe auto-filters; quarantine obvious lobby/desktop frames by hand when reviewing rejects. |
+| **Decision** | **(B)** Simple lobby / non-game detector with a score threshold, checked on a small hand-labelled sample (review recommendation). Until that ships: keep black / blur / near-dupe auto-filters; quarantine obvious lobby/desktop frames by hand when reviewing rejects. |
 | **Rationale** | Closes the undefined-filter gap without stripping in-game menus/HUD (D06). Detector is for lobby / desktop / facecam-heavy / browser — not “frame has a menu.” Hand-labelled sample keeps the rule honest before we trust a threshold. |
 | **Date** | 2026-11-15 |
 | **Links** | [tools/frame-cleaner.md](roadmap/tools/frame-cleaner.md) |
 
 **Note:** Proposal keeps menus/HUD as valid gameplay frames (D06). “Non-game” should mean desktop/browser/facecam-heavy/etc., not “has a menu.”
 
-**When:** Progress report can describe the rule + current black/blur/dedupe; implement the detector after first multi-game extract (not blocking batch extract).
+**When:** Interim write-up can describe the rule + current black/blur/dedupe; implement the detector after first multi-game extract (not blocking batch extract).
 
 ---
 
@@ -76,14 +76,14 @@ Called out positively in TA feedback. Treat as decided unless we explicitly reop
 | | |
 |---|---|
 | **Status** | open |
-| **Prompt** | TA Data Processing −0.5: three games have no public fallback / named source |
+| **Prompt** | Review (data processing): three games have no public fallback / named source |
 | **Options** | Name ≥1 concrete, terms-OK source per game (channel, VOD set, tournament archive, friends’ clips, …) |
 | **Decision** | LoL: ___ · OW2: ___ · Marvel Rivals: ___ |
 | **Rationale** | |
 | **Date** | |
 | **Links** | [tools/source-acquisition.md](roadmap/tools/source-acquisition.md) |
 
-**TA collection tip (operational, not architecture):** prioritize **personal clips** for these three while sourcing.
+**Collection tip from the review (operational, not architecture):** prioritize **personal clips** for these three while sourcing.
 
 ---
 
@@ -92,10 +92,10 @@ Called out positively in TA feedback. Treat as decided unless we explicitly reop
 | | |
 |---|---|
 | **Status** | provisional |
-| **Prompt** | TA: keep personal-clip held-out set untouched during development |
+| **Prompt** | Review: keep personal-clip held-out set untouched during development |
 | **Options** | (A) Strict freeze once split is written (B) Allow rare peek for debugging only, never for tuning (C) Soft holdout until dataset is larger |
 | **Decision** | **(A) for now.** Training and tuning read `train` and `val` only. `test_session` and `test_source` open through `gfc-evaluate` alone, only after the split is frozen, with a stated reason, and every access is appended to `data/runs/holdout_access.jsonl`. Development and progress-report numbers come from `val`. |
-| **Rationale** | Strict is the direction that can be relaxed later; a look at the test set cannot be taken back. Whether the progress report shows one logged `test_session` result is settled with D32. |
+| **Rationale** | Strict is the direction that can be relaxed later; a look at the test set cannot be taken back. Whether the interim write-up shows one logged `test_session` result is settled with D32. |
 | **Date** | 2026-11-17 |
 | **Links** | [tools/dataset-splitter.md](roadmap/tools/dataset-splitter.md) |
 
@@ -106,8 +106,8 @@ Called out positively in TA feedback. Treat as decided unless we explicitly reop
 | | |
 |---|---|
 | **Status** | decided |
-| **Prompt** | TA: report frames, videos, and channels **per game** |
-| **Options** | (A) Table in progress report only (B) Also auto-generate from catalog as a script output |
+| **Prompt** | Review: report frames, videos, and channels **per game** |
+| **Options** | (A) Table in interim write-up only (B) Also auto-generate from catalog as a script output |
 | **Decision** | **(B).** `gfc-split` writes `counts.csv` (slots, clips, sessions, sources per game and split) and `sources.csv` (per-source share); `gfc-evaluate --data-report` draws the class-count figure and example frames. |
 | **Rationale** | The numbers change every time footage arrives; a generated table cannot go stale. |
 | **Date** | 2026-11-17 |
@@ -120,8 +120,8 @@ Called out positively in TA feedback. Treat as decided unless we explicitly reop
 | | |
 |---|---|
 | **Status** | provisional — **two-stream not adopted** |
-| **Prompt** | TA: consider full-frame stream + small CNN on fixed HUD crops (minimap, ability bar, corners), fuse before classifier |
-| **Options** | (A) Stick to single-stream 4-block CNN for progress report; revisit after first results (B) Implement two-stream as primary before progress report (C) Single-stream primary + two-stream as ablation for final (D) Reject two-stream |
+| **Prompt** | Review: consider full-frame stream + small CNN on fixed HUD crops (minimap, ability bar, corners), fuse before classifier |
+| **Options** | (A) Stick to single-stream 4-block CNN for interim write-up; revisit after first results (B) Implement two-stream as primary before interim write-up (C) Single-stream primary + two-stream as ablation for final (D) Reject two-stream |
 | **Decision** | **(A) for now.** Single stream for the first results. (C) or (D) is chosen once the look-alike confusion of the single-stream model is known. |
 | **Rationale** | Nothing in the single-stream pipeline has to change to add a second stream later: HUD crops would be cut from the native stills in `frame_sources`, which are kept for exactly this (D25). |
 | **Date** | 2026-11-17 |
@@ -136,7 +136,7 @@ Called out positively in TA feedback. Treat as decided unless we explicitly reop
 | | |
 |---|---|
 | **Status** | provisional |
-| **Prompt** | TA: give exact channel/FC sizes; flattening 16×9×256 ≈ 37k features into first FC |
+| **Prompt** | Review: give exact channel/FC sizes; flattening 16×9×256 ≈ 37k features into first FC |
 | **Options** | FC 128 (5,108,390 params) · **FC 256 (9,827,878)** · FC 512 (19,266,854) · two FC layers · GAP head (390,438) |
 | **Decision** | Conv channels: **32-64-128-256** (3×3, no bias, BN, ReLU, 2×2 max pool) · Flatten 256×9×16 = 36,864 · FC: **36,864→256**, dropout 0.5, **256→7** by default · Params: **9,828,135** seven-way or **9,827,878** six-way (conv stack 388,896; first FC 9,437,440). Layer table in the tool page. |
 | **Rationale** | Matches the proposal (four blocks, 32–256 channels, one FC with dropout). 256 keeps the first FC under 10 M weights for a training set of roughly 10,000 frames; sizes are config values, so this is tuned on val after the first curves. |
@@ -162,7 +162,7 @@ Related open fork from proposal: **flatten vs global average pooling** — decid
 | | |
 |---|---|
 | **Status** | deferred (until we see metrics) |
-| **Prompt** | TA: if distinct games hit near-ceiling early, focus analysis on look-alike pair + low-quality frames |
+| **Prompt** | Review: if distinct games hit near-ceiling early, focus analysis on look-alike pair + low-quality frames |
 | **Decision** | |
 | **Rationale** | |
 | **Date** | |
@@ -328,7 +328,7 @@ Related open fork from proposal: **flatten vs global average pooling** — decid
 | **Status** | **gate** — blocks `gfc-split --freeze`, every `test_session` / `test_source` evaluation, and any reported test number |
 | **Prompt** | Proposal: test on unseen streamers and on held-out personal sessions. Actual footage so far is personal clips and contributor packs, a few people per game |
 | **Options** | (A) `test_session` only (B) `test_session` + `test_source`, holding out whole contributors where a game has at least three sources (C) `test_source` only |
-| **Sub-questions** | Which sources are held out per game · confirm the session rule (D30) · whether the progress report shows a test number or `val` only (D13) |
+| **Sub-questions** | Which sources are held out per game · confirm the session rule (D30) · whether the interim write-up shows a test number or `val` only (D13) |
 | **Decision** | |
 | **Rationale** | |
 | **Date** | |
@@ -436,7 +436,7 @@ Related open fork from proposal: **flatten vs global average pooling** — decid
 | 2026-11-16 | — | README Going deeper: split **across all games** vs **per-game special considerations** (Valorant table: may affect vs what I did) |
 | 2026-11-16 | D24 | Product: six games + **unknown**; lean threshold first, trained 7th optional later |
 | 2026-11-15 | D22 | Superseded still-CRF: video CRF → then extract/downscale (full/med/low) |
-| 2026-11-15 | D11 | Decided: simple lobby/non-game detector + threshold on hand-labelled sample (TA); interim = black/blur/dedupe + manual quarantine |
+| 2026-11-15 | D11 | Decided: simple lobby/non-game detector + threshold on hand-labelled sample (review); interim = black/blur/dedupe + manual quarantine |
 | 2026-11-14 | D20 | Manifests: CSV + JSON side by side |
 | 2026-11-14 | D19 | Game-first `raw/<Game>/<source>/` (final for collection) |
 | 2026-11-14 | D19 | Source-first draft tried same day; superseded |
@@ -445,4 +445,4 @@ Related open fork from proposal: **flatten vs global average pooling** — decid
 | 2026-11-12 | — | Frame cleaner implemented (Pillow aHash + FIND_EDGES blur var≥400); no pipeline manager yet |
 | 2026-11-12 | D21 | JPEG locked for frame extractor v1 |
 | 2026-11-12 | — | Frame extractor implemented (subprocess ffmpeg, resize-on-extract); catalog still deferred |
-| 2026-11-12 | — | File created; TA feedback indexed; D10–D17 opened from TA notes; D01–D07 marked keep |
+| 2026-11-12 | — | File created; proposal review feedback indexed; D10–D17 opened from the review notes; D01–D07 marked keep |
