@@ -35,12 +35,12 @@ def test_derive_16x9_4x3_compact_and_rerun(tmp_path):
     sha_bad = "55" * 32
 
     write_clip_tree(
-        fs, game="Valorant", source="edison", clip_sha256=sha_16,
+        fs, game="Valorant", source="tester", clip_sha256=sha_16,
         width=640, height=360, buckets=[0, 1], use_ffmpeg_jpegs=True,
         low_encoder="h264_d3d12va",
     )
     write_clip_tree(
-        fs, game="Valorant", source="edison", clip_sha256=sha_43,
+        fs, game="Valorant", source="tester", clip_sha256=sha_43,
         width=640, height=480, buckets=[0], use_ffmpeg_jpegs=True,
     )
     write_clip_tree(
@@ -54,17 +54,17 @@ def test_derive_16x9_4x3_compact_and_rerun(tmp_path):
     )
     # only crf45 → excluded
     write_clip_tree(
-        fs, game="Valorant", source="edison", clip_sha256=sha_bad,
+        fs, game="Valorant", source="tester", clip_sha256=sha_bad,
         width=640, height=360, buckets=[0], tiers=("crf45",),
         use_ffmpeg_jpegs=True,
     )
 
     for sha, source, pack in (
-        (sha_16, "edison", "personal:run1"),
-        (sha_43, "edison", "personal:run1"),
+        (sha_16, "tester", "personal:run1"),
+        (sha_43, "tester", "personal:run1"),
         (sha_compact, "contributor_alex", "pack-compact"),
         (sha_quick, "contributor_alex", "pack-quick"),
-        (sha_bad, "edison", "personal:run1"),
+        (sha_bad, "tester", "personal:run1"),
     ):
         write_index_entry(
             fs, clip_sha256=sha, clip_key=clip_key_for(sha),
@@ -159,26 +159,26 @@ def test_new_clip_appears_without_touching_existing(tmp_path):
     sha1 = "aa" * 32
     sha2 = "bb" * 32
     write_clip_tree(
-        fs, game="CS2", source="edison", clip_sha256=sha1,
+        fs, game="CS2", source="tester", clip_sha256=sha1,
         width=640, height=360, buckets=[0], use_ffmpeg_jpegs=True,
     )
     write_index_entry(
         fs, clip_sha256=sha1, clip_key=clip_key_for(sha1),
-        pack_id="personal:r", game="CS2", source="edison",
+        pack_id="personal:r", game="CS2", source="tester",
     )
     assert main(["--data-root", str(data), "--recipe", str(recipe)]) == 0
     key1 = clip_key_for(sha1)
-    existing = list((data / "frames" / "CS2" / "edison" / key1).rglob("*.jpg"))
+    existing = list((data / "frames" / "CS2" / "tester" / key1).rglob("*.jpg"))
     assert existing
     stamp = {p: (p.stat().st_mtime_ns, sha256_file(p)) for p in existing}
 
     write_clip_tree(
-        fs, game="CS2", source="edison", clip_sha256=sha2,
+        fs, game="CS2", source="tester", clip_sha256=sha2,
         width=640, height=360, buckets=[0], use_ffmpeg_jpegs=True,
     )
     write_index_entry(
         fs, clip_sha256=sha2, clip_key=clip_key_for(sha2),
-        pack_id="personal:r", game="CS2", source="edison",
+        pack_id="personal:r", game="CS2", source="tester",
     )
     assert main(["--data-root", str(data), "--recipe", str(recipe)]) == 0
 
@@ -187,3 +187,65 @@ def test_new_clip_appears_without_touching_existing(tmp_path):
         assert sha256_file(p) == digest
     keys = {r["clip_key"] for r in _read_csv(data / "manifests" / "clips_index.csv")}
     assert key1 in keys and clip_key_for(sha2) in keys
+
+
+@requires_ffmpeg
+def test_compact_pack_is_detected_from_the_stills_not_clip_json(tmp_path):
+    """A compact pack's clip.json reports the original video size; its stills are already 256x144."""
+    import json
+
+    data = tmp_path / "data"
+    fs = data / "frame_sources"
+    recipe = copy_recipe(tmp_path / "recipe.json")
+    clip_dir = write_clip_tree(
+        fs, game="Valorant", source="contributor_x", clip_sha256="66" * 32,
+        width=256, height=144, buckets=[0, 1], use_ffmpeg_jpegs=True,
+    )
+    meta = json.loads((clip_dir / "clip.json").read_text(encoding="utf-8"))
+    meta.update(width=1920, height=1080)
+    (clip_dir / "clip.json").write_text(json.dumps(meta), encoding="utf-8")
+    assert main(["--data-root", str(data), "--recipe", str(recipe)]) == 0
+    key = clip_key_for("66" * 32)
+    for tier in ("full", "crf45"):
+        for src in sorted((clip_dir / tier).glob("*.jpg")):
+            out = data / "frames" / "Valorant" / "contributor_x" / key / tier / src.name
+            assert sha256_file(out) == sha256_file(src)
+    (row,) = _read_csv(data / "manifests" / "clips_index.csv")
+    assert row["derive_id"] == "compact_passthrough"
+
+
+@requires_ffmpeg
+def test_game_filter_limits_work_but_tables_keep_every_clip(tmp_path):
+    data = tmp_path / "data"
+    fs = data / "frame_sources"
+    recipe = copy_recipe(tmp_path / "recipe.json")
+    write_clip_tree(fs, game="Valorant", source="tester", clip_sha256="77" * 32,
+                    width=640, height=360, buckets=[0, 1], use_ffmpeg_jpegs=True)
+    write_clip_tree(fs, game="CS2", source="tester", clip_sha256="88" * 32,
+                    width=640, height=360, buckets=[0], use_ffmpeg_jpegs=True)
+    assert main(["--data-root", str(data), "--recipe", str(recipe)]) == 0
+    assert main(["--data-root", str(data), "--recipe", str(recipe), "--game", "Valorant"]) == 0
+    games = sorted({r["game"] for r in _read_csv(data / "manifests" / "clips_index.csv")})
+    assert games == ["CS2", "Valorant"]
+    assert len(_read_csv(data / "manifests" / "slots.csv")) == 3
+
+
+@requires_ffmpeg
+def test_newer_source_stills_are_derived_again(tmp_path):
+    import os
+    import time
+
+    data = tmp_path / "data"
+    fs = data / "frame_sources"
+    recipe = copy_recipe(tmp_path / "recipe.json")
+    clip_dir = write_clip_tree(fs, game="Valorant", source="tester", clip_sha256="99" * 32,
+                               width=640, height=360, buckets=[0], use_ffmpeg_jpegs=True)
+    assert main(["--data-root", str(data), "--recipe", str(recipe)]) == 0
+    key = clip_key_for("99" * 32)
+    derived = data / "frames" / "Valorant" / "tester" / key / "full" / f"{key}_full_b000000.jpg"
+    first = derived.stat().st_mtime
+    src = clip_dir / "full" / f"{key}_full_b000000.jpg"
+    later = time.time() + 5
+    os.utime(src, (later, later))
+    assert main(["--data-root", str(data), "--recipe", str(recipe)]) == 0
+    assert derived.stat().st_mtime > first

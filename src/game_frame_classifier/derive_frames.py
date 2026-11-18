@@ -261,14 +261,18 @@ def plan_clip(ref: ClipRef, recipe: Recipe) -> ClipPlan:
 
 
 def output_complete(data_root: Path, plan: ClipPlan) -> bool:
+    """Every slot has its derived files, none older than its source still (a re-extracted
+    clip, for example after gfc-make-sources --rebuild, is derived again)."""
     out = frames_clip_dir(data_root, plan.ref)
+    tiers = ["full"] + ([plan.low_tier] if plan.low_tier else [])
     for bucket in plan.buckets:
-        full = out / "full" / frame_name(plan.ref.clip_key, "full", bucket)
-        if not full.is_file():
-            return False
-        if plan.low_tier:
-            low = out / plan.low_tier / frame_name(plan.ref.clip_key, plan.low_tier, bucket)
-            if not low.is_file():
+        for tier in tiers:
+            name = frame_name(plan.ref.clip_key, tier, bucket)
+            derived = out / tier / name
+            if not derived.is_file():
+                return False
+            source = plan.ref.clip_dir / tier / name
+            if source.is_file() and source.stat().st_mtime > derived.stat().st_mtime:
                 return False
     return True
 
@@ -289,13 +293,19 @@ def _stage_numbered(src_files: list[Path], stage_dir: Path) -> None:
         _link_or_copy(src, stage_dir / f"{i:06d}.jpg")
 
 
-def _is_compact(clip: dict[str, Any], recipe: Recipe) -> bool:
-    try:
-        width = int(clip.get("width"))
-        height = int(clip.get("height"))
-    except (TypeError, ValueError):
+def _is_compact(plan: ClipPlan, recipe: Recipe) -> bool:
+    """True when the source stills are already model size (a compact pack).
+
+    Decided from the first full-tier still, not clip.json: clip.json holds the size of the
+    original video, which a compact pack also reports.
+    """
+    if not plan.buckets:
         return False
-    return (width, height) == recipe.compact_size
+    first = plan.ref.clip_dir / "full" / frame_name(plan.ref.clip_key, "full", plan.buckets[0])
+    try:
+        return jpeg_size(first) == tuple(recipe.compact_size)
+    except (OSError, ValueError):
+        return False
 
 
 def derive_tier_folder(
@@ -319,7 +329,7 @@ def derive_tier_folder(
             shutil.rmtree(dst_dir)
         dst_dir.mkdir(parents=True)
         for f in src_files:
-            shutil.copy2(f, dst_dir / f.name)
+            shutil.copyfile(f, dst_dir / f.name)
         return
 
     stage_in = tmp_root / "in"
@@ -363,7 +373,7 @@ def derive_clip(
     if not force and output_complete(data_root, plan):
         return "skipped"
 
-    compact = _is_compact(plan.clip, recipe)
+    compact = _is_compact(plan, recipe)
     out_final = frames_clip_dir(data_root, plan.ref)
     tmp_root = Path(data_root) / "frames" / "_tmp" / f"derive_{plan.ref.clip_key}"
     if tmp_root.exists():
@@ -495,7 +505,7 @@ def resolve_origin_and_consent(
 
 
 def derive_id_for(plan: ClipPlan, recipe: Recipe) -> str:
-    return DERIVE_ID_COMPACT if _is_compact(plan.clip, recipe) else DERIVE_ID
+    return DERIVE_ID_COMPACT if _is_compact(plan, recipe) else DERIVE_ID
 
 
 def write_indexes(
@@ -597,11 +607,10 @@ def run_derive(
                     f"({plan.unpaired} unpaired ignored)"
                 )
 
-    clip_rows, slot_rows, table_skips = rebuild_tables_from_disk(
-        data_root, fs_root, recipe, game=game, source=source,
-    )
+    # --game / --source limit the image work only; the tables always cover every clip on disk.
+    clip_rows, slot_rows, table_skips = rebuild_tables_from_disk(data_root, fs_root, recipe)
     for msg in table_skips:
-        if msg not in report_skips:
+        if msg not in report_skips and (game is None or msg.startswith(f"{game}/")):
             print(f"  skip {msg}")
     write_indexes(data_root, clip_rows, slot_rows)
 

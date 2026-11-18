@@ -18,14 +18,14 @@ from tests.helpers.ffmpeg_fixtures import make_color_video, requires_ffmpeg
 def test_batch_extract_two_clips(tmp_path: Path) -> None:
     raw = tmp_path / "raw"
     make_color_video(
-        raw / "Valorant" / "edison" / "a.mp4",
+        raw / "Valorant" / "tester" / "a.mp4",
         duration_s=2.0,
         width=320,
         height=180,
         color="red",
     )
     make_color_video(
-        raw / "Minecraft" / "edison" / "b.mp4",
+        raw / "Minecraft" / "tester" / "b.mp4",
         duration_s=2.0,
         width=320,
         height=180,
@@ -45,8 +45,8 @@ def test_batch_extract_two_clips(tmp_path: Path) -> None:
     assert all(r.status == "extracted" for r in results)
     assert sum(r.frame_count for r in results) >= 2
 
-    a_manifest = frames / "Valorant" / "edison" / "a" / "frames_manifest.csv"
-    b_manifest = frames / "Minecraft" / "edison" / "b" / "frames_manifest.csv"
+    a_manifest = frames / "Valorant" / "tester" / "a" / "frames_manifest.csv"
+    b_manifest = frames / "Minecraft" / "tester" / "b" / "frames_manifest.csv"
     assert a_manifest.is_file()
     assert b_manifest.is_file()
 
@@ -55,7 +55,7 @@ def test_batch_extract_two_clips(tmp_path: Path) -> None:
 def test_batch_extract_skips_existing_unless_force(tmp_path: Path) -> None:
     raw = tmp_path / "raw"
     make_color_video(
-        raw / "CS2" / "edison" / "only.mp4",
+        raw / "CS2" / "tester" / "only.mp4",
         duration_s=2.0,
         width=160,
         height=90,
@@ -79,9 +79,9 @@ def test_batch_extract_skips_existing_unless_force(tmp_path: Path) -> None:
 @requires_ffmpeg
 def test_batch_extract_game_filter_and_summary(tmp_path: Path) -> None:
     raw = tmp_path / "raw"
-    make_color_video(raw / "Valorant" / "edison" / "v.mp4", duration_s=1.5)
+    make_color_video(raw / "Valorant" / "tester" / "v.mp4", duration_s=1.5)
     make_color_video(
-        raw / "CS2" / "edison" / "c.mp4",
+        raw / "CS2" / "tester" / "c.mp4",
         duration_s=1.5,
         color="blue",
     )
@@ -108,8 +108,8 @@ def test_batch_extract_game_filter_and_summary(tmp_path: Path) -> None:
 @requires_ffmpeg
 def test_clean_rebuild_drops_removed_source(tmp_path: Path) -> None:
     raw = tmp_path / "raw"
-    make_color_video(raw / "Valorant" / "edison" / "keep.mp4", duration_s=1.5)
-    gone = raw / "Valorant" / "edison" / "gone.mp4"
+    make_color_video(raw / "Valorant" / "tester" / "keep.mp4", duration_s=1.5)
+    gone = raw / "Valorant" / "tester" / "gone.mp4"
     make_color_video(gone, duration_s=1.5, color="blue")
 
     manifests = tmp_path / "manifests"
@@ -117,14 +117,14 @@ def test_clean_rebuild_drops_removed_source(tmp_path: Path) -> None:
     build_catalog(raw, manifests)
     first = extract_catalog(manifests / "clips.csv", frames, interval_s=1.0)
     assert len(first) == 2
-    assert (frames / "Valorant" / "edison" / "gone").is_dir()
+    assert (frames / "Valorant" / "tester" / "gone").is_dir()
 
     gone.unlink()
     records, removed = rebuild_from_raw(raw, manifests, frames)
     assert len(records) == 1
     assert records[0].filename == "keep.mp4"
     assert any("gone" in p for p in removed)
-    assert not (frames / "Valorant" / "edison" / "gone").exists()
+    assert not (frames / "Valorant" / "tester" / "gone").exists()
 
     catalog = load_clip_catalog(manifests / "clips.csv")
     assert [c.filename for c in catalog] == ["keep.mp4"]

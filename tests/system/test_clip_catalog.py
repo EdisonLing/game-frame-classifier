@@ -13,7 +13,7 @@ from tests.helpers.ffmpeg_fixtures import make_color_video, requires_ffmpeg
 @requires_ffmpeg
 def test_catalog_synthetic_tree(tmp_path: Path) -> None:
     raw = tmp_path / "raw"
-    video_path = raw / "Valorant" / "edison" / "smoke.mp4"
+    video_path = raw / "Valorant" / "tester" / "smoke.mp4"
     make_color_video(video_path, duration_s=2.0, width=320, height=180, color="red")
 
     out = tmp_path / "manifests"
@@ -21,9 +21,9 @@ def test_catalog_synthetic_tree(tmp_path: Path) -> None:
 
     assert len(records) == 1
     rec = records[0]
-    assert rec.clip_id == "Valorant/edison/smoke.mp4"
+    assert rec.clip_id == "Valorant/tester/smoke.mp4"
     assert rec.game == "Valorant"
-    assert rec.source == "edison"
+    assert rec.source == "tester"
     assert rec.filename == "smoke.mp4"
     assert Path(rec.path) == video_path.resolve()
     assert Path(rec.path).is_file()
@@ -38,7 +38,7 @@ def test_catalog_synthetic_tree(tmp_path: Path) -> None:
     with csv_path.open(encoding="utf-8") as f:
         rows = list(csv.DictReader(f))
     assert len(rows) == 1
-    assert rows[0]["clip_id"] == "Valorant/edison/smoke.mp4"
+    assert rows[0]["clip_id"] == "Valorant/tester/smoke.mp4"
     assert rows[0]["game"] == "Valorant"
     assert int(rows[0]["width"]) == 320
 
@@ -51,7 +51,7 @@ def test_catalog_synthetic_tree(tmp_path: Path) -> None:
 def test_catalog_rerun_same_clip_ids(tmp_path: Path) -> None:
     raw = tmp_path / "raw"
     make_color_video(
-        raw / "Minecraft" / "edison" / "a.mp4",
+        raw / "Minecraft" / "tester" / "a.mp4",
         duration_s=1.0,
         width=160,
         height=90,
@@ -68,7 +68,7 @@ def test_catalog_rerun_same_clip_ids(tmp_path: Path) -> None:
     second = scan_raw_tree(raw)
     assert [r.clip_id for r in first] == [r.clip_id for r in second]
     assert {r.clip_id for r in first} == {
-        "Minecraft/edison/a.mp4",
+        "Minecraft/tester/a.mp4",
         "Minecraft/friend_b/b.mp4",
     }
 
@@ -76,7 +76,7 @@ def test_catalog_rerun_same_clip_ids(tmp_path: Path) -> None:
 @requires_ffmpeg
 def test_catalog_unreadable_video_raises(tmp_path: Path) -> None:
     raw = tmp_path / "raw"
-    bad = raw / "CS2" / "edison" / "broken.mp4"
+    bad = raw / "CS2" / "tester" / "broken.mp4"
     bad.parent.mkdir(parents=True)
     bad.write_bytes(b"not a real video")
 

@@ -26,9 +26,9 @@ def test_validate_game_rejects_unknown() -> None:
 
 
 def test_make_clip_id_stable() -> None:
-    a = make_clip_id("Valorant", "edison", "clip_01.mp4")
-    b = make_clip_id("Valorant", "edison", "clip_01.mp4")
-    assert a == b == "Valorant/edison/clip_01.mp4"
+    a = make_clip_id("Valorant", "tester", "clip_01.mp4")
+    b = make_clip_id("Valorant", "tester", "clip_01.mp4")
+    assert a == b == "Valorant/tester/clip_01.mp4"
 
 
 def test_empty_raw_returns_empty(tmp_path: Path) -> None:
@@ -43,7 +43,7 @@ def test_missing_raw_returns_empty(tmp_path: Path) -> None:
 
 def test_unknown_game_folder_raises(tmp_path: Path) -> None:
     raw = tmp_path / "raw"
-    bad = raw / "NotAGame" / "edison"
+    bad = raw / "NotAGame" / "tester"
     bad.mkdir(parents=True)
     (bad / "clip.mp4").write_bytes(b"fake")
     with pytest.raises(ValueError, match="unknown game folder"):
@@ -53,7 +53,7 @@ def test_unknown_game_folder_raises(tmp_path: Path) -> None:
 def test_ignores_loose_files_and_non_video(tmp_path: Path) -> None:
     raw = tmp_path / "raw"
     game = raw / "Valorant"
-    source = game / "edison"
+    source = game / "tester"
     source.mkdir(parents=True)
 
     (raw / "loose.mp4").write_bytes(b"x")
@@ -63,9 +63,9 @@ def test_ignores_loose_files_and_non_video(tmp_path: Path) -> None:
 
     records = scan_raw_tree(raw, probe=False)
     assert len(records) == 1
-    assert records[0].clip_id == "Valorant/edison/keep.mp4"
+    assert records[0].clip_id == "Valorant/tester/keep.mp4"
     assert records[0].game == "Valorant"
-    assert records[0].source == "edison"
+    assert records[0].source == "tester"
     assert records[0].filename == "keep.mp4"
     assert Path(records[0].path).is_absolute()
     assert Path(records[0].path).name == "keep.mp4"

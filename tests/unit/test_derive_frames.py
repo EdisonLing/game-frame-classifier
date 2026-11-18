@@ -62,7 +62,7 @@ def test_pair_slots_quick_mode():
     [
         ("contributor_alex", "contributor"),
         ("public_twitch", "public"),
-        ("edison", "personal"),
+        ("tester", "personal"),
         ("friend_bob", "personal"),
     ],
 )

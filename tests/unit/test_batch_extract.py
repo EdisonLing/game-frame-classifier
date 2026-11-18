@@ -16,10 +16,10 @@ from game_frame_classifier.clip_catalog import ClipRecord, load_clip_catalog, wr
 
 def _clip(**kwargs) -> ClipRecord:
     base = dict(
-        clip_id="Valorant/edison/smoke.mp4",
-        path=r"C:\fake\Valorant\edison\smoke.mp4",
+        clip_id="Valorant/tester/smoke.mp4",
+        path=r"C:\fake\Valorant\tester\smoke.mp4",
         game="Valorant",
-        source="edison",
+        source="tester",
         filename="smoke.mp4",
         duration_s=10.0,
         width=640,
@@ -31,7 +31,7 @@ def _clip(**kwargs) -> ClipRecord:
 
 def test_clip_frames_dir_mirrors_game_source_stem(tmp_path: Path) -> None:
     out = clip_frames_dir(tmp_path / "frames", _clip())
-    assert out == tmp_path / "frames" / "Valorant" / "edison" / "smoke"
+    assert out == tmp_path / "frames" / "Valorant" / "tester" / "smoke"
 
 
 def test_already_extracted_requires_manifest(tmp_path: Path) -> None:
@@ -80,8 +80,8 @@ def test_write_batch_summary(tmp_path: Path) -> None:
 
 def test_clear_batch_frame_outputs_removes_clips_and_orphans(tmp_path: Path) -> None:
     frames = tmp_path / "frames"
-    keep = frames / "Valorant" / "edison" / "keep"
-    orphan = frames / "Valorant" / "edison" / "gone"
+    keep = frames / "Valorant" / "tester" / "keep"
+    orphan = frames / "Valorant" / "tester" / "gone"
     smoke = frames / "valorant_smoke"  # not a known-game batch path
     keep.mkdir(parents=True)
     orphan.mkdir(parents=True)
@@ -92,7 +92,7 @@ def test_clear_batch_frame_outputs_removes_clips_and_orphans(tmp_path: Path) -> 
 
     removed = clear_batch_frame_outputs(
         frames,
-        [_clip(filename="keep.mp4", clip_id="Valorant/edison/keep.mp4")],
+        [_clip(filename="keep.mp4", clip_id="Valorant/tester/keep.mp4")],
     )
     assert not keep.exists()
     assert not orphan.exists()
