@@ -145,7 +145,7 @@ No downsampling. All kept slots are used (subject to the source cap); the traine
 | `ledger.csv` | `clip_key, split, first_assigned_utc, note` |
 | `sessions.csv` | `clip_key, game, source, session, recorded_start_utc, recorded_start_source, duration_s, slots_kept, split` |
 | `counts.csv` | `game, split, slots, slots_full, slots_low, slots_quick, clips, sessions, sources, groups`, with `ALL` rows per game and per split |
-| `sources.csv` | `game, source, group, source_kind, split, slots, share` (share of that game's slots in that split) |
+| `sources.csv` | `game, source, group, source_kind, split, slots, share` (share of that game's slots in that split); `source_kind` is `contributor` for `contributor_*` and `friend_*`, `public` for `public_*`, else `personal` |
 | `other_names.csv` | `other_name, split, slots, sessions, sources, share` (share of the split's Other slots) |
 | `unused.csv` | Kept slots not used, with reason (`source_limit`, `source_cap`, `bridges_splits`) |
 | `reassigned.csv` | Clips moved to a more held-out split, with the run time and reason |

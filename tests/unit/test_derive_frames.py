@@ -61,9 +61,9 @@ def test_pair_slots_quick_mode():
     "source,kind",
     [
         ("contributor_alex", "contributor"),
+        ("friend_bob", "contributor"),
         ("public_twitch", "public"),
         ("tester", "personal"),
-        ("friend_bob", "personal"),
     ],
 )
 def test_source_kind(source, kind):

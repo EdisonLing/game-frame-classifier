@@ -224,6 +224,7 @@ __marimo__/
 data/raw/
 data/frames/
 data/frame_sources/
+data/sorting/
 data/manifests/
 data/runs/
 data/bench_extract/

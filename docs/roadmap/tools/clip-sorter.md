@@ -1,7 +1,7 @@
 # Clip sorter (`gfc-sort-clips`)
 
 **Stage:** 1 — Data intake  
-**Status:** specified  
+**Status:** implemented  
 **Back to:** [ROADMAP.md](../ROADMAP.md) · [make-sources](make-sources.md) · [link downloader](clip-link-downloader.md)
 
 ## What it does (high level)
@@ -100,11 +100,11 @@ After a decision the page moves to the next clip.
 
 ## Acceptance checks
 
-- [ ] A folder of clips can be labelled with one key per clip, with sheets ready ahead of the cursor
-- [ ] Disabled and trashed clips behave as in the table; nothing is deleted
-- [ ] Apply copies into the `gfc-make-sources` layout and skips clips already in the pipeline
-- [ ] Session resumes after closing
-- [ ] CLI entry `gfc-sort-clips` in `pyproject.toml`
+- [x] A folder of clips can be labelled with one key per clip, with sheets ready ahead of the cursor
+- [x] Disabled and trashed clips behave as in the table; nothing is deleted
+- [x] Apply copies into the `gfc-make-sources` layout and skips clips already in the pipeline
+- [x] Session resumes after closing
+- [x] CLI entry `gfc-sort-clips` in `pyproject.toml`
 
 ## Build instructions
 

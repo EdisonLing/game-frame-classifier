@@ -9,7 +9,8 @@ Raw media stays **local** (`data/raw/`, `data/frames/`, `data/manifests/` are gi
 data/
   README.md          # short pointer (tracked)
   raw/               # source videos/clips (local only) — collect here
-  frame_sources/     # native-res stills per clip (local only) — D26; from gfc-ingest-pack / future gfc-make-sources
+  sorting/           # clip sorter sessions (sheets cache, decisions, apply reports)
+  frame_sources/     # native-res stills per clip (local only) — D26; from gfc-ingest-pack / gfc-make-sources
   frames/            # 256×144 model-size frames derived from frame_sources (local only)
   manifests/         # index tables and split manifests (local only)
   runs/              # training runs and evaluation output (local only)
@@ -80,7 +81,19 @@ data/raw/
       VALORANT_replay_....mp4
 ```
 
-`<source>` ≈ channel for the ~1/15 cap (you, a friend, a streamer name, etc.).
+`<source>` ≈ channel for the ~1/15 cap (you, a friend, a streamer name, etc.). Friends' clips placed by `gfc-sort-clips` use a `friend_<handle>` source name (for example `friend_alex`); derive and the splitter treat `friend_*` as `contributor`. Pair a friend's raw source with their kit packs through `source_groups` in `config/split.json`.
+
+### Clip sorter sessions (`data/sorting/`)
+
+```text
+data/sorting/<session>/
+  decisions.csv
+  sheets/<quick_id>.jpg
+  apply_report.json
+  apply_report.csv
+```
+
+`<session>` defaults to `<folder name>_<source>`. Contact sheets and decisions live here; apply copies labelled clips into `data/raw/` and moves trash into `<input folder>/_archive/`.
 
 ### Collection rules
 

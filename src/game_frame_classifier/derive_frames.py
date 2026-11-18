@@ -94,7 +94,7 @@ class ClipPlan:
 
 
 def source_kind(source: str) -> str:
-    if source.startswith("contributor_"):
+    if source.startswith("contributor_") or source.startswith("friend_"):
         return "contributor"
     if source.startswith("public_"):
         return "public"

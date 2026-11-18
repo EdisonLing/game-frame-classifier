@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Clip sorter</title>
+<style>
+:root {
+  color-scheme: light dark;
+  --bg: #f4f4f2;
+  --fg: #1a1a1a;
+  --muted: #666;
+  --panel: #fff;
+  --accent: #0b5;
+  --border: #ccc;
+  --warn: #a60;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #121212;
+    --fg: #eee;
+    --muted: #aaa;
+    --panel: #1c1c1c;
+    --accent: #3d8;
+    --border: #333;
+    --warn: #fc6;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+}
+header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: baseline;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+header .progress { margin-left: auto; color: var(--muted); }
+main {
+  display: grid;
+  grid-template-columns: 1fr 280px;
+  gap: 1rem;
+  padding: 1rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+@media (max-width: 800px) {
+  main { grid-template-columns: 1fr; }
+}
+.sheet-wrap {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  min-height: 240px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+.sheet-wrap img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+.placeholder {
+  color: var(--muted);
+  padding: 2rem;
+  text-align: center;
+}
+.meta h1 {
+  font-size: 1.1rem;
+  margin: 0 0 0.5rem;
+  word-break: break-all;
+}
+.meta p { margin: 0.25rem 0; color: var(--muted); font-size: 0.9rem; }
+.meta .decision { color: var(--fg); font-weight: 600; }
+.meta .problem { color: var(--warn); }
+.legend {
+  font-size: 0.85rem;
+  line-height: 1.45;
+  color: var(--muted);
+  border-top: 1px solid var(--border);
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+}
+.legend kbd {
+  display: inline-block;
+  min-width: 1.4em;
+  text-align: center;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0 0.25em;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: inherit;
+}
+dialog {
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--fg);
+  padding: 1rem 1.25rem;
+  max-width: 360px;
+}
+dialog::backdrop { background: rgba(0,0,0,0.4); }
+dialog label { display: block; margin: 0.5rem 0 0.25rem; }
+dialog input, dialog select {
+  width: 100%;
+  padding: 0.35rem;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+}
+dialog .row { display: flex; gap: 0.5rem; margin-top: 0.75rem; justify-content: flex-end; }
+dialog button {
+  padding: 0.35rem 0.75rem;
+  cursor: pointer;
+}
+</style>
+</head>
+<body>
+<header>
+  <strong>Clip sorter</strong>
+  <span id="status" class="progress">Loading…</span>
+</header>
+<main>
+  <div class="sheet-wrap" id="sheet">
+    <div class="placeholder" id="placeholder">Loading…</div>
+  </div>
+  <aside class="meta">
+    <h1 id="name">—</h1>
+    <p id="path"></p>
+    <p id="tech"></p>
+    <p id="suggest"></p>
+    <p class="decision" id="decision"></p>
+    <p class="problem" id="problem"></p>
+    <div class="legend">
+      <div><kbd>1</kbd>–<kbd>6</kbd> games · <kbd>7</kbd> Other · <kbd>Enter</kbd> accept suggestion</div>
+      <div><kbd>D</kbd> disable · <kbd>X</kbd> trash · <kbd>S</kbd> skip · <kbd>U</kbd> undo</div>
+      <div><kbd>←</kbd>/<kbd>→</kbd> move · <kbd>F</kbd> first undecided · <kbd>P</kbd> open clip</div>
+    </div>
+  </aside>
+</main>
+<dialog id="otherDlg">
+  <form method="dialog" id="otherForm">
+    <strong>Other — content name</strong>
+    <label for="otherSelect">Used before</label>
+    <select id="otherSelect"><option value="">— new —</option></select>
+    <label for="otherInput">Or type a new name</label>
+    <input id="otherInput" autocomplete="off" maxlength="32">
+    <div class="row">
+      <button type="submit" value="cancel">Cancel</button>
+      <button type="submit" value="ok">OK</button>
+    </div>
+  </form>
+</dialog>
+<script>
+(function () {
+  const games = [];
+  let state = null;
+  let current = 0;
+  let pollTimer = null;
+  let busy = false;
+
+  const el = (id) => document.getElementById(id);
+
+  async function api(path, body) {
+    const opts = body === undefined
+      ? { method: "GET" }
+      : {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        };
+    const res = await fetch(path, opts);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || res.statusText);
+    return data;
+  }
+
+  function lasting(d) {
+    return d === "label" || d === "disabled" || d === "trash";
+  }
+
+  function decidedCount() {
+    if (!state) return 0;
+    return state.clips.filter((c) => lasting(c.decision)).length;
+  }
+
+  function render() {
+    if (!state || !state.clips.length) {
+      el("status").textContent = "No clips";
+      return;
+    }
+    current = Math.max(0, Math.min(current, state.clips.length - 1));
+    const c = state.clips[current];
+    el("name").textContent = c.rel_path.split("/").pop();
+    el("path").textContent = c.rel_path;
+    const dur = c.duration_s == null ? "?" : Number(c.duration_s).toFixed(1) + "s";
+    el("tech").textContent = dur + " · " + (c.width || "?") + "×" + (c.height || "?");
+    if (c.suggestion) {
+      const origin = c.origin ? " (" + c.origin + ")" : "";
+      el("suggest").textContent = "Suggested: " + c.suggestion +
+        (c.suggestion === "Other" && c.other_name ? " / " + c.other_name : "") + origin;
+    } else {
+      el("suggest").textContent = "Suggested: (none)";
+    }
+    if (c.decision === "label") {
+      el("decision").textContent = "Decision: " + c.game +
+        (c.game === "Other" && c.other_name ? " / " + c.other_name : "");
+    } else if (c.decision) {
+      el("decision").textContent = "Decision: " + c.decision;
+    } else {
+      el("decision").textContent = "Decision: (none)";
+    }
+    el("problem").textContent = c.problem ? "Problem: " + c.problem : "";
+    const n = state.clips.length;
+    const done = decidedCount();
+    el("status").textContent = done + " / " + n + " decided · clip " + (current + 1);
+    const wrap = el("sheet");
+    wrap.innerHTML = "";
+    if (c.sheet_ready) {
+      const img = document.createElement("img");
+      img.alt = "Contact sheet";
+      img.src = "/sheet/" + c.quick_id + ".jpg?t=" + Date.now();
+      wrap.appendChild(img);
+      stopPoll();
+    } else {
+      const ph = document.createElement("div");
+      ph.className = "placeholder";
+      ph.textContent = c.problem ? "No sheet (problem clip)" : "Sheet not ready…";
+      wrap.appendChild(ph);
+      startPoll();
+    }
+  }
+
+  function startPoll() {
+    if (pollTimer) return;
+    pollTimer = setInterval(async () => {
+      try {
+        state = await api("/api/state");
+        render();
+      } catch (e) { /* ignore transient */ }
+    }, 2000);
+  }
+  function stopPoll() {
+    if (pollTimer) {
+      clearInterval(pollTimer);
+      pollTimer = null;
+    }
+  }
+
+  async function refresh() {
+    state = await api("/api/state");
+    if (games.length === 0) {
+      state.games.forEach((g) => games.push(g));
+    }
+    current = state.current;
+    render();
+  }
+
+  async function setCurrent(i) {
+    current = i;
+    await api("/api/current", { i });
+    render();
+  }
+
+  async function decide(decision, game, other_name) {
+    if (busy || !state) return;
+    busy = true;
+    try {
+      const payload = { i: current, decision, game: game || "", other_name: other_name || "" };
+      const res = await api("/api/decide", payload);
+      state = await api("/api/state");
+      current = res.current != null ? res.current : state.current;
+      render();
+    } catch (e) {
+      alert(e.message || String(e));
+    } finally {
+      busy = false;
+    }
+  }
+
+  function askOther() {
+    return new Promise((resolve) => {
+      const dlg = el("otherDlg");
+      const sel = el("otherSelect");
+      const inp = el("otherInput");
+      sel.innerHTML = '<option value="">— new —</option>';
+      (state.other_names || []).forEach((n) => {
+        const o = document.createElement("option");
+        o.value = n;
+        o.textContent = n;
+        sel.appendChild(o);
+      });
+      inp.value = "";
+      const onClose = () => {
+        dlg.removeEventListener("close", onClose);
+        if (dlg.returnValue === "ok") {
+          const name = (inp.value || sel.value || "").trim();
+          resolve(name || null);
+        } else {
+          resolve(null);
+        }
+      };
+      dlg.addEventListener("close", onClose);
+      dlg.showModal();
+      inp.focus();
+    });
+  }
+
+  async function labelGame(game) {
+    if (game === "Other") {
+      const name = await askOther();
+      if (!name) return;
+      await decide("label", "Other", name);
+    } else {
+      await decide("label", game, "");
+    }
+  }
+
+  async function acceptSuggestion() {
+    const c = state.clips[current];
+    if (!c.suggestion) return;
+    if (c.suggestion === "Other") {
+      let name = c.other_name;
+      if (!name) {
+        name = await askOther();
+        if (!name) return;
+      }
+      await decide("label", "Other", name);
+    } else {
+      await decide("label", c.suggestion, "");
+    }
+  }
+
+  document.addEventListener("keydown", async (ev) => {
+    if (el("otherDlg").open) return;
+    if (busy) return;
+    const k = ev.key;
+    if (k >= "1" && k <= "6") {
+      ev.preventDefault();
+      await labelGame(games[Number(k) - 1]);
+      return;
+    }
+    if (k === "7") {
+      ev.preventDefault();
+      await labelGame("Other");
+      return;
+    }
+    if (k === "Enter") {
+      ev.preventDefault();
+      await acceptSuggestion();
+      return;
+    }
+    const lower = k.length === 1 ? k.toLowerCase() : k;
+    if (lower === "d") { ev.preventDefault(); await decide("disabled"); return; }
+    if (lower === "x") { ev.preventDefault(); await decide("trash"); return; }
+    if (lower === "s") { ev.preventDefault(); await decide("skip"); return; }
+    if (lower === "u") {
+      ev.preventDefault();
+      try {
+        state = await api("/api/undo", {});
+        current = state.current;
+        render();
+      } catch (e) { alert(e.message || String(e)); }
+      return;
+    }
+    if (lower === "p") {
+      ev.preventDefault();
+      try { await api("/api/open", { i: current }); } catch (e) { alert(e.message || String(e)); }
+      return;
+    }
+    if (lower === "f") {
+      ev.preventDefault();
+      const idx = state.clips.findIndex((c) => !lasting(c.decision));
+      if (idx >= 0) await setCurrent(idx);
+      return;
+    }
+    if (k === "ArrowLeft") {
+      ev.preventDefault();
+      if (current > 0) await setCurrent(current - 1);
+      return;
+    }
+    if (k === "ArrowRight") {
+      ev.preventDefault();
+      if (current < state.clips.length - 1) await setCurrent(current + 1);
+    }
+  });
+
+  refresh().catch((e) => {
+    el("status").textContent = "Failed to load: " + e.message;
+  });
+})();
+</script>
+</body>
+</html>

@@ -305,7 +305,7 @@ def _choose_split(current: dict[str, int], sessions: dict[str, int], targets: di
 
 
 def _source_kind(source: str) -> str:
-    if source.startswith("contributor_"):
+    if source.startswith("contributor_") or source.startswith("friend_"):
         return "contributor"
     if source.startswith("public_"):
         return "public"

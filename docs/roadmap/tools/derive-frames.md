@@ -62,7 +62,7 @@ Exit codes: `0` success, `1` at least one clip failed, `2` usage or missing inpu
 |---|---|
 | `clip_key`, `clip_sha256` | Identity |
 | `game`, `other_name`, `source` | `game` is `Other` and `other_name` is the normalised `_other` folder for non-six content; `other_name` is empty for the six games |
-| `source_kind` | `contributor` when `source` starts with `contributor_`, `public` when it starts with `public_`, else `personal` |
+| `source_kind` | `contributor` when `source` starts with `contributor_` or `friend_`, `public` when it starts with `public_`, else `personal` |
 | `origin` | `pack_id` from the index (`personal:<run_id>` for make-sources) |
 | `public_examples_ok` | `true` for personal sources; for contributor sources the pack's `consent.public_examples`; `false` when unknown |
 | `recorded_start_utc`, `recorded_start_source`, `duration_s` | From `clip.json`; input to sessions |
