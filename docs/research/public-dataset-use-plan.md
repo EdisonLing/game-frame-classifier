@@ -54,12 +54,13 @@ Dropped by the labelled-media filter: MineDojo YT metadata, LoL-V2T annotations-
 
 Common steps for every public source:
 
-1. Add a ledger row (`status: planned` → `active` when files land).
-2. Create **one** folder `data/raw/<Game>/<source_id>/` (and later the same `<source_id>` under `frame_sources` / `frames`). Never mix datasets in one source folder.
-3. Record URL, license SPDX, attribution blurb, date accessed, and “commercial OK?” on the ledger.
-4. Ingest → clean → split with **clip/session** units (D01/D02); enforce source caps (D33).
-5. Cite active ledger rows in the progress/final report ethics section.
-6. To drop a source: set ledger `status: retired`, delete that source’s raw/frame_sources/frames rows, rebuild catalog/split, retrain if needed, regenerate attributions from **active** rows only.
+1. Add a ledger row (`status: planned` → `active` when files land).  
+2. Create **one** folder under `frame_sources/<Game>/public_…/` (stills) or `data/raw/<Game>/public_…/` then make-sources (videos). Never mix datasets in one source folder.  
+3. Record URL, license SPDX, attribution blurb, date accessed, and “commercial OK?” on the ledger.  
+4. Ingest → clean → split with **clip/session** units (D01/D02); enforce source caps (D33).  
+5. **Toggle for a run** without deleting files: pick a split preset under `config/splits/` or set `include_source_kinds` / `exclude_sources` in a new `split_id` (see [dataset-splitter.md](../roadmap/tools/dataset-splitter.md)).  
+6. Cite active ledger rows that actually appear in that run’s `sources.csv`.  
+7. To remove a dataset for good: ledger `retired` + delete its `public_*` tree + rebuild.
 
 | Source id (proposed) | Game(s) | Tier | Before first use | Ingest notes | Attribution obligation (while active) | Drop before monetize? |
 |---|---|---|---|---|---|---|

@@ -56,9 +56,15 @@ Exit codes: `0` success, `1` policy conflict (see Ledger rules), `2` usage or mi
   "train_slots_per_source": 0,
   "source_slots": {},
   "source_groups": {},
+  "include_source_kinds": [],
+  "exclude_source_kinds": [],
+  "include_sources": [],
+  "exclude_sources": [],
   "test_design": ""
 }
 ```
+
+Preset policies (same keys, different `split_id` / filters) live under `config/splits/`: `personal_only.json`, `no_public.json`, `everything.json`, `public_permissive.json`.
 
 | Key | Meaning |
 |---|---|
@@ -67,12 +73,18 @@ Exit codes: `0` success, `1` policy conflict (see Ledger rules), `2` usage or mi
 | `session_gap_min` | Session rule (below) |
 | `holdout_sources` | `{ "<Game>": ["<source-or-group>", ...] }`; every clip of those sources (or every source in a named group) for that game goes to `test_source` |
 | `holdout_other` | `["<other_name>", ...]`; every Other clip with one of those names goes to `test_source`, regardless of source |
+| `include_source_kinds` | If non-empty, only these kinds: `personal`, `contributor`, `public`. Empty = all kinds. Optional, default `[]` |
+| `exclude_source_kinds` | Drop these kinds before assignment (slots go to `unused.csv` with reason `excluded_kind`). Optional, default `[]` |
+| `include_sources` | If non-empty, only these source folder names. Optional, default `[]` |
+| `exclude_sources` | Drop these source folders (reason `excluded_source`). Use to toggle individual `public_*` datasets off without deleting files. Optional, default `[]` |
 | `max_source_share` | Largest share of one game's **train** slots a single **group** may hold (section 3). Default `0.0667` (1/15, the proposal); `1.0` = no cap |
 | `train_slots_per_source` | Most **train** slots one **group** may hold in one game (section 3); `0` = no limit. Optional, default `0` |
 | `max_slots_per_source` | Most kept slots one source may contribute to one game, all splits together; `0` = no limit (section 3a). Optional, default `0` |
 | `source_slots` | `{ "<source>": N }`: a per-source limit that replaces `max_slots_per_source` for that source in every game (`0` = no limit). Optional, default `{}` |
 | `source_groups` | `{ "<group>": ["<source>", ...] }`: sources that are the same person count as one group for the train cap and for held-out sources. A source not listed is its own group. Optional, default `{}` |
 | `test_design` | One line stating the agreed held-out design (gate G1). Empty until agreed; `--freeze` refuses while empty |
+
+**Toggles vs holdout:** `exclude_*` / `include_*` omit a source from the whole split (data stays on disk). `holdout_sources` still puts a source in `test_source` for evaluation. Use a **new `split_id`** when you change the filter set so ledgers do not fight.
 
 ## Behaviour
 

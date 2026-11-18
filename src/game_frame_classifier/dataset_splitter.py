@@ -106,10 +106,24 @@ def load_config(path: Path) -> dict[str, Any]:
     config.setdefault("train_slots_per_source", 0)
     config.setdefault("source_groups", {})
     config.setdefault("holdout_other", [])
+    config.setdefault("include_source_kinds", [])
+    config.setdefault("exclude_source_kinds", [])
+    config.setdefault("include_sources", [])
+    config.setdefault("exclude_sources", [])
     if not isinstance(config["holdout_other"], list) or any(
         not isinstance(value, str) or not value for value in config["holdout_other"]
     ):
         raise SplitterError("holdout_other must be a list of non-empty names", 2)
+    for key in ("include_source_kinds", "exclude_source_kinds", "include_sources", "exclude_sources"):
+        value = config[key]
+        if not isinstance(value, list) or any(not isinstance(item, str) or not item for item in value):
+            raise SplitterError(f"{key} must be a list of non-empty strings", 2)
+    kind_values = set(config["include_source_kinds"]) | set(config["exclude_source_kinds"])
+    if kind_values - {"personal", "contributor", "public"}:
+        raise SplitterError(
+            "include_source_kinds / exclude_source_kinds may only use personal, contributor, public",
+            2,
+        )
     limits = [config["max_slots_per_source"], config["train_slots_per_source"], *config["source_slots"].values()]
     if not isinstance(config["source_slots"], dict) or any(
         not isinstance(value, int) or isinstance(value, bool) or value < 0 for value in limits
@@ -312,6 +326,49 @@ def _source_kind(source: str) -> str:
     return "personal"
 
 
+def source_selected(source: str, kind: str, config: dict[str, Any]) -> bool:
+    """Whether a source participates in this split policy (toggle for public / personal runs)."""
+    if source in config["exclude_sources"]:
+        return False
+    if kind in config["exclude_source_kinds"]:
+        return False
+    include_sources = config["include_sources"]
+    if include_sources and source not in include_sources:
+        return False
+    include_kinds = config["include_source_kinds"]
+    if include_kinds and kind not in include_kinds:
+        return False
+    return True
+
+
+def apply_source_selection(
+    slots: list[dict[str, Any]],
+    clips: dict[str, dict[str, str]],
+    config: dict[str, Any],
+) -> tuple[list[dict[str, Any]], dict[str, dict[str, str]], list[dict[str, Any]]]:
+    """Drop toggled-off sources before sessions/assignment; record them as unused."""
+    kept_slots: list[dict[str, Any]] = []
+    unused: list[dict[str, Any]] = []
+    for slot in slots:
+        source = slot["source"]
+        kind = slot.get("source_kind") or _source_kind(source)
+        if source_selected(source, kind, config):
+            kept_slots.append(slot)
+            continue
+        reason = "excluded_source" if source in config["exclude_sources"] or (
+            config["include_sources"] and source not in config["include_sources"]
+        ) else "excluded_kind"
+        unused.append({
+            "slot_id": slot["slot_id"], "clip_key": slot["clip_key"], "game": slot["game"],
+            "source": source, "session": "", "split": "", "reason": reason,
+        })
+    kept_clips = {
+        key: clip for key, clip in clips.items()
+        if source_selected(clip["source"], clip.get("source_kind") or _source_kind(clip["source"]), config)
+    }
+    return kept_slots, kept_clips, unused
+
+
 def _write_counts(
     output: Path, used: list[dict[str, Any]], source_to_group: dict[str, str] | None = None,
 ) -> list[dict[str, Any]]:
@@ -473,6 +530,7 @@ def run_split(data_root: Path, config_path: Path, *, plan: bool = False, reset: 
     unknown = sorted({clip["game"] for clip in clips.values()} - set(CLASSES))
     if unknown:
         raise SplitterError(f"clips_index has games outside the label set: {', '.join(unknown)}", 2)
+    slots, clips, excluded = apply_source_selection(slots, clips, config)
     slots, limited = apply_source_limits(slots, config)
     source_to_group = resolve_source_groups(
         config["source_groups"],
@@ -503,7 +561,7 @@ def run_split(data_root: Path, config_path: Path, *, plan: bool = False, reset: 
         for clip in session["clips"]
     }
     _validate_ledger(ledger, clips, heldout, holdout_other, session_holdout)
-    now, reassigned, unused = _now(), [], list(limited)
+    now, reassigned, unused = _now(), [], list(excluded) + list(limited)
     assigned_slots: list[dict[str, Any]] = []
     session_of: dict[str, str] = {}
     filled = {game: {split: 0 for split in SPLITS} for game in CLASSES}

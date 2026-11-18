@@ -1,0 +1,23 @@
+{
+  "schema": "gfc.split/1",
+  "split_id": "no_public",
+  "seed": 360,
+  "targets": {
+    "train": 0.70,
+    "val": 0.15,
+    "test_session": 0.15
+  },
+  "session_gap_min": 30,
+  "holdout_sources": {},
+  "holdout_other": [],
+  "max_source_share": 0.0667,
+  "max_slots_per_source": 0,
+  "train_slots_per_source": 0,
+  "source_slots": {},
+  "source_groups": {},
+  "include_source_kinds": ["personal", "contributor"],
+  "exclude_source_kinds": [],
+  "include_sources": [],
+  "exclude_sources": [],
+  "test_design": ""
+}

@@ -507,3 +507,43 @@ def test_source_group_tables_and_empty_groups_match_ungrouped(tmp_path) -> None:
     assert int(train["sources"]) == 3 and int(train["groups"]) == 2
     summary = json.loads((grouped_out / "summary.json").read_text(encoding="utf-8"))
     assert summary["source_groups"]["person_a"] == ["tester", "tester_oldpc"]
+
+
+def test_source_kind_and_source_toggles(tmp_path) -> None:
+    data = tmp_path / "data"
+    clips = [
+        {"source": "me", "source_kind": "personal", "recorded_start_utc": "2026-01-01T00:00:00Z"},
+        {"source": "contributor_a", "source_kind": "contributor", "recorded_start_utc": "2026-01-01T01:00:00Z"},
+        {"source": "public_gamed", "source_kind": "public", "recorded_start_utc": "2026-01-01T02:00:00Z"},
+        {"source": "public_minerl", "source_kind": "public", "recorded_start_utc": "2026-01-01T03:00:00Z"},
+    ]
+    write_split_inputs(data, clips, slots_per_clip=2)
+
+    personal = write_split_config(
+        tmp_path / "personal.json",
+        split_id="personal_only",
+        include_source_kinds=["personal"],
+        max_source_share=1.0,
+    )
+    run_split(data, personal)
+    train = list(csv.DictReader((data / "manifests/splits/personal_only/train.csv").open(encoding="utf-8")))
+    unused = list(csv.DictReader((data / "manifests/splits/personal_only/unused.csv").open(encoding="utf-8")))
+    assert {row["source"] for row in train} == {"me"}
+    assert {row["reason"] for row in unused} == {"excluded_kind"}
+
+    permissive = write_split_config(
+        tmp_path / "perm.json",
+        split_id="public_permissive",
+        exclude_sources=["public_minerl"],
+        max_source_share=1.0,
+    )
+    run_split(data, permissive)
+    train = list(csv.DictReader((data / "manifests/splits/public_permissive/train.csv").open(encoding="utf-8")))
+    unused = list(csv.DictReader((data / "manifests/splits/public_permissive/unused.csv").open(encoding="utf-8")))
+    assert "public_minerl" not in {row["source"] for row in train}
+    assert "public_gamed" in {row["source"] for row in train} or "public_gamed" in {
+        row["source"] for row in csv.DictReader((data / "manifests/splits/public_permissive/val.csv").open(encoding="utf-8"))
+    } or "public_gamed" in {
+        row["source"] for row in csv.DictReader((data / "manifests/splits/public_permissive/test_session.csv").open(encoding="utf-8"))
+    }
+    assert any(row["source"] == "public_minerl" and row["reason"] == "excluded_source" for row in unused)
