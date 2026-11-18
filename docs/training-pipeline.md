@@ -32,7 +32,7 @@ flowchart TD
 | 5 | Loader and augmentation (library, no command) | — | split manifests, `data/frames/` | tensors / arrays in memory | [dataset-loader.md](roadmap/tools/dataset-loader.md) | implemented |
 | 6 | Baseline | `gfc-train-baseline` | split manifests | `runs/baseline/<run_id>/` | [baseline.md](roadmap/tools/baseline.md) | planned |
 | 7 | CNN | `gfc-train-cnn` | split manifests | `runs/cnn/<run_id>/` | [cnn-trainer.md](roadmap/tools/cnn-trainer.md) | planned |
-| 8 | Evaluation and report figures | `gfc-evaluate` | a run folder + split manifests | metrics, figures, comparison table | [evaluation.md](roadmap/tools/evaluation.md) | planned |
+| 8 | Evaluation and report figures | `gfc-evaluate` | a run folder + split manifests | metrics, figures, comparison table | [evaluation.md](roadmap/tools/evaluation.md) | implemented |
 
 Every step is rerunnable and skips finished work, so new clips can be added at any time and pushed through steps 1 to 4 again. Existing clips never change split when that happens (section 3.5).
 

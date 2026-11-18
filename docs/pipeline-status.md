@@ -65,7 +65,8 @@ The interim branch (catalog → batch extract → clean → quality) ends at sin
 | Clean, slot mode | **Done** | One verdict per slot; dedupe across a source; quarantine list (`gfc-clean-frames --slots`) |
 | `gfc-split` | **Done** | Sessions, ledger splits, tier per slot, data tables; freeze gated on D32 |
 | Loader + augmentation | **Done** | `split_manifest` + `dataset`: one decode path for both models, train-only augmentation, test splits gated |
-| Baseline, CNN, evaluation | **Specified** | See [training-pipeline.md](training-pipeline.md) |
+| Evaluation | **Done** | `gfc-evaluate`: metrics, confusion matrix, example grid, tier diagnostic, comparison table, data report; test splits gated and logged |
+| Baseline, CNN | **Specified** | See [training-pipeline.md](training-pipeline.md) |
 
 ## Batch extract usage (interim)
 
@@ -87,7 +88,7 @@ Ops quality on a single clip: `gfc-encode-quality … --tiers full low` (D04). M
 
 ## In short
 
-**Usable now:** catalog + batch extract + clean + quality + Frame Export Kit + ingest + `gfc-make-sources` + `gfc-derive-frames` + slot-mode clean + `gfc-split` + loader. **Specified and next to build:** evaluation, baseline, CNN. **Later:** D11 detector.
+**Usable now:** catalog + batch extract + clean + quality + Frame Export Kit + ingest + `gfc-make-sources` + `gfc-derive-frames` + slot-mode clean + `gfc-split` + loader + `gfc-evaluate`. **Specified and next to build:** baseline, CNN. **Later:** D11 detector.
 
 ## Related
 
