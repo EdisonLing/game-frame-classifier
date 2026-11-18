@@ -50,7 +50,7 @@ Exit codes: `0` all done (including nothing new), `1` at least one link failed, 
 ## Behaviour
 
 1. **Read links.** Strip, drop blanks and `#` lines, de-duplicate keeping order.
-2. **Parse each link.** `parse_link(url) -> LinkInfo(url, site, clip_id, slug)`. Medal: host `medal.tv` or `www.medal.tv`, path `/games/<slug>/clips/<clip_id>` (an optional trailing path or query is ignored). Older form `/clips/<clip_id>`: slug empty. Other hosts: `site = "other"`.
+2. **Parse each link.** `parse_link(url) -> LinkInfo(url, site, clip_id, slug)`. Medal: host `medal.tv` or `www.medal.tv`, path `/games/<slug>/clips/<clip_id>` (an optional trailing path or query is ignored). Older form `/clips/<clip_id>`: slug empty, and it is not downloaded (status `failed`, error "old Medal link form; ask for the full medal.tv/games/... link"): yt-dlp 2026.10.26's Medal extractor only matches `/games/<slug>/clips/<id>` (checked 2026-11-18). Other hosts: `site = "other"`.
 3. **Game from the slug.** `game_for_slug(slug) -> (game, other_name)`: the table below first; otherwise `label_hints(slug with "-" replaced by " ")` when it gives exactly one game; otherwise Other with `other_name = normalize_other_name(slug)` (empty slug: no suggestion).
 
    | Slug | Game |
