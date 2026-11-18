@@ -174,12 +174,7 @@ def expand_holdout_sources(
                 raise SplitterError(
                     f"group {group} would be split between held-out and training", 1,
                 )
-        # A holdout name that is only a future source still forms a singleton group.
-        for source in sorted(resolved):
-            if source not in source_to_group:
-                # Treat unknown names as singleton groups for the partial-group check above;
-                # they stay in the expanded set so ledger checks and assignment see them.
-                pass
+        # A name that is not a known source yet (footage to come) stays in the set as its own group.
         heldout[game] = resolved
     return heldout
 
