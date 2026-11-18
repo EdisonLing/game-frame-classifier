@@ -42,4 +42,16 @@ Tiers half full, half CRF 45 in every split (D04). Test splits not opened (split
 
 The run folder, the split snapshot, figures (confusion matrix, example grid, class counts, example frames) and per-source tables are archived locally for the reports; the figures contain gameplay frames and stay out of the repo until they are checked for personal details.
 
-**Next.** A larger histogram run once more footage is in; footage for Minecraft, Overwatch 2 and Marvel Rivals; the CNN on the same split for the comparison.
+**Next.** A larger histogram run once more footage is in; footage for Minecraft, Overwatch 2 and Marvel Rivals.
+
+## 2026-11-18 — CNN, same data as the baseline above
+
+**Data.** Exactly the baseline's train and val (same split files, same hashes).
+
+**Run.** `gfc-train-cnn` with the default config (D16, D37): FrameCNN 32-64-128-256, flatten head, FC 256, dropout 0.5, 9,827,878 parameters; Adam lr 1e-3, weight decay 1e-4, batch 64, class-weighted loss, augmentation on; early stop on val macro-F1 with patience 6. Trained on the RX 9070 XT (ROCm build of PyTorch): 11 epochs, best at epoch 5, about 30 s for the first epoch (warm-up) and 4.6 s for each later one.
+
+**Val results.** Accuracy 1.000 and macro-F1 1.000 (366 of 366), every game F1 1.00, full and CRF 45 tiers both 1.000. Against the baseline on the same rows: accuracy +0.268, macro-F1 +0.303, CS2 F1 +0.47.
+
+- Train and val curves converge by epoch 3 with no gap between them; val stays at 0.98 to 1.00 for the remaining epochs.
+- Three games with very different HUDs and only 366 val frames make this an easy setting: the CNN separates exactly the cases the histogram could not (Valorant against CS2), but the real test is the look-alike pair (Overwatch 2 and Marvel Rivals), unseen sources and held-out sessions, none of which are in this run.
+
