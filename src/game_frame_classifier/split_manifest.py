@@ -136,6 +136,8 @@ def image_path(row: SlotRow, data_root: Path, tier_mode: str = "assigned") -> Pa
         rel = row.path_full
     else:
         rel = row.path_low
+        if not rel:
+            raise ValueError(f"{row.slot_id} has no low tier (quick-mode clip); filter such rows first")
     return Path(data_root) / Path(*rel.split("/"))
 
 

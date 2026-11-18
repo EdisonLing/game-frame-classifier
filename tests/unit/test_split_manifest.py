@@ -153,3 +153,15 @@ def test_load_image_u8_greyscale_to_rgb(tmp_path):
     assert arr.dtype == np.uint8
     assert (arr[:, :, 0] == arr[:, :, 1]).all()
     assert (arr[:, :, 1] == arr[:, :, 2]).all()
+
+
+def test_low_tier_path_raises_for_quick_mode_rows(tmp_path):
+    row = SlotRow(
+        slot_id="c000000000001:b000000", clip_key="c000000000001", game="Valorant", label=0,
+        source="contributor_x", source_kind="contributor", session="s", split="train", tier="full",
+        path="frames/a.jpg", path_full="frames/a.jpg", path_low="", bucket=0, target_time_s=0.0,
+        public_examples_ok=True,
+    )
+    assert image_path(row, tmp_path, "assigned") == tmp_path / "frames" / "a.jpg"
+    with pytest.raises(ValueError, match="quick-mode"):
+        image_path(row, tmp_path, "low")
