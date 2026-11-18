@@ -75,9 +75,11 @@ def reencode_video_crf(
     *,
     crf: int,
     preset: str = "veryfast",
+    max_duration_s: float | None = None,
 ) -> Path:
     """
-    Re-encode ``src`` to H.264 at ``crf`` (video only, no audio).
+    Re-encode ``src`` to H.264 at ``crf`` (video only, no audio), or only its first
+    ``max_duration_s`` seconds when given.
 
     This is the authentic quality path: compress the timeline, then callers
     extract and downscale. CRF 0 is rejected here — use the original file.
@@ -100,6 +102,7 @@ def reencode_video_crf(
         "-y",
         "-i",
         str(src),
+        *(["-t", f"{max_duration_s:.3f}"] if max_duration_s else []),
         "-an",
         "-c:v",
         "libx264",
@@ -230,7 +233,9 @@ def encode_video_quality_tiers(
                 )
                 tmp.close()
                 tmp_proxy = Path(tmp.name)
-                reencode_video_crf(video_path, tmp_proxy, crf=crf, preset=preset)
+                reencode_video_crf(
+                    video_path, tmp_proxy, crf=crf, preset=preset, max_duration_s=max_duration_s,
+                )
                 src_for_extract = tmp_proxy
 
             frames = extract_frames(
