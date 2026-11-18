@@ -30,7 +30,7 @@ flowchart TD
 | 3 | Clean per slot | `gfc-clean-frames --slots` | `slots`, `clips_index`, `quarantine.csv` | `slots_clean` | [frame-cleaner.md](roadmap/tools/frame-cleaner.md) | implemented |
 | 4 | Sessions, splits, tier assignment, data tables | `gfc-split` | `slots_clean`, `clips_index`, `config/split.json` | `splits/<split_id>/` | [dataset-splitter.md](roadmap/tools/dataset-splitter.md) | implemented |
 | 5 | Loader and augmentation (library, no command) | — | split manifests, `data/frames/` | tensors / arrays in memory | [dataset-loader.md](roadmap/tools/dataset-loader.md) | implemented |
-| 6 | Baseline | `gfc-train-baseline` | split manifests | `runs/baseline/<run_id>/` | [baseline.md](roadmap/tools/baseline.md) | planned |
+| 6 | Baseline | `gfc-train-baseline` | split manifests | `runs/baseline/<run_id>/` | [baseline.md](roadmap/tools/baseline.md) | implemented |
 | 7 | CNN | `gfc-train-cnn` | split manifests | `runs/cnn/<run_id>/` | [cnn-trainer.md](roadmap/tools/cnn-trainer.md) | planned |
 | 8 | Evaluation and report figures | `gfc-evaluate` | a run folder + split manifests | metrics, figures, comparison table | [evaluation.md](roadmap/tools/evaluation.md) | implemented |
 
