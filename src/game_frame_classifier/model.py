@@ -1,4 +1,4 @@
-"""From-scratch FrameCNN: 256×144 RGB frame → six-way game logits.
+"""From-scratch FrameCNN: 256×144 RGB frame → configurable game logits.
 
 Spec: `docs/roadmap/tools/cnn-trainer.md`. Architecture D16 / D16b.
 """
@@ -29,7 +29,7 @@ class FrameCNN(nn.Module):
         fc_dim: int = 256,
         dropout: float = 0.5,
         head: str = "flatten",
-        num_classes: int = 6,
+        num_classes: int = 7,
     ) -> None:
         super().__init__()
         if head not in ("flatten", "gap"):

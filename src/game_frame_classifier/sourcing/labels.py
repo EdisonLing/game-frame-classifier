@@ -8,6 +8,7 @@ from pathlib import Path
 
 GAMES = ("Valorant", "League_of_Legends", "CS2", "Minecraft", "Overwatch_2", "Marvel_Rivals")
 OTHER = "Other"
+CLASSES = GAMES + (OTHER,)
 MIXED = "Mixed"
 MIXED_OTHER_NAME = "mixed_other"
 MIXED_FILENAME_FORMAT = "title__timestamp_v1"

@@ -117,6 +117,7 @@ def write_clip_tree(
     use_ffmpeg_jpegs: bool = False,
     colors: dict[str, str] | None = None,
     extra_files: list[tuple[str, str, int]] | None = None,
+    other_name: str = "",
 ) -> Path:
     """
     Create ``frame_sources/<game>/<source>/<clip_key>/{tiers}/...`` plus ``clip.json``.
@@ -125,7 +126,11 @@ def write_clip_tree(
     for unpaired-name tests (``bucket_or_-1`` unused for naming).
     """
     clip_key = clip_key_for(clip_sha256)
-    clip_dir = Path(fs_root) / game / source / clip_key
+    clip_dir = (
+        Path(fs_root) / "_other" / other_name / source / clip_key
+        if game == "Other"
+        else Path(fs_root) / game / source / clip_key
+    )
     clip_dir.mkdir(parents=True, exist_ok=True)
     colors = colors or {}
     for tier in tiers:

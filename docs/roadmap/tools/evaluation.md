@@ -8,7 +8,7 @@
 
 ## What it does (high level)
 
-Scores any trained run on a split and writes the numbers and figures the reports need: accuracy, per-game precision, recall and F1, a confusion matrix, breakdowns by tier, source and clip, and a grid of example predictions. It also draws the data figures (class counts, example frames) and builds the baseline-versus-CNN table.
+Scores six-way and seven-way runs, including six-game classification and open-set detection, and writes the metrics, figures and paired run comparison the reports need.
 
 ## Why we need it
 
@@ -53,7 +53,7 @@ python -m game_frame_classifier.evaluation ...
 ```python
 class Predictor(Protocol):
     labels: tuple[str, ...]
-    def predict_proba(self, rows: list[SlotRow], data_root: Path, tier_mode: str = "assigned") -> np.ndarray   # (N, 6)
+    def predict_proba(self, rows: list[SlotRow], data_root: Path, tier_mode: str = "assigned") -> np.ndarray   # (N, 6 or 7)
 
 def load_predictor(run_dir: Path) -> Predictor      # dispatches on run.json "model_type"
 ```
@@ -63,8 +63,9 @@ Evaluation knows nothing else about a model. A new model type only has to provid
 ### Checks before scoring
 
 - The run's `split_id` matches the split folder, and the folder's current file hashes are compared with those stored in `run.json`; a difference (data added since training) is printed and recorded, not an error.
-- The run's `labels` equal `split_manifest.LABELS`.
+- The run's labels equal either `GAMES` or `CLASSES`.
 - For `test_session` / `test_source`: the split folder must contain `freeze.json` (gate G1) and `--reason` must be given. One line `{utc, run, split, reason, git_commit}` is appended to `data/runs/holdout_access.jsonl`.
+- `val` chooses the open-set threshold. Every other split refuses until `<run>/eval/val/open_set.json` exists.
 
 ### Metrics (`metrics.json`)
 
@@ -78,6 +79,8 @@ Evaluation knows nothing else about a model. A new model type only has to provid
 | `by_encoder` | Accuracy and n for `crf45` rows per encoder (`h264_d3d12va`, `libx264`), joined from `clips_index.low_encoder`; also by encoder within each game where both occur. A large gap is the signal to revisit D28 |
 | `by_source` | Accuracy and n per source (and `source_kind`) |
 | `by_clip` | Accuracy and n per `clip_key`, worst first (per-video error breakdown) |
+| `six_game` | Accuracy and macro-F1 on six-game rows; a seven-way prediction of Other is wrong |
+| `open_set` | `s = 1 - max p(game)`; val threshold at at most 5% six-game false alarms; false-alarm rate, Other detection, AUROC, coverage and covered accuracy |
 | `provenance` | Run id, model type, split id, split hash, hash-changed flag, time |
 
 A class with no rows in the split gets `null` scores and is left out of macro-F1; this is stated in the file. A class with rows that the model never predicts gets precision 0 and F1 0 and stays in macro-F1. `provenance.split_hash` is the hash of the split file actually scored (comparisons pair runs on it); `train_time_split_hash` is the one stored in `run.json`.
@@ -90,8 +93,9 @@ With `--tier-diagnostic`, every row that has both tiers is predicted twice, at `
 
 | File | Content |
 |---|---|
-| `predictions.csv` | `slot_id, game, label, pred, pred_game, correct, confidence, p_<game>` ×6, `tier, source, clip_key, session` |
+| `predictions.csv` | Identity, prediction, confidence, `open_score`, one probability column per run label, tier/source/clip/session |
 | `metrics.json` | Above |
+| `open_set.json` | The `open_set` block, including the val-selected `tau` |
 | `confusion.png` | Row-normalised matrix with counts in the cells |
 | `examples.png` | Two panels: highest-confidence correct and highest-confidence wrong, each tile captioned true → predicted and confidence; wrong panel favours the look-alike pair when present |
 | `tier_diagnostic.json` | Only with `--tier-diagnostic` |
@@ -100,7 +104,7 @@ Example grids use only rows with `public_examples_ok = true`, so a contributor w
 
 ### Comparison (`--compare`)
 
-Reads both runs' `metrics.json` for the split (they must share `split_id` and split hash) and writes `data/runs/compare/<runA>__<runB>/<split>.md` and `.csv`: accuracy, macro-F1, per-game F1 and the look-alike numbers side by side with the difference.
+Reads both runs' metrics and predictions for the same split id/hash. In addition to the side-by-side `.md` and `.csv`, it writes `<split>.json` with 95% paired bootstrap intervals for `six_game` macro-F1, Other detection rate and AUROC differences. It resamples whole `clip_key` values 1,000 times with replacement, seed 360.
 
 ### Data report (`--data-report`)
 
@@ -114,7 +118,7 @@ Writes to `<split_dir>/report/`: `class_counts.png` (slots per game, stacked by 
 | Headline metric | Macro-F1 beside accuracy; classes will not be perfectly balanced (D34) |
 | Tier results | `by_tier` on the half-and-half set is always present; the paired diagnostic is opt-in because it doubles inference |
 | Test access | Frozen split, stated reason, logged (D13, G1) |
-| Unknown | Added after first results: `--unknown-threshold` picked on val, reported as coverage and accuracy on covered rows (D24) |
+| Open set | Same score and 5% val false-alarm operating point for six-way and seven-way runs (D24) |
 
 ## Working defaults
 
@@ -127,9 +131,9 @@ Writes to `<split_dir>/report/`: `class_counts.png` (slots per game, stacked by 
 
 | Kind | Cases |
 |---|---|
-| **Unit: metrics** | Hand-built 3-class predictions → exact accuracy, per-class P/R/F1, macro-F1 and confusion matrix; class with zero support handled; look-alike numbers from a known matrix; `by_tier`, `by_source`, `by_clip` group correctly |
-| **Unit: guards** | Test split without `freeze.json` refused; without `--reason` refused; accepted case appends exactly one log line; label-order mismatch refused; examples exclude rows without consent |
-| **System** | Fake predictor (always right / always one class) on a synthetic split → all files written, metrics as expected, PNGs non-empty; `--tier-diagnostic` with a predictor that depends on the path gives the expected flip rate; `--compare` on two fake runs writes the table; `--data-report` writes both figures |
+| **Unit: metrics** | Existing classification/group cases plus six-game errors, known 5% threshold, Other detection, AUROC and coverage |
+| **Unit: guards** | Existing held-out guards plus non-val scoring before val threshold refused |
+| **System** | Existing files/figures plus six/seven output and reproducible paired video bootstrap comparison |
 
 **How to run:** `pytest tests/unit/test_evaluation.py tests/system/test_evaluation.py` (skips without NumPy / matplotlib)
 

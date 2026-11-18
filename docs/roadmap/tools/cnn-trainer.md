@@ -6,7 +6,7 @@
 
 ## What it does (high level)
 
-Defines the from-scratch CNN that maps one 256×144 RGB frame to one of six games, trains it on the `train` split, selects the best epoch on `val`, and saves a checkpoint with everything needed to reproduce or evaluate it.
+Defines the from-scratch CNN that maps one 256×144 RGB frame to either six games or six games plus Other, trains it on `train`, selects the best epoch on `val`, and saves a reproducible checkpoint.
 
 ## Why we need it
 
@@ -43,8 +43,8 @@ python -m game_frame_classifier.train --split-dir ...
 
 ```python
 class FrameCNN(nn.Module):
-    def __init__(self, channels=(32, 64, 128, 256), fc_dim=256, dropout=0.5, head="flatten", num_classes=6): ...
-    def forward(self, x):            # x: [B, 3, 144, 256] → logits [B, 6]
+    def __init__(self, channels=(32, 64, 128, 256), fc_dim=256, dropout=0.5, head="flatten", num_classes=7): ...
+    def forward(self, x):            # x: [B, 3, 144, 256] → logits [B, num_classes]
 ```
 
 Each block: 3×3 convolution (padding 1, no bias) → batch normalisation → ReLU → 2×2 max pool.
@@ -58,12 +58,12 @@ Each block: 3×3 convolution (padding 1, no bias) → batch normalisation → Re
 | Block 4: conv 128→256, BN | 256×9×16 | 295,424 |
 | Flatten | 36,864 | — |
 | FC 36,864→256, ReLU, dropout 0.5 | 256 | 9,437,440 |
-| FC 256→6 | 6 | 1,542 |
-| **Total** | | **9,827,878** |
+| FC 256→7 | 7 | 1,799 |
+| **Total (seven-way)** | | **9,828,135** |
 
 96 % of the parameters sit in the first fully connected layer; the convolutional stack is 388,896. Softmax is applied only for reporting; training uses logits.
 
-`head="gap"` replaces flatten and the first FC with global average pooling → dropout → FC 256→6, for 390,438 parameters. This is the flatten versus global-average-pooling comparison planned in the proposal (D16b); flatten is primary because it keeps where on screen a feature fired.
+`head="gap"` replaces flatten and the first FC with global average pooling → dropout → FC 256→7, for 390,695 parameters. Six-way counts remain 9,827,878 and 390,438.
 
 Weights use PyTorch's default initialisation. No pretrained weights.
 
@@ -83,7 +83,7 @@ Weights use PyTorch's default initialisation. No pretrained weights.
 
 Per epoch: train loss and accuracy (running, in train mode), then val loss, accuracy and macro-F1 in eval mode. One line is printed and appended to `history.csv`.
 
-Training never opens a test split. The unknown threshold (D24) is not part of training; the model is always six-way.
+Training never opens a test split. `label_set` is `"seven"` (default) or `"six"`; six drops Other rows, while seven outputs seven logits and refuses to run without Other in train. The threshold remains an evaluation concern.
 
 ### Training time
 
@@ -184,6 +184,7 @@ The RX 9070 XT environment was checked with a standalone script that builds the 
 ```json
 {
   "schema": "gfc.train_cnn/1",
+  "label_set": "seven",
   "seed": 360,
   "model": { "channels": [32, 64, 128, 256], "fc_dim": 256, "dropout": 0.5, "head": "flatten" },
   "optim": { "name": "adam", "lr": 0.001, "weight_decay": 0.0001 },
@@ -234,9 +235,9 @@ Checkpoints are loaded with `weights_only=True` plus the config stored beside th
 
 | Kind | Cases |
 |---|---|
-| **Unit: model** | Random `[2, 3, 144, 256]` → logits `[2, 6]`; parameter count is 9,827,878 for the default and 390,438 for `head="gap"`; eval mode is deterministic; other channel tuples build |
+| **Unit: model** | Random `[2, 3, 144, 256]` → seven logits; default counts are 9,828,135 flatten and 390,695 GAP; explicit six-way counts remain unchanged |
 | **Unit: config** | `--set model.head=gap` changes the resolved config; unknown keys are rejected |
-| **System** | Overfit: 3 classes × 8 synthetic frames, 30 epochs, no augmentation → train accuracy ≥ 0.95; run folder holds every file listed; `history.csv` has one row per epoch; `CnnPredictor` on the run reproduces the saved val predictions; same seed gives the same first-epoch loss on CPU |
+| **System** | Existing six-way overfit and reproducibility cases; synthetic Other runs in six and seven; seven records seven labels and 9,828,135 parameters; seven without Other refuses |
 | **Manual / report** | Real curves, val metrics, example grid |
 
 **How to run:** `pytest tests/unit/test_model.py tests/system/test_train.py` (skips without PyTorch)

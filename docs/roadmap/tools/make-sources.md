@@ -7,7 +7,7 @@
 
 ## What it does (high level)
 
-Turns the videos under `data/raw/<Game>/<source>/` into native-resolution stills under `data/frame_sources/`, using the same `sourcing` code and recipe as the Frame Export Kit. After this step a personal clip and a contributor clip look identical to everything downstream (D26).
+Turns the videos under `data/raw/<Game>/<source>/` and `data/raw/_other/<name>/<source>/` into native-resolution stills under `data/frame_sources/`, using the same `sourcing` code and recipe as the Frame Export Kit. After this step a personal clip and a contributor clip look identical to everything downstream (D26).
 
 ## Why we need it
 
@@ -17,8 +17,8 @@ The splitter, loader and both models read slots with paired `full` and `crf45` i
 
 | | |
 |---|---|
-| **Reads** | `data/raw/<Game>/<source>/**` videos; `config/recipe.json` |
-| **Writes** | `data/frame_sources/<Game>/<source>/<clip_key>/{full,crf45}/*.jpg`, `clip.json`, `_personal/<run_id>/`, `_index/by_sha256.json` |
+| **Reads** | `data/raw/<Game>/<source>/**` and `data/raw/_other/<name>/<source>/**` videos; `config/recipe.json` |
+| **Writes** | `data/frame_sources/<Game>/<source>/<clip_key>/` or `data/frame_sources/_other/<name>/<source>/<clip_key>/`, `clip.json`, `_personal/<run_id>/`, `_index/by_sha256.json` |
 | **Next step** | [`gfc-derive-frames`](derive-frames.md) |
 | **Shares code with** | Frame Export Kit (`sourcing.probe`, `sourcing.extract.extract_clip`, `sourcing.timeinfo`, `sourcing.hashing`) |
 
@@ -27,6 +27,7 @@ The splitter, loader and both models read slots with paired `full` and `crf45` i
 ```text
 gfc-make-sources
 gfc-make-sources --game Valorant --source myclips
+gfc-make-sources --game Other
 gfc-make-sources --limit 1 --dry-run
 gfc-make-sources --rebuild c1a2b3c4d5e6f
 gfc-make-sources --cpu                          # libx264 for this run
@@ -49,13 +50,13 @@ Exit codes: `0` success (including nothing new), `1` at least one clip failed, `
 
 ## Behaviour
 
-1. **Scan.** Walk `data/raw/<Game>/<source>/` recursively. `<Game>` must be one of the recipe's `games`; other top-level folders are skipped with a warning. Files are videos when their extension is in `video_extensions`.
+1. **Scan.** Walk `data/raw/<Game>/<source>/` recursively for the six games and `data/raw/_other/<name>/<source>/` for Other. `<name>` must already equal `normalize_other_name(name)`. `--game Other` selects only the latter. Files are videos when their extension is in `video_extensions`.
 2. **Source name.** `<source>` is the folder name, lower-cased through `normalize_handle`. It must not start with `contributor_` (reserved for ingested packs); such a folder is refused.
-3. **Probe and select.** `sourcing.probe.probe_file`; skip clips shorter than `min_duration_s` or that fail to probe. Two files with the same content in one run: the second is `skipped` / `duplicate`. With `--budget-hours H`, the new clips of each game and source are picked with the kit's `spread_days_v1` (spread across recording days) up to H hours minus the footage already in `frame_sources/<Game>/<source>/` (from each `clip.json`); the rest are `skipped` / `over_budget` and stay in `data/raw` for a later run. Rerunning with the same H adds nothing; a higher H tops up; a lower H never deletes anything (use the splitter's `source_slots` to use less). When nothing fits, a first run takes the shortest clip, as the kit does; a top-up never goes over H.
+3. **Probe and select.** `sourcing.probe.probe_file`; skip clips shorter than `min_duration_s` or that fail to probe. Two files with the same content in one run: the second is `skipped` / `duplicate`. With `--budget-hours H`, the new clips of each game and source are picked with the kit's `spread_days_v1` (spread across recording days) up to H hours minus footage already extracted. For Other, the budget is separate per `(other_name, source)`.
 4. **Identity.** `clip_sha256` over the file, `clip_key = "c" + sha[:12]`. If the SHA is already in `_index/by_sha256.json` (from an earlier run or from a contributor pack), the clip is skipped and listed as `skipped_existing`.
 5. **Extract.** `extract_clip(tools, src, info, recipe, clip_key, stage, frames_root, rel_root)` with `frames_root = frame_sources/_tmp/<run_id>/frames` and `frame_mode` forced to `native`. Tiers come from the recipe (`full` + `crf45`). The degraded tier is encoded on the GPU (`h264_d3d12va`, QP 51) after a startup self-test, with the same picture checks, stall timeout, per-tier libx264 fallback and 3-in-a-row cut-off as the Frame Export Kit, and the same separate per-codec GPU decode check (D28). Each frame row records `encoder` and `encoder_rc`; `clip.json` records `low_encoder` and `gpu_fallback` (local paths scrubbed).
-6. **Place.** Move `<clip_key>/` to `frame_sources/<Game>/<source>/<clip_key>/`. File names are the pack names: `<clip_key>_<tier>_b<bucket:06d>.jpg`.
-7. **`clip.json`.** One row with `sourcing.manifests.CLIP_COLUMNS`, filled the same way as the Frame Export Kit's `clip_row`: `status = "ok"`, probe fields, recording-time evidence from `sourcing.timeinfo.recording_times`, slot counts. `original_relpath` is relative to `data/raw/<Game>/<source>/`.
+6. **Place.** Move `<clip_key>/` to `frame_sources/<Game>/<source>/<clip_key>/`, or `_other/<name>/<source>/<clip_key>/` for Other.
+7. **`clip.json`.** One row with `sourcing.manifests.CLIP_COLUMNS`, filled the same way as the Frame Export Kit's `clip_row`. An Other clip additionally records `game = "Other"` and `other_name`.
 8. **Index.** Add `clip_sha256 → {clip_key, pack_id: "personal:<run_id>", game, source, rel_dir}` to `_index/by_sha256.json`, written atomically.
 9. **Run record.** `frame_sources/_personal/<run_id>/` holds `run_manifest.json`, `clips.csv/json` (every scanned file, including skipped and failed) and `frames.csv/json` (`FRAME_COLUMNS`, `rel_path` relative to `frame_sources/`).
 

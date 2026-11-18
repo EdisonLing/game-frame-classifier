@@ -208,6 +208,25 @@ def test_ingest_places_and_skips_duplicate(tmp_path):
     assert main([str(z), "--data-root", str(data), "--recipe", str(ROOT / "config" / "recipe.json"), "--force"]) == 0
 
 
+def test_ingest_places_other_pack_under_named_folder(tmp_path):
+    pack = make_pack_dir(
+        tmp_path / "src", game="Other", other_name="Apex_Legends",
+    )
+    z = tmp_path / "other.zip"
+    write_pack_zip(pack, z)
+    data = tmp_path / "data"
+    assert main([
+        str(z),
+        "--data-root", str(data),
+        "--recipe", str(ROOT / "config" / "recipe.json"),
+    ]) == 0
+    placed = list(
+        (data / "frame_sources" / "_other" / "Apex_Legends" / "contributor_alex")
+        .glob("c*/full/*.jpg")
+    )
+    assert len(placed) == 1
+
+
 def test_dry_run_writes_nothing(tmp_path):
     pack = make_pack_dir(tmp_path / "src")
     z = tmp_path / "pack.zip"

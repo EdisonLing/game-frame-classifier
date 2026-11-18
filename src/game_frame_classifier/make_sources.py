@@ -31,7 +31,12 @@ from game_frame_classifier.sourcing.budget import Candidate, select_within_budge
 from game_frame_classifier.sourcing.extract import ClipResult, ExtractError, extract_clip
 from game_frame_classifier.sourcing.ffbin import FFmpegNotFoundError, find_tools, version_line
 from game_frame_classifier.sourcing.hashing import quick_id, sha256_file
-from game_frame_classifier.sourcing.labels import label_hints, normalize_handle
+from game_frame_classifier.sourcing.labels import (
+    OTHER,
+    label_hints,
+    normalize_handle,
+    normalize_other_name,
+)
 from game_frame_classifier.sourcing.manifests import (
     CLIP_COLUMNS,
     FRAME_COLUMNS,
@@ -281,10 +286,22 @@ def frame_rows_for_clip(result: ClipResult, rel_dir: str) -> list[dict[str, Any]
     return rows
 
 
-def extracted_footage_s(fs_root: Path, game: str, source: str) -> float:
+def source_clip_root(fs_root: Path, game: str, other_name: str, source: str) -> Path:
+    if game == OTHER:
+        return fs_root / "_other" / other_name / source
+    return fs_root / game / source
+
+
+def source_rel_dir(game: str, other_name: str, source: str, clip_key: str) -> str:
+    if game == OTHER:
+        return f"_other/{other_name}/{source}/{clip_key}"
+    return f"{game}/{source}/{clip_key}"
+
+
+def extracted_footage_s(fs_root: Path, game: str, source: str, other_name: str = "") -> float:
     """Seconds of footage already in frame_sources for one game and source (from clip.json)."""
     total = 0.0
-    folder = fs_root / game / source
+    folder = source_clip_root(fs_root, game, other_name, source)
     if not folder.is_dir():
         return 0.0
     for clip_json in folder.glob("*/clip.json"):
@@ -327,11 +344,14 @@ def place_clip(frames_root: Path, dest: Path) -> None:
     (frames_root / dest.name).replace(dest)
 
 
-def write_clip_json(dest: Path, row: dict[str, Any]) -> None:
+def write_clip_json(dest: Path, row: dict[str, Any], *, game: str, other_name: str = "") -> None:
     missing = [c for c in CLIP_COLUMNS if c not in row]
     if missing:
         raise MakeSourcesError(f"clip.json missing columns: {missing}")
     payload = {c: row.get(c, "") for c in CLIP_COLUMNS}
+    if game == OTHER:
+        payload["game"] = game
+        payload["other_name"] = other_name
     atomic_write_json(dest / "clip.json", payload)
 
 
@@ -421,8 +441,8 @@ def main(argv: list[str] | None = None) -> int:
     budget_s = None if args.budget_hours is None else args.budget_hours * 3600
 
     game_filter = args.game
-    if game_filter and game_filter not in recipe.games:
-        print(f"Unknown game {game_filter!r}; expected one of: {', '.join(recipe.games)}")
+    if game_filter and game_filter not in (*recipe.games, OTHER):
+        print(f"Unknown game {game_filter!r}; expected one of: {', '.join((*recipe.games, OTHER))}")
         return EXIT_USAGE
     source_filter = normalize_handle(args.source) if args.source else ""
     if args.source and not source_filter:
@@ -477,9 +497,18 @@ def main(argv: list[str] | None = None) -> int:
     stage_root = tmp_run / "stage"
 
     try:
-        for game_dir in sorted(p for p in raw_root.iterdir() if p.is_dir()):
-            game = game_dir.name
-            if game not in recipe.games:
+        collection_dirs = [p for p in raw_root.iterdir() if p.is_dir() and p.name != "_other"]
+        other_root = raw_root / "_other"
+        if other_root.is_dir():
+            collection_dirs.extend(p for p in other_root.iterdir() if p.is_dir())
+        for game_dir in sorted(collection_dirs):
+            is_other = game_dir.parent == other_root
+            game = OTHER if is_other else game_dir.name
+            other_name = normalize_other_name(game_dir.name) if is_other else ""
+            if is_other and (not other_name or other_name != game_dir.name):
+                print(f"warning: skipping invalid Other name folder {game_dir.name!r}")
+                continue
+            if not is_other and game not in recipe.games:
                 print(f"warning: skipping unknown game folder {game!r}")
                 continue
             if game_filter and game != game_filter:
@@ -560,7 +589,7 @@ def main(argv: list[str] | None = None) -> int:
                         continue
                     pending.append((path, info, times, sha, clip_key))
 
-                already_s = extracted_footage_s(fs_root, game, source) if budget_s is not None else 0.0
+                already_s = extracted_footage_s(fs_root, game, source, other_name) if budget_s is not None else 0.0
                 selected, over = apply_footage_budget(pending, budget_s, already_s)
                 for path, info, times, sha, clip_key in over:
                     clips_over_budget += 1
@@ -572,7 +601,8 @@ def main(argv: list[str] | None = None) -> int:
                 if budget_s is not None and pending:
                     take_h = sum(item[1].duration_s for item in selected) / 3600
                     print(
-                        f"  budget {game}/{source}: {already_s / 3600:.2f} h already extracted, "
+                        f"  budget {game}{('/' + other_name) if other_name else ''}/{source}: "
+                        f"{already_s / 3600:.2f} h already extracted, "
                         f"taking {len(selected)} clip(s) ({take_h:.2f} h), {len(over)} over budget"
                     )
                 for path, info, times, sha, clip_key in selected:
@@ -592,8 +622,8 @@ def main(argv: list[str] | None = None) -> int:
                     fs_root.mkdir(parents=True, exist_ok=True)
                     frames_root.mkdir(parents=True, exist_ok=True)
                     stage = stage_root / clip_key
-                    dest = fs_root / game / source / clip_key
-                    rel_dir = f"{game}/{source}/{clip_key}"
+                    dest = source_clip_root(fs_root, game, other_name, source) / clip_key
+                    rel_dir = source_rel_dir(game, other_name, source, clip_key)
                     t0 = time.perf_counter()
                     try:
                         result = extract_clip(
@@ -622,7 +652,7 @@ def main(argv: list[str] | None = None) -> int:
                             sha=sha, clip_key=clip_key, status="ok", status_detail="",
                             result=result, wall_s=wall,
                         )
-                        write_clip_json(dest, row)
+                        write_clip_json(dest, row, game=game, other_name=other_name)
                         index[sha] = {
                             "clip_key": clip_key,
                             "pack_id": f"personal:{run_id}",

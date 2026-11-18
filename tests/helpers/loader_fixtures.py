@@ -8,7 +8,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from game_frame_classifier.sourcing.labels import GAMES
+from game_frame_classifier.sourcing.labels import CLASSES, GAMES, OTHER
 from game_frame_classifier.split_manifest import SPLIT_COLUMNS
 
 FRAME_W = 256
@@ -43,7 +43,9 @@ def write_frame_jpeg(
     return path
 
 
-def _rel(game: str, source: str, clip_key: str, tier: str, name: str) -> str:
+def _rel(game: str, source: str, clip_key: str, tier: str, name: str, other_name: str = "") -> str:
+    if game == OTHER:
+        return f"frames/_other/{other_name or 'desktop'}/{source}/{clip_key}/{tier}/{name}"
     return f"frames/{game}/{source}/{clip_key}/{tier}/{name}"
 
 
@@ -61,16 +63,17 @@ def make_slot_dict(
     target_time_s: float = 0.0,
     public_examples_ok: bool = True,
     slot_suffix: str | None = None,
+    other_name: str = "",
 ) -> dict:
     """One split-CSV row dict; paths relative to data root with forward slashes."""
     if label is None:
-        label = GAMES.index(game)
+        label = CLASSES.index(game)
     slot_id = f"{clip_key}:b{bucket:06d}"
     if slot_suffix:
         slot_id = f"{slot_id}:{slot_suffix}"
     name = f"b{bucket:06d}.jpg"
-    path_full = _rel(game, source, clip_key, "full", name)
-    path_low = _rel(game, source, clip_key, "crf45", name)
+    path_full = _rel(game, source, clip_key, "full", name, other_name)
+    path_low = _rel(game, source, clip_key, "crf45", name, other_name)
     path = path_low if tier == "crf45" else path_full
     return {
         "slot_id": slot_id,
@@ -88,6 +91,7 @@ def make_slot_dict(
         "bucket": bucket,
         "target_time_s": target_time_s,
         "public_examples_ok": public_examples_ok,
+        "other_name": other_name,
     }
 
 
@@ -146,6 +150,7 @@ def build_split_fixture(
     n_per_game: int = 1,
     splits: tuple[str, ...] = ("train", "val"),
     asymmetric: bool = False,
+    include_other: bool = False,
 ) -> tuple[Path, Path]:
     """
     Create data_root and splits/<id>/ with CSVs, summary.json and JPEGs.
@@ -159,7 +164,8 @@ def build_split_fixture(
     by_split: dict[str, list[dict]] = {name: [] for name in splits}
     bucket = 0
     for split in splits:
-        for game_i, game in enumerate(GAMES):
+        labels = CLASSES if include_other else GAMES
+        for game_i, game in enumerate(labels):
             for j in range(n_per_game):
                 tier = "full" if (bucket % 2) == 0 else "crf45"
                 row = make_slot_dict(
@@ -172,6 +178,7 @@ def build_split_fixture(
                     clip_key=f"c{game_i:012x}",
                     bucket=bucket,
                     target_time_s=float(bucket),
+                    other_name="desktop" if game == OTHER else "",
                 )
                 by_split[split].append(row)
                 bucket += 1

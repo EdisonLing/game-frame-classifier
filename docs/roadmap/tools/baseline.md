@@ -41,6 +41,7 @@ python -m game_frame_classifier.baseline --split-dir ...
 ```json
 {
   "schema": "gfc.baseline/1",
+  "label_set": "seven",
   "seed": 360,
   "bins": 16,
   "c_grid": [0.01, 0.1, 1.0, 10.0],
@@ -65,14 +66,14 @@ Features for a split are computed once and cached in the run folder as `features
 
 `sklearn.pipeline.Pipeline([StandardScaler(), LogisticRegression(C=c, max_iter=..., class_weight="balanced", random_state=seed)])` with the default lbfgs solver (multinomial).
 
-One model is fitted on `train` for each value in `c_grid`. The one with the best macro-F1 on `val` is kept; ties go to the smaller `C`. No test split is read. Because `val` both picks `C` and reports the score, the val number is slightly optimistic; the CNN's best-epoch selection has the same bias, so the comparison stays fair.
+`label_set` is `"seven"` (default, all classes) or `"six"` (Other rows dropped from train and val). Seven-way training refuses a split with no Other train rows. One model is fitted on `train` for each value in `c_grid`; the best macro-F1 on `val` wins, with ties going to the smaller `C`.
 
 ### Prediction interface
 
 ```python
 class BaselinePredictor:
     labels: tuple[str, ...]
-    def predict_proba(self, rows: list[SlotRow], data_root: Path, tier_mode: str = "assigned") -> np.ndarray   # (N, 6)
+    def predict_proba(self, rows: list[SlotRow], data_root: Path, tier_mode: str = "assigned") -> np.ndarray   # (N, 6 or 7)
 ```
 
 This is the interface [evaluation](evaluation.md) calls for every model type.
@@ -95,7 +96,7 @@ data/runs/baseline/<run_id>/
 | Frames | Same 256×144 files and tier assignment as the CNN, so the only difference between the two models is the model |
 | Stack | scikit-learn |
 | Imbalance | `class_weight="balanced"` (D34) |
-| Unknown | The baseline is six-way only; no threshold |
+| Label set | Six-way or seven-way through `label_set`; open-set thresholding belongs to evaluation |
 
 ## Working defaults (D36)
 
@@ -109,7 +110,7 @@ data/runs/baseline/<run_id>/
 
 | Kind | Cases |
 |---|---|
-| **Unit** | Feature length is `3 * bins`; each channel block sums to 1; a solid-colour image puts all mass in the expected bin of each channel; value 255 falls in the last bin; `predict_proba` shape `(N, 6)` with rows summing to 1 |
+| **Unit** | Feature construction; six/seven predictors have the selected output width; seven refuses missing Other; `run.json` records `label_set` and labels |
 | **System** | Synthetic split of three solid-ish colours standing in for three games → train → val accuracy far above chance; run folder holds every file listed; rerun with the same seed gives identical `c_search.csv` |
 | **Manual / report** | Real val metrics, confusion matrix and example grid from evaluation |
 

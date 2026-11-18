@@ -25,6 +25,7 @@ Native-resolution JPEG stills used as the shared source of truth for personal an
 data/frame_sources/
   <Game>/contributor_<handle>/<clip_key>/<tier>/*.jpg   # from gfc-ingest-pack
   <Game>/<source>/<clip_key>/<tier>/*.jpg               # my clips, from gfc-make-sources
+  _other/<other_name>/<source>/<clip_key>/<tier>/*.jpg  # personal Other footage
   _personal/<run_id>/                                   # make-sources run records
   _other/<other_name>/contributor_<handle>/<clip_key>/...
   _packs/<pack_id>/          # verbatim contributor pack manifests
@@ -42,6 +43,10 @@ data/raw/
     <source>/
       anything.mp4
       another_clip.mkv
+  _other/
+    <other_name>/
+      <source>/
+        anything.mp4
 ```
 
 ### Exact game folder names (top level under `raw/`)
@@ -82,6 +87,7 @@ data/raw/
 | Rule | Detail |
 |---|---|
 | Path | `data/raw/<Game>/<source>/<file>` |
+| Other path | `data/raw/_other/<other_name>/<source>/<file>`; `<other_name>` is normalised content metadata, not a class |
 | Rename files? | **No** — keep original names |
 | Labels | Game = `<Game>` folder; source/channel = `<source>` folder |
 | Files | Prefer `.mp4`; other common containers OK |
@@ -102,6 +108,7 @@ Training frames, written by `gfc-derive-frames` ([spec](roadmap/tools/derive-fra
 data/frames/
   <Game>/<source>/<clip_key>/full/<clip_key>_full_b000012.jpg
   <Game>/<source>/<clip_key>/crf45/<clip_key>_crf45_b000012.jpg
+  _other/<other_name>/<source>/<clip_key>/full/<clip_key>_full_b000012.jpg
 ```
 
 Outputs of the single-clip debugging tools (extract / clean / quality) use this pattern:

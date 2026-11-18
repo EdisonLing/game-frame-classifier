@@ -96,6 +96,27 @@ def test_clip_json_has_every_column_and_no_absolute_paths(tmp_path, monkeypatch)
         assert "PathLeakUser" not in text
 
 
+@requires_ffmpeg
+def test_other_clip_uses_other_layout_and_metadata(tmp_path):
+    data_root, source_dir = data_tree(
+        tmp_path, game="_other/Apex_Legends", source="tester",
+    )
+    make_raw_clip(source_dir, "clip.mp4", duration_s=6.0)
+    assert main([
+        "--data-root", str(data_root),
+        "--recipe", str(RECIPE),
+        "--game", "Other",
+        "--cpu",
+    ]) == 0
+    clip_dirs = list(
+        (data_root / "frame_sources" / "_other" / "Apex_Legends" / "tester").glob("c*")
+    )
+    assert len(clip_dirs) == 1
+    clip = json.loads((clip_dirs[0] / "clip.json").read_text(encoding="utf-8"))
+    assert clip["game"] == "Other"
+    assert clip["other_name"] == "Apex_Legends"
+
+
 def test_build_clip_row_columns(tmp_path):
     path = tmp_path / "x.mp4"
     path.write_bytes(b"not-a-real-video")

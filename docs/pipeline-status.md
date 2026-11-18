@@ -9,7 +9,7 @@ What’s built vs missing for turning `data/raw/` (and contributor packs) into t
 | Path | Status | What it does |
 |---|---|---|
 | **Interim personal** | **Done** | `gfc-catalog-clips` → `gfc-batch-extract` → `data/frames/...` at **256×144** (plus optional `gfc-encode-quality`) |
-| **Target (D26)** | **Partial** | Same `sourcing` code: Frame Export Kit / `gfc-make-sources` → `data/frame_sources/` (native, full + crf45) → `gfc-derive-frames` 256×144 (D27) → slot-mode clean → split → models. **Ingest**, **`gfc-make-sources`** and **`gfc-derive-frames`**, slot-mode clean, `gfc-split` and the loader are implemented; everything after them is specified in [training-pipeline.md](training-pipeline.md) and not built yet |
+| **Target (D26)** | **Done** | Frame Export Kit / `gfc-make-sources` → `frame_sources` → derive → clean → split → six/seven baseline and CNN → shared evaluation. Other follows `_other/<name>/<source>/` through the same path |
 
 Batch extract is useful now; it is **not** the long-term personal path once `gfc-make-sources` lands.
 
@@ -65,9 +65,9 @@ The interim branch (catalog → batch extract → clean → quality) ends at sin
 | Clean, slot mode | **Done** | One verdict per slot; dedupe across a source; quarantine list (`gfc-clean-frames --slots`) |
 | `gfc-split` | **Done** | Sessions, ledger splits, tier per slot, data tables; freeze gated on D32 |
 | Loader + augmentation | **Done** | `split_manifest` + `dataset`: one decode path for both models, train-only augmentation, test splits gated |
-| Evaluation | **Done** | `gfc-evaluate`: metrics, confusion matrix, example grid, tier diagnostic, comparison table, data report; test splits gated and logged |
+| Evaluation | **Done** | `gfc-evaluate`: classification, six-game and open-set metrics, val threshold, paired video bootstrap comparison, figures and gated test access |
 | Baseline | **Done** | `gfc-train-baseline`: 16-bin RGB histograms + logistic regression, C picked on val, evaluated by `gfc-evaluate` at the end; needs at least two games in train |
-| CNN | **Done** | `gfc-train-cnn`: four-block FrameCNN (flatten or GAP head), best val macro-F1 checkpoint, reproducible run folder, automatic val evaluation; GPU through `.venv-rocm` |
+| CNN | **Done** | `gfc-train-cnn`: six/seven label-set switch, four-block FrameCNN (flatten or GAP), reproducible best-val checkpoint and automatic val evaluation; GPU through `.venv-rocm` |
 
 ## Batch extract usage (interim)
 
@@ -89,7 +89,7 @@ Ops quality on a single clip: `gfc-encode-quality … --tiers full low` (D04). M
 
 ## In short
 
-**Usable now:** catalog + batch extract + clean + quality + Frame Export Kit + ingest + `gfc-make-sources` + `gfc-derive-frames` + slot-mode clean + `gfc-split` + loader + `gfc-evaluate` + `gfc-train-baseline` + `gfc-train-cnn`. **Next:** Other as a seventh class (D24), held-out test design (G1). **Later:** D11 detector.
+**Usable now:** the complete target pipeline: catalog + batch extract + clean + quality + Frame Export Kit + ingest + `gfc-make-sources` + `gfc-derive-frames` + slot-mode clean + `gfc-split` (with source groups) + loader + `gfc-evaluate` + `gfc-train-baseline` + `gfc-train-cnn`, including Other as a seventh class and the six/seven comparison (D24). **Next:** held-out test design (G1). **Later:** D11 detector.
 
 ## Related
 

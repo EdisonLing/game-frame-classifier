@@ -138,7 +138,7 @@ Called out positively in TA feedback. Treat as decided unless we explicitly reop
 | **Status** | provisional |
 | **Prompt** | TA: give exact channel/FC sizes; flattening 16×9×256 ≈ 37k features into first FC |
 | **Options** | FC 128 (5,108,390 params) · **FC 256 (9,827,878)** · FC 512 (19,266,854) · two FC layers · GAP head (390,438) |
-| **Decision** | Conv channels: **32-64-128-256** (3×3, no bias, BN, ReLU, 2×2 max pool) · Flatten 256×9×16 = 36,864 · FC: **36,864→256**, dropout 0.5, **256→6** · Params: **9,827,878** (conv stack 388,896; first FC 9,437,440). Layer table in the tool page. |
+| **Decision** | Conv channels: **32-64-128-256** (3×3, no bias, BN, ReLU, 2×2 max pool) · Flatten 256×9×16 = 36,864 · FC: **36,864→256**, dropout 0.5, **256→7** by default · Params: **9,828,135** seven-way or **9,827,878** six-way (conv stack 388,896; first FC 9,437,440). Layer table in the tool page. |
 | **Rationale** | Matches the proposal (four blocks, 32–256 channels, one FC with dropout). 256 keeps the first FC under 10 M weights for a training set of roughly 10,000 frames; sizes are config values, so this is tuned on val after the first curves. |
 | **Date** | 2026-11-17 |
 | **Links** | [tools/cnn-trainer.md](roadmap/tools/cnn-trainer.md) |

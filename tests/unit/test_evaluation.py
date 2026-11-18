@@ -11,8 +11,12 @@ np = pytest.importorskip("numpy")
 
 from game_frame_classifier.evaluation import (
     LOOKALIKE,
+    _bootstrap_comparison,
     _lookalike_metrics,
+    _threshold_at_false_alarm,
     compute_classification_metrics,
+    compute_open_set_metrics,
+    compute_six_game_metrics,
     evaluate_run,
     register_predictor_loader,
     clear_predictor_registry,
@@ -72,7 +76,7 @@ def test_metrics_hand_built_three_class():
 
 
 def test_lookalike_from_known_matrix():
-    conf = [[0] * 6 for _ in range(6)]
+    conf = [[0] * len(LABELS) for _ in range(len(LABELS))]
     i = LABELS.index("Overwatch_2")
     j = LABELS.index("Marvel_Rivals")
     conf[i][i] = 7
@@ -125,6 +129,81 @@ def test_group_breakdowns_by_tier_source_clip(tmp_path):
     assert metrics["by_source"]["src_a"]["source_kind"] == "personal"
     assert metrics["by_clip"]
     assert metrics["by_clip"][0]["accuracy"] == 1.0
+
+
+def _metric_row(index: int, game: str, label: int, clip_key: str) -> SlotRow:
+    return SlotRow(
+        slot_id=f"{clip_key}:b{index:06d}",
+        clip_key=clip_key,
+        game=game,
+        label=label,
+        source="src",
+        source_kind="personal",
+        session=f"src:{game}:s001",
+        split="val",
+        tier="full",
+        path="frames/x.jpg",
+        path_full="frames/x.jpg",
+        path_low="frames/y.jpg",
+        bucket=index,
+        target_time_s=float(index),
+        public_examples_ok=False,
+        other_name="desktop" if game == "Other" else "",
+    )
+
+
+def test_six_game_and_open_set_metrics_on_known_probabilities():
+    rows = [
+        _metric_row(i, LABELS[i % 6], i % 6, f"cg{i // 2}")
+        for i in range(20)
+    ]
+    rows.extend([
+        _metric_row(20, "Other", 6, "co1"),
+        _metric_row(21, "Other", 6, "co2"),
+    ])
+    scores = np.asarray([i / 100 for i in range(20)] + [0.9, 0.8])
+    probs = np.zeros((len(rows), 7), dtype=np.float64)
+    for i, row in enumerate(rows):
+        probs[i, row.label if row.label < 6 else 0] = 1.0 - scores[i]
+        probs[i, 6] = scores[i]
+    tau = _threshold_at_false_alarm(scores[:20])
+    assert tau == pytest.approx(0.18)
+    opened = compute_open_set_metrics(rows, probs, tau=tau, seven_way=True)
+    assert opened["false_alarm_rate"] == pytest.approx(0.05)
+    assert opened["other_detection_rate"] == 1.0
+    assert opened["auroc"] == 1.0
+    assert opened["coverage"] == pytest.approx(0.95)
+    assert opened["accuracy_on_covered"] == 1.0
+    assert opened["argmax_other_rate"] == 1.0
+
+    pred = probs.argmax(axis=1)
+    pred[0] = 6
+    six = compute_six_game_metrics(rows, pred)
+    assert six["n"] == 20
+    assert six["accuracy"] == pytest.approx(19 / 20)
+
+
+def test_paired_bootstrap_is_reproducible_over_clips():
+    a: list[dict[str, str]] = []
+    b: list[dict[str, str]] = []
+    specs = [
+        ("g1", 0, 0.1, 0.1, 0, 0),
+        ("g2", 1, 0.2, 0.2, 1, 1),
+        ("o1", 6, 0.4, 0.8, 0, 6),
+        ("o2", 6, 0.6, 0.9, 0, 6),
+    ]
+    for i, (clip, label, score_a, score_b, pred_a, pred_b) in enumerate(specs):
+        common = {"slot_id": f"s{i}", "clip_key": clip, "label": str(label)}
+        a.append({**common, "pred": str(pred_a), "open_score": str(score_a)})
+        b.append({**common, "pred": str(pred_b), "open_score": str(score_b)})
+    first = _bootstrap_comparison(a, b, 0.5, 0.5)
+    second = _bootstrap_comparison(a, b, 0.5, 0.5)
+    assert first == second
+    assert first["unit"] == "clip_key"
+    assert first["resamples"] == 1000
+    for result in first["metrics"].values():
+        if result["difference_b_minus_a"] is not None:
+            assert result["ci_low"] <= result["difference_b_minus_a"] <= result["ci_high"]
 
 
 class _AlwaysRight:
@@ -192,6 +271,7 @@ def test_guards_accepted_appends_one_log_line(tmp_path):
     run_dir = tmp_path / "runs" / "fake" / "r1"
     _write_run(run_dir, split_dir)
     register_predictor_loader("fake", lambda _p: _AlwaysRight())
+    evaluate_run(run_dir, "val", data_root=data_root)
     evaluate_run(
         run_dir,
         "test_session",
@@ -206,6 +286,26 @@ def test_guards_accepted_appends_one_log_line(tmp_path):
     assert entry["reason"] == "final report"
     assert entry["run"] == "r1"
     assert "utc" in entry and "git_commit" in entry
+
+
+def test_test_split_refuses_before_val_threshold_exists(tmp_path):
+    data_root, split_dir = build_split_fixture(
+        tmp_path, n_per_game=1, splits=("test_session",),
+    )
+    (split_dir / "freeze.json").write_text(
+        json.dumps({"time": "t", "git_commit": "abc", "test_design": "B"}),
+        encoding="utf-8",
+    )
+    run_dir = tmp_path / "runs" / "fake" / "r1"
+    _write_run(run_dir, split_dir)
+    register_predictor_loader("fake", lambda _p: _AlwaysRight())
+    with pytest.raises(PermissionError, match="score val first"):
+        evaluate_run(
+            run_dir,
+            "test_session",
+            data_root=data_root,
+            reason="final report",
+        )
 
 
 def test_label_order_mismatch_refused(tmp_path):

@@ -1,5 +1,6 @@
 {
   "schema": "gfc.baseline/1",
+  "label_set": "seven",
   "seed": 360,
   "bins": 16,
   "c_grid": [0.01, 0.1, 1.0, 10.0],

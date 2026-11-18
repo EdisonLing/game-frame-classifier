@@ -20,7 +20,7 @@ from typing import Any
 from game_frame_classifier.sourcing.derive import derive_dir, pad_dims
 from game_frame_classifier.sourcing.ffbin import FFmpegNotFoundError, ToolError, find_tools
 from game_frame_classifier.sourcing.hashing import jpeg_size
-from game_frame_classifier.sourcing.labels import GAMES
+from game_frame_classifier.sourcing.labels import GAMES, OTHER, normalize_other_name
 from game_frame_classifier.sourcing.manifests import write_table
 from game_frame_classifier.sourcing.recipe import Recipe, RecipeError, load_recipe
 
@@ -37,6 +37,7 @@ CLIPS_INDEX_COLUMNS = (
     "clip_key",
     "clip_sha256",
     "game",
+    "other_name",
     "source",
     "source_kind",
     "origin",
@@ -61,6 +62,7 @@ SLOTS_COLUMNS = (
     "slot_id",
     "clip_key",
     "game",
+    "other_name",
     "source",
     "bucket",
     "target_time_s",
@@ -75,6 +77,7 @@ _CRF_TIER = re.compile(r"^crf(\d+)$", re.IGNORECASE)
 @dataclass(frozen=True)
 class ClipRef:
     game: str
+    other_name: str
     source: str
     clip_key: str
     clip_dir: Path
@@ -122,17 +125,19 @@ def rel_posix(*parts: str) -> str:
 
 
 def frames_clip_dir(data_root: Path, ref: ClipRef) -> Path:
+    if ref.game == OTHER:
+        return Path(data_root) / "frames" / "_other" / ref.other_name / ref.source / ref.clip_key
     return Path(data_root) / "frames" / ref.game / ref.source / ref.clip_key
 
 
 def find_clips(fs_root: Path, *, game: str | None = None, source: str | None = None) -> list[ClipRef]:
-    """Every ``clip.json`` under a known game folder (folders starting with ``_`` are skipped)."""
+    """Every ``clip.json`` under a known game folder or ``_other/<name>``."""
     fs_root = Path(fs_root)
     if not fs_root.is_dir():
         return []
-    games = (game,) if game else GAMES
     found: list[ClipRef] = []
-    for g in games:
+    games = (game,) if game else (*GAMES, OTHER)
+    for g in (item for item in games if item != OTHER):
         game_dir = fs_root / g
         if not game_dir.is_dir():
             continue
@@ -141,7 +146,20 @@ def find_clips(fs_root: Path, *, game: str | None = None, source: str | None = N
                 continue
             for clip_dir in sorted(p for p in source_dir.iterdir() if p.is_dir() and not p.name.startswith("_")):
                 if (clip_dir / "clip.json").is_file():
-                    found.append(ClipRef(g, source_dir.name, clip_dir.name, clip_dir))
+                    found.append(ClipRef(g, "", source_dir.name, clip_dir.name, clip_dir))
+    if OTHER in games:
+        other_root = fs_root / "_other"
+        if other_root.is_dir():
+            for name_dir in sorted(p for p in other_root.iterdir() if p.is_dir() and not p.name.startswith("_")):
+                other_name = normalize_other_name(name_dir.name)
+                if not other_name or other_name != name_dir.name:
+                    continue
+                for source_dir in sorted(p for p in name_dir.iterdir() if p.is_dir() and not p.name.startswith("_")):
+                    if source is not None and source_dir.name != source:
+                        continue
+                    for clip_dir in sorted(p for p in source_dir.iterdir() if p.is_dir() and not p.name.startswith("_")):
+                        if (clip_dir / "clip.json").is_file():
+                            found.append(ClipRef(OTHER, other_name, source_dir.name, clip_dir.name, clip_dir))
     return found
 
 
@@ -441,6 +459,7 @@ def build_clip_row(
         "clip_key": plan.ref.clip_key,
         "clip_sha256": str(clip.get("clip_sha256") or ""),
         "game": plan.ref.game,
+        "other_name": plan.ref.other_name,
         "source": plan.ref.source,
         "source_kind": kind,
         "origin": origin,
@@ -464,14 +483,19 @@ def build_clip_row(
 
 def build_slot_rows(plan: ClipPlan, recipe: Recipe) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
+    frame_parts = (
+        ("frames", "_other", plan.ref.other_name, plan.ref.source, plan.ref.clip_key)
+        if plan.ref.game == OTHER
+        else ("frames", plan.ref.game, plan.ref.source, plan.ref.clip_key)
+    )
     for bucket in plan.buckets:
         path_full = rel_posix(
-            "frames", plan.ref.game, plan.ref.source, plan.ref.clip_key, "full",
+            *frame_parts, "full",
             frame_name(plan.ref.clip_key, "full", bucket),
         )
         if plan.low_tier:
             path_low = rel_posix(
-                "frames", plan.ref.game, plan.ref.source, plan.ref.clip_key, plan.low_tier,
+                *frame_parts, plan.low_tier,
                 frame_name(plan.ref.clip_key, plan.low_tier, bucket),
             )
         else:
@@ -480,6 +504,7 @@ def build_slot_rows(plan: ClipPlan, recipe: Recipe) -> list[dict[str, Any]]:
             "slot_id": slot_id(plan.ref.clip_key, bucket),
             "clip_key": plan.ref.clip_key,
             "game": plan.ref.game,
+            "other_name": plan.ref.other_name,
             "source": plan.ref.source,
             "bucket": bucket,
             "target_time_s": float(bucket) * float(recipe.interval_s),
@@ -547,8 +572,8 @@ def rebuild_tables_from_disk(
             )
         )
         slot_rows.extend(build_slot_rows(plan, recipe))
-    clip_rows.sort(key=lambda r: (r["game"], r["source"], r["clip_key"]))
-    slot_rows.sort(key=lambda r: (r["game"], r["source"], r["clip_key"], int(r["bucket"])))
+    clip_rows.sort(key=lambda r: (r["game"], r["other_name"], r["source"], r["clip_key"]))
+    slot_rows.sort(key=lambda r: (r["game"], r["other_name"], r["source"], r["clip_key"], int(r["bucket"])))
     return clip_rows, slot_rows, skips
 
 
@@ -652,8 +677,8 @@ def main(argv: list[str] | None = None) -> int:
     except (RecipeError, OSError) as exc:
         print(f"Recipe problem: {exc}")
         return EXIT_USAGE
-    if args.game is not None and args.game not in GAMES:
-        print(f"Unknown game: {args.game} (expected one of {', '.join(GAMES)})")
+    if args.game is not None and args.game not in (*GAMES, OTHER):
+        print(f"Unknown game: {args.game} (expected one of {', '.join((*GAMES, OTHER))})")
         return EXIT_USAGE
     return run_derive(
         args.data_root,

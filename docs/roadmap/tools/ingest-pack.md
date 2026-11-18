@@ -239,7 +239,7 @@ No ffmpeg required for ingest v1 (frames are already JPEG).
 - [x] Safe zip fails closed (no files under `frame_sources/` after a bad zip)
 - [x] Good pack places frames + `_packs/<id>/` + index + stats line
 - [ ] Duplicate `clip_sha256` skipped (code path present; dedicated cross-pack test still optional)
-- [ ] `Other` lands under `_other/<other_name>/`
+- [x] `Other` lands under `_other/<other_name>/`
 - [x] `--dry-run` is bit-identical tree before/after
 - [x] CLI entry `gfc-ingest-pack` in `pyproject.toml`
 

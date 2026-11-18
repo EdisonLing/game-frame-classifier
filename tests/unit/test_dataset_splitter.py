@@ -197,6 +197,53 @@ def test_holdout_source_only_in_test_source(tmp_path) -> None:
     assert {row["source"] for row in _read(out / "test_source.csv")} == {"held"}
 
 
+def test_other_label_holdout_and_name_report(tmp_path) -> None:
+    data = tmp_path / "data"
+    clips = [
+        {"game": "Other", "other_name": name, "source": source,
+         "recorded_start_utc": f"2026-01-0{day}T00:00:00Z"}
+        for name, source, day in (
+            ("desktop", "a", 1),
+            ("desktop", "b", 2),
+            ("Apex_Legends", "a", 3),
+            ("Apex_Legends", "b", 4),
+        )
+    ]
+    write_split_inputs(data, clips)
+    config = write_split_config(tmp_path / "split.json", holdout_other=["desktop"])
+    run_split(data, config)
+    out = data / "manifests/splits/v1"
+    test_rows = _read(out / "test_source.csv")
+    assert {(row["other_name"], row["source"]) for row in test_rows} == {
+        ("desktop", "a"), ("desktop", "b"),
+    }
+    assert {row["label"] for row in test_rows} == {"6"}
+    report = _read(out / "other_names.csv")
+    assert any(row["other_name"] == "desktop" and row["split"] == "test_source" for row in report)
+
+    write_split_config(config, holdout_other=["desktop", "Apex_Legends"])
+    with pytest.raises(SplitterError, match="holdout_other") as caught:
+        run_split(data, config)
+    assert caught.value.exit_code == 1
+
+
+def test_other_holdout_can_carry_a_mixed_session_without_ledger_conflict(tmp_path) -> None:
+    data = tmp_path / "data"
+    clips = [
+        {"game": "Other", "other_name": name, "source": "same_source",
+         "recorded_start_utc": "2026-01-01T00:00:00Z"}
+        for name in ("desktop", "Apex_Legends")
+    ]
+    write_split_inputs(data, clips)
+    config = write_split_config(tmp_path / "split.json", holdout_other=["desktop"])
+    run_split(data, config)
+    run_split(data, config)
+    assert {
+        row["other_name"]
+        for row in _read(data / "manifests/splits/v1/test_source.csv")
+    } == {"desktop", "Apex_Legends"}
+
+
 def _train(source, count):
     return [{"game": "Valorant", "split": "train", "source": source, "slot_id": f"{source}{i}", "clip_key": source, "session": source} for i in range(count)]
 

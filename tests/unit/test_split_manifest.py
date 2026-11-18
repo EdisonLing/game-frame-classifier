@@ -17,7 +17,7 @@ from game_frame_classifier.split_manifest import (
     load_split,
     split_hashes,
 )
-from game_frame_classifier.sourcing.labels import GAMES
+from game_frame_classifier.sourcing.labels import CLASSES, GAMES
 from tests.helpers.loader_fixtures import (
     build_split_fixture,
     make_slot_dict,
@@ -28,9 +28,11 @@ from tests.helpers.loader_fixtures import (
 
 
 def test_labels_match_games():
-    assert LABELS == GAMES
+    assert LABELS == CLASSES
+    assert LABELS[:6] == GAMES
     assert LABELS[0] == "Valorant"
     assert LABELS[5] == "Marvel_Rivals"
+    assert LABELS[6] == "Other"
 
 
 def test_load_split_parses_fixture(tmp_path):
@@ -119,12 +121,26 @@ def test_class_weights_known_counts():
             )
         )
     w = class_weights(slot_rows)
-    assert w.shape == (6,)
-    n, k = 4.0, 6.0
+    assert w.shape == (7,)
+    n, k = 4.0, 7.0
     assert w[0] == pytest.approx(n / (k * 3))
     assert w[2] == pytest.approx(n / (k * 1))
     assert w[1] == 0.0
     assert w[3] == 0.0
+
+
+def test_label_set_six_drops_other_and_seven_keeps_it(tmp_path):
+    _, split_dir = build_split_fixture(
+        tmp_path, n_per_game=1, splits=("train",), include_other=True,
+    )
+    seven = load_split(split_dir, "train")
+    six = load_split(split_dir, "train", label_set="six")
+    assert len(seven) == 7
+    assert seven[-1].game == "Other"
+    assert seven[-1].label == 6
+    assert seven[-1].other_name == "desktop"
+    assert len(six) == 6
+    assert all(row.game != "Other" for row in six)
 
 
 def test_split_hashes_from_summary(tmp_path):

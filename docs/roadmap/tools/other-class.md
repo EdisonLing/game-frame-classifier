@@ -1,7 +1,7 @@
 # Other as a seventh class (6-way / 7-way switch)
 
 **Stage:** 2–5 — data through evaluation  
-**Status:** specified  
+**Status:** implemented
 **Back to:** [ROADMAP.md](../ROADMAP.md) · [training pipeline](../../training-pipeline.md) · decision [D24](../../design-decisions.md)
 
 ## What it does (high level)
@@ -92,11 +92,11 @@ Otherwise 6-way plus threshold is kept. `auroc` and its interval are reported be
 
 ## Acceptance checks
 
-- [ ] Own Other clips go from `data/raw/_other/` to split rows with label 6; ingested Other packs too
-- [ ] `label_set` switch in both trainers; `run.json` records it
-- [ ] `six_game` and `open_set` in `metrics.json` for both label sets; `--compare` shows them with paired bootstrap intervals over videos
-- [ ] `holdout_other` places whole names in `test_source`
-- [ ] Existing six-game splits, runs and tests unchanged
+- [x] Own Other clips go from `data/raw/_other/` to split rows with label 6; ingested Other packs too
+- [x] `label_set` switch in both trainers; `run.json` records it
+- [x] `six_game` and `open_set` in `metrics.json` for both label sets; `--compare` shows them with paired bootstrap intervals over videos
+- [x] `holdout_other` places whole names in `test_source`
+- [x] Existing six-game splits, runs and tests unchanged
 
 ## Ties to proposal and decisions
 

@@ -25,25 +25,26 @@ The baseline and the CNN must see the same frames in the same tier, or the compa
 ### `split_manifest.py` (NumPy + Pillow, no PyTorch)
 
 ```python
-LABELS: tuple[str, ...]                     # sourcing.labels.GAMES, index = class id
+LABELS: tuple[str, ...]                     # sourcing.labels.CLASSES, index = class id
 
 @dataclass(frozen=True)
 class SlotRow:
-    slot_id: str; clip_key: str; game: str; label: int
+    slot_id: str; clip_key: str; game: str; label: int; other_name: str
     source: str; source_kind: str; session: str
     split: str; tier: str
     path: str; path_full: str; path_low: str
     bucket: int; target_time_s: float
     public_examples_ok: bool
 
-def load_split(split_dir: Path, name: str, *, allow_test: bool = False) -> list[SlotRow]
+def load_split(split_dir: Path, name: str, *, allow_test: bool = False, label_set: str = "seven") -> list[SlotRow]
 def split_hashes(split_dir: Path) -> dict[str, str]          # sha256 per split file, from summary.json
 def image_path(row: SlotRow, data_root: Path, tier_mode: str = "assigned") -> Path
 def load_image_u8(path: Path) -> np.ndarray                   # uint8, shape (144, 256, 3), RGB
-def class_weights(rows: list[SlotRow]) -> np.ndarray          # n / (k * count_c), from the rows given
+def class_weights(rows: list[SlotRow], labels=LABELS) -> np.ndarray
 ```
 
 - `load_split` accepts `train` and `val` freely. For `test_session` and `test_source` it requires `allow_test=True`, which only [evaluation](evaluation.md) passes (D13).
+- `label_set="seven"` keeps all seven classes; `"six"` drops Other rows. Six-game label indices remain 0–5.
 - `tier_mode`: `assigned` (the row's `tier`, the default everywhere), `full` or `low` (the per-tier diagnostic). `low` raises for a row with an empty `path_low` (quick-mode clip); callers filter those rows first.
 - `load_image_u8` opens with Pillow, converts to RGB and raises if the size is not 256×144. It never resizes (D27).
 - `label` in the file must equal `LABELS.index(game)`; a mismatch raises.
@@ -96,10 +97,10 @@ Quality tier is **not** an augmentation. It is fixed per slot by the splitter (D
 
 | Kind | Cases |
 |---|---|
-| **Unit: manifest** | `load_split` parses a fixture; test splits refused without `allow_test`; label/game mismatch raises; `image_path` follows `tier`, and `full` / `low` override it; `class_weights` values on a known count |
+| **Unit: manifest** | `load_split` parses a fixture; six drops Other and seven keeps label 6; test splits refused without `allow_test`; label/game mismatch raises; `class_weights` values on a known count |
 | **Unit: decode** | 256×144 JPEG → `(144, 256, 3)` uint8; other sizes raise; greyscale file comes back as three channels |
 | **Unit: transforms** | Eval transform is deterministic and equals `(x/255 − 0.5)/0.5`; train transform keeps shape and dtype; no flip class anywhere in the pipeline; with all probabilities 0 the train transform equals the eval transform; an asymmetric test image is never mirrored over 200 draws |
-| **System** | Synthetic split dir + frames → one batch from `make_loader` has shape `[B, 3, 144, 256]`, dtype float32, values in `[-1, 1]`, labels in `0..5`; same seed gives the same batch order; `cache="ram"` and `cache="none"` return identical eval tensors |
+| **System** | Synthetic split dir + frames → one batch has shape `[B, 3, 144, 256]`, dtype float32, values in `[-1, 1]`, labels in the selected set; same seed gives the same order |
 | **Manual** | Save a grid of augmented train samples next to their originals; HUD orientation unchanged; at the largest zoom (1.15) about 7 % of each edge is cropped, so check that corner HUD elements are still mostly visible |
 
 **How to run:** `pytest tests/unit/test_split_manifest.py tests/unit/test_dataset.py tests/system/test_dataset.py` (PyTorch tests skip when it is not installed)

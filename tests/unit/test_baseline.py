@@ -12,6 +12,7 @@ pytest.importorskip("sklearn")
 pytest.importorskip("joblib")
 
 from game_frame_classifier.baseline import (
+    BaselineError,
     histogram_features,
     load_baseline_predictor,
     load_config,
@@ -19,12 +20,24 @@ from game_frame_classifier.baseline import (
     train_baseline,
 )
 from game_frame_classifier.split_manifest import LABELS, load_split
-from game_frame_classifier.sourcing.labels import GAMES
+from game_frame_classifier.sourcing.labels import CLASSES, GAMES
 from tests.helpers.loader_fixtures import build_split_fixture
 
 
 def _solid(colour: tuple[int, int, int]) -> np.ndarray:
     return np.full((144, 256, 3), colour, dtype=np.uint8)
+
+
+def _six_config() -> dict:
+    config = load_config(Path("config/baseline.json"))
+    config["label_set"] = "six"
+    return config
+
+
+def _six_config_path(tmp_path: Path) -> Path:
+    path = tmp_path / "baseline-six.json"
+    path.write_text(json.dumps(_six_config()), encoding="utf-8")
+    return path
 
 
 def test_histogram_length_and_channel_sums():
@@ -53,7 +66,7 @@ def test_value_255_in_last_bin():
 
 def test_predict_proba_shape_and_row_sums(tmp_path):
     data_root, split_dir = build_split_fixture(tmp_path, n_per_game=2, splits=("train", "val"))
-    config = load_config(Path("config/baseline.json"))
+    config = _six_config()
     run_dir = tmp_path / "run"
     train_baseline(
         split_dir=split_dir,
@@ -66,12 +79,12 @@ def test_predict_proba_shape_and_row_sums(tmp_path):
     proba = predictor.predict_proba(rows, data_root)
     assert proba.shape == (len(rows), 6)
     assert np.allclose(proba.sum(axis=1), 1.0, atol=1e-6)
-    assert predictor.labels == LABELS == GAMES
+    assert predictor.labels == GAMES
 
 
 def test_load_baseline_predictor_round_trip(tmp_path):
     data_root, split_dir = build_split_fixture(tmp_path, n_per_game=2, splits=("train", "val"))
-    config = load_config(Path("config/baseline.json"))
+    config = _six_config()
     run_dir = tmp_path / "run_rt"
     train_baseline(
         split_dir=split_dir,
@@ -110,7 +123,7 @@ def test_tag_in_run_id(tmp_path, capsys, monkeypatch):
             "--data-root",
             str(data_root),
             "--config",
-            "config/baseline.json",
+            str(_six_config_path(tmp_path)),
             "--tag",
             "bins16",
             "--out",
@@ -155,15 +168,15 @@ def test_never_opens_test_split(tmp_path, monkeypatch):
     data_root, split_dir = build_split_fixture(
         tmp_path, n_per_game=1, splits=("train", "val", "test_session", "test_source")
     )
-    config = load_config(Path("config/baseline.json"))
+    config = _six_config()
     opened: list[str] = []
     real_load = __import__(
         "game_frame_classifier.split_manifest", fromlist=["load_split"]
     ).load_split
 
-    def tracking_load(split_dir_arg, name, *, allow_test=False):
+    def tracking_load(split_dir_arg, name, *, allow_test=False, label_set="seven"):
         opened.append(name)
-        return real_load(split_dir_arg, name, allow_test=allow_test)
+        return real_load(split_dir_arg, name, allow_test=allow_test, label_set=label_set)
 
     monkeypatch.setattr("game_frame_classifier.baseline.load_split", tracking_load)
     train_baseline(
@@ -182,7 +195,7 @@ def test_end_of_training_evaluation_writes_val_results(tmp_path):
     data_root, split_dir = build_split_fixture(tmp_path, n_per_game=2, splits=("train", "val"))
     run_dir = tmp_path / "runs" / "baseline" / "r"
     code = main(["--split-dir", str(split_dir), "--data-root", str(data_root),
-                 "--config", "config/baseline.json", "--out", str(run_dir)])
+                 "--config", str(_six_config_path(tmp_path)), "--out", str(run_dir)])
     assert code == 0
     metrics = json.loads((run_dir / "eval" / "val" / "metrics.json").read_text(encoding="utf-8"))
     assert metrics["provenance"]["model_type"] == "baseline"
@@ -202,6 +215,47 @@ def test_single_game_train_is_a_clear_error(tmp_path, capsys):
         writer.writeheader()
         writer.writerows(keep)
     code = main(["--split-dir", str(split_dir), "--data-root", str(data_root),
-                 "--config", "config/baseline.json", "--out", str(tmp_path / "run")])
+                 "--config", str(_six_config_path(tmp_path)), "--out", str(tmp_path / "run")])
     assert code == 2
     assert "at least two games" in capsys.readouterr().err
+
+
+def test_seven_way_records_other_label_and_six_way_drops_it(tmp_path):
+    data_root, split_dir = build_split_fixture(
+        tmp_path, n_per_game=2, splits=("train", "val"), include_other=True,
+    )
+    seven_dir = tmp_path / "seven"
+    seven = train_baseline(
+        split_dir=split_dir,
+        data_root=data_root,
+        config=load_config(Path("config/baseline.json")),
+        run_dir=seven_dir,
+    )
+    assert seven["label_set"] == "seven"
+    assert seven["labels"] == list(CLASSES)
+    assert load_baseline_predictor(seven_dir).predict_proba(
+        load_split(split_dir, "val"), data_root,
+    ).shape[1] == 7
+
+    six = train_baseline(
+        split_dir=split_dir,
+        data_root=data_root,
+        config=_six_config(),
+        run_dir=tmp_path / "six",
+    )
+    assert six["label_set"] == "six"
+    assert six["labels"] == list(GAMES)
+    assert six["n_train"] == 12
+
+
+def test_seven_way_refuses_split_without_other(tmp_path):
+    data_root, split_dir = build_split_fixture(
+        tmp_path, n_per_game=1, splits=("train", "val"),
+    )
+    with pytest.raises(BaselineError, match="no Other frames"):
+        train_baseline(
+            split_dir=split_dir,
+            data_root=data_root,
+            config=load_config(Path("config/baseline.json")),
+            run_dir=tmp_path / "run",
+        )

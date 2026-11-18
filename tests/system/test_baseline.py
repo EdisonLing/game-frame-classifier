@@ -73,6 +73,18 @@ def _required_run_files(run_dir: Path) -> list[Path]:
     ]
 
 
+def _six_config() -> dict:
+    config = load_config(Path("config/baseline.json"))
+    config["label_set"] = "six"
+    return config
+
+
+def _six_config_path(tmp_path: Path) -> Path:
+    path = tmp_path / "baseline-six.json"
+    path.write_text(json.dumps(_six_config()), encoding="utf-8")
+    return path
+
+
 def test_cli_beats_chance_and_writes_run_folder(tmp_path):
     data_root, split_dir = _build_colour_split(tmp_path, n_per_game=8)
     run_dir = tmp_path / "runs" / "baseline" / "smoke1"
@@ -83,7 +95,7 @@ def test_cli_beats_chance_and_writes_run_folder(tmp_path):
             "--data-root",
             str(data_root),
             "--config",
-            "config/baseline.json",
+            str(_six_config_path(tmp_path)),
             "--out",
             str(run_dir),
         ]
@@ -112,7 +124,7 @@ def test_cli_beats_chance_and_writes_run_folder(tmp_path):
 
 def test_same_seed_identical_c_search(tmp_path):
     data_root, split_dir = _build_colour_split(tmp_path, n_per_game=6)
-    config = load_config(Path("config/baseline.json"))
+    config = _six_config()
     run_a = tmp_path / "run_a"
     run_b = tmp_path / "run_b"
     train_baseline(split_dir=split_dir, data_root=data_root, config=config, run_dir=run_a)
@@ -138,7 +150,7 @@ def test_evaluation_missing_exits_zero(tmp_path, capsys, monkeypatch):
             "--data-root",
             str(data_root),
             "--config",
-            "config/baseline.json",
+            str(_six_config_path(tmp_path)),
             "--out",
             str(run_dir),
         ]

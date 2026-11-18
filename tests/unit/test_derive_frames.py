@@ -228,3 +228,30 @@ def test_build_slot_rows_quick_mode_empty_path_low(tmp_path):
     clip_row = build_clip_row(plan, RECIPE, origin="pack-q", examples_ok=False, derive_id="x")
     assert clip_row["low_tier"] == ""
     assert "low_encoder" in clip_row
+
+
+def test_other_tree_is_indexed_with_name_and_special_paths(tmp_path):
+    fs = tmp_path / "frame_sources"
+    sha = "e" * 64
+    write_clip_tree(
+        fs,
+        game="Other",
+        other_name="Apex_Legends",
+        source="contributor_x",
+        clip_sha256=sha,
+        width=256,
+        height=144,
+        buckets=[0],
+    )
+    ref = find_clips(fs, game="Other")[0]
+    assert ref.game == "Other"
+    assert ref.other_name == "Apex_Legends"
+    plan = plan_clip(ref, RECIPE)
+    clip = build_clip_row(plan, RECIPE, origin="pack-other", examples_ok=False, derive_id="x")
+    slots = build_slot_rows(plan, RECIPE)
+    assert clip["game"] == "Other"
+    assert clip["other_name"] == "Apex_Legends"
+    assert slots[0]["other_name"] == "Apex_Legends"
+    assert slots[0]["path_full"].startswith(
+        "frames/_other/Apex_Legends/contributor_x/"
+    )

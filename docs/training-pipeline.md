@@ -59,8 +59,8 @@ All paths are under the data root (`data/` by default, `--data-root` on every co
 
 | File | Written by | Read by | One row per |
 |---|---|---|---|
-| `frame_sources/<Game>/<source>/<clip_key>/{full,crf45}/*.jpg` + `clip.json` | make-sources, ingest-pack | derive-frames | native image |
-| `frames/<Game>/<source>/<clip_key>/{full,crf45}/*.jpg` | derive-frames | loader | 256×144 image |
+| `frame_sources/<Game>/<source>/<clip_key>/` or `_other/<name>/<source>/<clip_key>/` + `clip.json` | make-sources, ingest-pack | derive-frames | native image |
+| `frames/<Game>/<source>/<clip_key>/` or `_other/<name>/<source>/<clip_key>/` | derive-frames | loader | 256×144 image |
 | `manifests/clips_index.csv` | derive-frames | cleaner, splitter, evaluation | clip |
 | `manifests/slots.csv` | derive-frames | cleaner | slot |
 | `manifests/quarantine.csv` (hand-edited, optional) | — | cleaner | slot to drop |
@@ -91,7 +91,7 @@ The **slot** is the unit everywhere after extraction: it is cleaned, split and c
 
 ### 3.2 Labels
 
-Six classes, index order fixed by `sourcing.labels.GAMES`:
+The index order is fixed by `sourcing.labels.CLASSES = GAMES + ("Other",)`. `label_set = "six"` uses indices 0–5 and drops Other rows; `"seven"` (default) uses all seven:
 
 | Index | Label |
 |---|---|
@@ -101,8 +101,9 @@ Six classes, index order fixed by `sourcing.labels.GAMES`:
 | 3 | `Minecraft` |
 | 4 | `Overwatch_2` |
 | 5 | `Marvel_Rivals` |
+| 6 | `Other` |
 
-Every saved model stores this list. `unknown` is not a trained class; it is produced at inference by a confidence threshold (D24) and is added in evaluation after the first results.
+Every saved model stores `label_set` and its labels. `other_name` describes Other content but is never a class. Evaluation puts the same validation-selected confidence threshold on both label sets (D24).
 
 ### 3.3 Quality tiers (D04)
 
@@ -198,7 +199,7 @@ Each is a config value or a small code switch. Changing one means rerunning a st
 |---|---|---|---|
 | D13 | Strict: test splits untouched until the final evaluation; report development numbers on `val` | Allow one logged look at `test_session` for the progress report | Writing the progress report |
 | D15 | Single-stream CNN | Two-stream with HUD crops from native stills, as primary or as an ablation | After first CNN results on the look-alike pair |
-| D16 | Conv 32-64-128-256, one FC of 256, dropout 0.5; 9,827,878 parameters | FC 128 (5,108,390), FC 512 (19,266,854), two FC layers, or GAP head (390,438) | Train vs val gap is known |
+| D16 | Conv 32-64-128-256, one FC of 256, dropout 0.5; 9,828,135 parameters at seven outputs (9,827,878 at six) | FC 128, FC 512, two FC layers, or GAP head | Train vs val gap is known |
 | D30 | Session = clips of one source and game whose start is within 30 min of the previous clip's end | Different gap, or one session per recording day | Session report on real data looks wrong |
 | D34 | Keep every kept slot; correct imbalance with class weights | Downsample every game to the smallest class | Class counts are known |
 | D35 | Online augmentation: zoom 0.85–1.15 and small shift on half the samples, colour jitter on most, no flips | Zoom-out only (never crops HUD edges); offline augmented copies | Looking at augmented samples and the val curve |
@@ -231,7 +232,7 @@ Options and a suggestion are in [dataset-splitter.md](roadmap/tools/dataset-spli
 | Test = unseen streamers + held-out personal sessions | `test_source` and `test_session`; which sources are held out is open | G1 |
 | Balanced 2,000–3,000 frames per game | Keep all kept slots; class weights | D34 |
 | Hyperparameters tuned on validation | Same; test splits are never used for tuning | D13 |
-| "Unknown" threshold and majority vote | Threshold added in evaluation after first results; majority vote stays a demo | D24, D07 |
+| "Unknown" threshold and majority vote | Measured six-way threshold versus seven-way Other plus the same threshold; majority vote stays a demo | D24, D07 |
 
 ---
 

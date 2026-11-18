@@ -19,7 +19,13 @@ from typing import Any, Callable, Protocol
 import numpy as np
 
 from game_frame_classifier.sourcing.manifests import write_json
-from game_frame_classifier.split_manifest import LABELS, SlotRow, load_split, split_hashes
+from game_frame_classifier.sourcing.labels import CLASSES, GAMES, OTHER
+from game_frame_classifier.split_manifest import SlotRow, load_split, split_hashes
+
+LABELS = CLASSES
+OPEN_SET_FALSE_ALARM_RATE = 0.05
+BOOTSTRAP_RESAMPLES = 1000
+BOOTSTRAP_SEED = 360
 
 LOOKALIKE = ("Overwatch_2", "Marvel_Rivals")
 _TEST_SPLITS = frozenset({"test_session", "test_source"})
@@ -123,9 +129,9 @@ def _resolve_split_dir(run: dict[str, Any], split_dir: Path | None) -> Path:
 
 def _check_labels(run: dict[str, Any]) -> None:
     labels = tuple(run["labels"])
-    if labels != LABELS:
+    if labels not in {GAMES, CLASSES}:
         raise ValueError(
-            f"run labels {labels} do not match split_manifest.LABELS {LABELS}"
+            f"run labels {labels} do not match a supported label set"
         )
 
 
@@ -231,6 +237,97 @@ def compute_classification_metrics(
             "A class with no rows gets null scores and is left out of macro-F1."
         ),
     }
+
+
+def compute_six_game_metrics(
+    rows: list[SlotRow],
+    y_pred: np.ndarray,
+) -> dict[str, Any]:
+    """Score only six-game rows; predicting Other remains an ordinary error."""
+    keep = np.asarray([row.game in GAMES for row in rows], dtype=bool)
+    y_true = np.asarray([row.label for row in rows], dtype=np.int64)[keep]
+    pred = np.asarray(y_pred, dtype=np.int64)[keep]
+    f1s: list[float] = []
+    for label in range(len(GAMES)):
+        support = int(np.sum(y_true == label))
+        if not support:
+            continue
+        tp = int(np.sum((y_true == label) & (pred == label)))
+        fp = int(np.sum((y_true != label) & (pred == label)))
+        fn = int(np.sum((y_true == label) & (pred != label)))
+        _, _, f1 = _precision_recall_f1(tp, fp, fn)
+        f1s.append(float(f1 or 0.0))
+    return {
+        "n": int(len(y_true)),
+        "accuracy": float(np.mean(y_true == pred)) if len(y_true) else 0.0,
+        "macro_f1": float(np.mean(f1s)) if f1s else None,
+    }
+
+
+def _open_scores(probs: np.ndarray) -> np.ndarray:
+    return 1.0 - np.max(np.asarray(probs, dtype=np.float64)[:, :len(GAMES)], axis=1)
+
+
+def _threshold_at_false_alarm(scores: np.ndarray, rate: float = OPEN_SET_FALSE_ALARM_RATE) -> float:
+    """Largest empirical tail no greater than ``rate`` under the strict ``score > tau`` rule."""
+    values = np.sort(np.asarray(scores, dtype=np.float64))
+    if not len(values):
+        raise ValueError("cannot choose open-set threshold without six-game val rows")
+    allowed = int(np.floor(rate * len(values)))
+    if allowed < 1:
+        return float(values[-1])
+    return float(values[-allowed - 1])
+
+
+def _binary_auroc(scores: np.ndarray, positive: np.ndarray) -> float | None:
+    """AUROC by average ranks, including ties, without a scikit-learn dependency."""
+    values = np.asarray(scores, dtype=np.float64)
+    pos = np.asarray(positive, dtype=bool)
+    n_pos = int(pos.sum())
+    n_neg = int((~pos).sum())
+    if not n_pos or not n_neg:
+        return None
+    order = np.argsort(values, kind="mergesort")
+    ranks = np.empty(len(values), dtype=np.float64)
+    start = 0
+    while start < len(order):
+        end = start + 1
+        while end < len(order) and values[order[end]] == values[order[start]]:
+            end += 1
+        ranks[order[start:end]] = (start + 1 + end) / 2.0
+        start = end
+    rank_sum = float(ranks[pos].sum())
+    return (rank_sum - n_pos * (n_pos + 1) / 2.0) / (n_pos * n_neg)
+
+
+def compute_open_set_metrics(
+    rows: list[SlotRow],
+    probs: np.ndarray,
+    *,
+    tau: float,
+    seven_way: bool,
+) -> dict[str, Any]:
+    scores = _open_scores(probs)
+    is_other = np.asarray([row.game == OTHER for row in rows], dtype=bool)
+    is_game = ~is_other
+    flagged = scores > tau
+    y_true = np.asarray([row.label for row in rows], dtype=np.int64)
+    pred = np.asarray(probs).argmax(axis=1)
+    covered = is_game & ~flagged
+    out: dict[str, Any] = {
+        "tau": float(tau),
+        "false_alarm_rate": float(np.mean(flagged[is_game])) if is_game.any() else None,
+        "coverage": float(np.mean(~flagged[is_game])) if is_game.any() else None,
+        "accuracy_on_covered": (
+            float(np.mean(pred[covered] == y_true[covered])) if covered.any() else None
+        ),
+    }
+    if is_other.any():
+        out["other_detection_rate"] = float(np.mean(flagged[is_other]))
+        out["auroc"] = _binary_auroc(scores, is_other)
+        if seven_way:
+            out["argmax_other_rate"] = float(np.mean(pred[is_other] == len(GAMES)))
+    return out
 
 
 def _lookalike_metrics(confusion: list[list[int]], labels: tuple[str, ...]) -> dict[str, Any]:
@@ -395,15 +492,24 @@ def build_metrics(
     split_dir: Path,
     data_root: Path,
     hash_changed: bool,
+    tau: float | None = None,
 ) -> dict[str, Any]:
     probs = np.asarray(probs, dtype=np.float64)
-    if probs.ndim != 2 or probs.shape[0] != len(rows) or probs.shape[1] != len(LABELS):
+    labels = tuple(run["labels"])
+    if probs.ndim != 2 or probs.shape[0] != len(rows) or probs.shape[1] != len(labels):
         raise ValueError(
-            f"predict_proba shape {probs.shape} != ({len(rows)}, {len(LABELS)})"
+            f"predict_proba shape {probs.shape} != ({len(rows)}, {len(labels)})"
         )
-    y_true = np.asarray([r.label for r in rows], dtype=np.int64)
-    y_pred = probs.argmax(axis=1)
-    base = compute_classification_metrics(y_true, y_pred)
+    included = np.asarray([r.label < len(labels) for r in rows], dtype=bool)
+    class_rows = [row for row, keep in zip(rows, included.tolist()) if keep]
+    class_probs = probs[included]
+    y_true = np.asarray([r.label for r in class_rows], dtype=np.int64)
+    y_pred = class_probs.argmax(axis=1)
+    base = compute_classification_metrics(y_true, y_pred, labels=labels)
+    all_pred = probs.argmax(axis=1)
+    if tau is None:
+        game_mask = np.asarray([row.game in GAMES for row in rows], dtype=bool)
+        tau = _threshold_at_false_alarm(_open_scores(probs)[game_mask])
     metrics: dict[str, Any] = {
         "n": base["n"],
         "accuracy": base["accuracy"],
@@ -411,11 +517,15 @@ def build_metrics(
         "per_class": base["per_class"],
         "confusion": base["confusion"],
         "zero_support_note": base["zero_support_note"],
-        "lookalike": _lookalike_metrics(base["confusion"], LABELS),
-        "by_tier": _by_tier(rows, y_true, y_pred),
-        "by_encoder": _by_encoder(rows, y_true, y_pred, data_root),
-        "by_source": _by_source(rows, y_true, y_pred),
-        "by_clip": _by_clip(rows, y_true, y_pred),
+        "lookalike": _lookalike_metrics(base["confusion"], labels),
+        "by_tier": _by_tier(class_rows, y_true, y_pred),
+        "by_encoder": _by_encoder(class_rows, y_true, y_pred, data_root),
+        "by_source": _by_source(class_rows, y_true, y_pred),
+        "by_clip": _by_clip(class_rows, y_true, y_pred),
+        "six_game": compute_six_game_metrics(rows, all_pred),
+        "open_set": compute_open_set_metrics(
+            rows, probs, tau=tau, seven_way=labels == CLASSES,
+        ),
         "provenance": {
             "run_id": run["run_id"],
             "model_type": run["model_type"],
@@ -435,6 +545,7 @@ def write_predictions_csv(
     path: Path,
     rows: list[SlotRow],
     probs: np.ndarray,
+    labels: tuple[str, ...],
 ) -> None:
     probs = np.asarray(probs, dtype=np.float64)
     y_pred = probs.argmax(axis=1)
@@ -447,7 +558,8 @@ def write_predictions_csv(
         "pred_game",
         "correct",
         "confidence",
-        *[f"p_{g}" for g in LABELS],
+        "open_score",
+        *[f"p_{g}" for g in labels],
         "tier",
         "source",
         "clip_key",
@@ -461,15 +573,16 @@ def write_predictions_csv(
             "game": row.game,
             "label": row.label,
             "pred": pred,
-            "pred_game": LABELS[pred],
+            "pred_game": labels[pred],
             "correct": "true" if pred == row.label else "false",
             "confidence": float(conf[i]),
+            "open_score": float(1.0 - np.max(probs[i, :len(GAMES)])),
             "tier": row.tier,
             "source": row.source,
             "clip_key": row.clip_key,
             "session": row.session,
         }
-        for j, g in enumerate(LABELS):
+        for j, g in enumerate(labels):
             item[f"p_{g}"] = float(probs[i, j])
         out_rows.append(item)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -530,6 +643,7 @@ def write_examples_png(
     data_root: Path,
     *,
     examples: int = 8,
+    labels: tuple[str, ...] = LABELS,
 ) -> bool:
     plt = _try_matplotlib()
     if plt is None:
@@ -550,8 +664,8 @@ def write_examples_png(
             return []
         if favour_lookalike:
             look = {
-                LABELS.index(LOOKALIKE[0]),
-                LABELS.index(LOOKALIKE[1]),
+                labels.index(LOOKALIKE[0]),
+                labels.index(LOOKALIKE[1]),
             }
 
             def sort_key(i: int) -> tuple:
@@ -583,7 +697,7 @@ def write_examples_png(
             img = load_image_u8(image_path(row, data_root, "assigned"))
             ax.imshow(img)
             ax.set_title(
-                f"{row.game} → {LABELS[int(y_pred[i])]}\n{float(conf[i]):.2f}",
+                f"{row.game} → {labels[int(y_pred[i])]}\n{float(conf[i]):.2f}",
                 fontsize=7,
             )
         # Axes are off, so a y-label would not show; label the row in axes coordinates.
@@ -682,9 +796,10 @@ def evaluate_run(
     allow_test = split in _TEST_SPLITS
     rows = load_split(resolved_split_dir, split, allow_test=allow_test)
     predictor = load_predictor(run_dir)
-    if tuple(predictor.labels) != LABELS:
+    labels = tuple(run["labels"])
+    if tuple(predictor.labels) != labels:
         raise ValueError(
-            f"predictor labels {predictor.labels} != LABELS {LABELS}"
+            f"predictor labels {predictor.labels} != run labels {labels}"
         )
     probs = np.asarray(
         predictor.predict_proba(rows, root, tier_mode="assigned"),
@@ -692,7 +807,17 @@ def evaluate_run(
     )
     out_dir = run_dir / "eval" / split
     out_dir.mkdir(parents=True, exist_ok=True)
-    write_predictions_csv(out_dir / "predictions.csv", rows, probs)
+    if split == "val":
+        game_mask = np.asarray([row.game in GAMES for row in rows], dtype=bool)
+        tau = _threshold_at_false_alarm(_open_scores(probs)[game_mask])
+    else:
+        threshold_path = run_dir / "eval" / "val" / "open_set.json"
+        if not threshold_path.is_file():
+            raise PermissionError(
+                f"refusing {split!r}: score val first to choose the open-set threshold"
+            )
+        tau = float(json.loads(threshold_path.read_text(encoding="utf-8"))["tau"])
+    write_predictions_csv(out_dir / "predictions.csv", rows, probs, labels)
     metrics = build_metrics(
         rows,
         probs,
@@ -701,20 +826,118 @@ def evaluate_run(
         split_dir=resolved_split_dir,
         data_root=root,
         hash_changed=changed,
+        tau=tau,
     )
     write_json(metrics, out_dir / "metrics.json")
-    write_confusion_png(out_dir / "confusion.png", metrics["confusion"])
+    write_json(metrics["open_set"], out_dir / "open_set.json")
+    write_confusion_png(out_dir / "confusion.png", metrics["confusion"], labels)
     write_examples_png(
         out_dir / "examples.png",
         rows,
         probs,
         root,
         examples=examples,
+        labels=labels,
     )
     if tier_diagnostic:
         diag = run_tier_diagnostic(predictor, rows, root)
         write_json(diag, out_dir / "tier_diagnostic.json")
     return out_dir
+
+
+def _read_prediction_rows(path: Path) -> list[dict[str, str]]:
+    with path.open(encoding="utf-8", newline="") as file:
+        return list(csv.DictReader(file))
+
+
+def _six_macro_f1_arrays(y_true: np.ndarray, y_pred: np.ndarray) -> float | None:
+    f1s: list[float] = []
+    game_rows = y_true < len(GAMES)
+    yt, yp = y_true[game_rows], y_pred[game_rows]
+    for label in range(len(GAMES)):
+        if not np.any(yt == label):
+            continue
+        tp = int(np.sum((yt == label) & (yp == label)))
+        fp = int(np.sum((yt != label) & (yp == label)))
+        fn = int(np.sum((yt == label) & (yp != label)))
+        _, _, f1 = _precision_recall_f1(tp, fp, fn)
+        f1s.append(float(f1 or 0.0))
+    return float(np.mean(f1s)) if f1s else None
+
+
+def _bootstrap_comparison(
+    pred_a: list[dict[str, str]],
+    pred_b: list[dict[str, str]],
+    tau_a: float,
+    tau_b: float,
+) -> dict[str, Any]:
+    by_slot_b = {row["slot_id"]: row for row in pred_b}
+    if set(by_slot_b) != {row["slot_id"] for row in pred_a}:
+        raise ValueError("prediction rows differ between runs")
+    ordered_b = [by_slot_b[row["slot_id"]] for row in pred_a]
+    clips = np.asarray([row["clip_key"] for row in pred_a], dtype=object)
+    y_true = np.asarray([int(row["label"]) for row in pred_a], dtype=np.int64)
+    pred_a_values = np.asarray([int(row["pred"]) for row in pred_a], dtype=np.int64)
+    pred_b_values = np.asarray([int(row["pred"]) for row in ordered_b], dtype=np.int64)
+    score_a = np.asarray([float(row["open_score"]) for row in pred_a], dtype=np.float64)
+    score_b = np.asarray([float(row["open_score"]) for row in ordered_b], dtype=np.float64)
+    unique_clips = sorted(set(clips.tolist()))
+    clip_indices = {clip: np.flatnonzero(clips == clip) for clip in unique_clips}
+
+    def values(indices: np.ndarray) -> dict[str, float | None]:
+        yt = y_true[indices]
+        other = yt == len(GAMES)
+        game = ~other
+        return {
+            "six_game_macro_f1_a": _six_macro_f1_arrays(yt, pred_a_values[indices]),
+            "six_game_macro_f1_b": _six_macro_f1_arrays(yt, pred_b_values[indices]),
+            "other_detection_rate_a": (
+                float(np.mean(score_a[indices][other] > tau_a)) if other.any() else None
+            ),
+            "other_detection_rate_b": (
+                float(np.mean(score_b[indices][other] > tau_b)) if other.any() else None
+            ),
+            "auroc_a": _binary_auroc(score_a[indices], other) if game.any() and other.any() else None,
+            "auroc_b": _binary_auroc(score_b[indices], other) if game.any() and other.any() else None,
+        }
+
+    all_indices = np.arange(len(pred_a), dtype=np.int64)
+    observed = values(all_indices)
+    metric_pairs = {
+        "six_game_macro_f1": ("six_game_macro_f1_a", "six_game_macro_f1_b"),
+        "other_detection_rate": ("other_detection_rate_a", "other_detection_rate_b"),
+        "auroc": ("auroc_a", "auroc_b"),
+    }
+    rng = np.random.default_rng(BOOTSTRAP_SEED)
+    samples: dict[str, list[float]] = {name: [] for name in metric_pairs}
+    if unique_clips:
+        for _ in range(BOOTSTRAP_RESAMPLES):
+            selected = rng.choice(unique_clips, size=len(unique_clips), replace=True)
+            indices = np.concatenate([clip_indices[str(clip)] for clip in selected])
+            result = values(indices)
+            for name, (a_key, b_key) in metric_pairs.items():
+                a, b = result[a_key], result[b_key]
+                if a is not None and b is not None:
+                    samples[name].append(float(b) - float(a))
+    out: dict[str, Any] = {
+        "resamples": BOOTSTRAP_RESAMPLES,
+        "seed": BOOTSTRAP_SEED,
+        "unit": "clip_key",
+        "confidence": 0.95,
+        "metrics": {},
+    }
+    for name, (a_key, b_key) in metric_pairs.items():
+        a, b = observed[a_key], observed[b_key]
+        diffs = samples[name]
+        out["metrics"][name] = {
+            "run_a": a,
+            "run_b": b,
+            "difference_b_minus_a": None if a is None or b is None else float(b) - float(a),
+            "ci_low": float(np.percentile(diffs, 2.5)) if diffs else None,
+            "ci_high": float(np.percentile(diffs, 97.5)) if diffs else None,
+            "valid_resamples": len(diffs),
+        }
+    return out
 
 
 def compare_runs(
@@ -758,8 +981,8 @@ def compare_runs(
     add("accuracy", meta_a["accuracy"], meta_b["accuracy"])
     add("macro_f1", meta_a["macro_f1"], meta_b["macro_f1"])
     for game in LABELS:
-        fa = meta_a["per_class"][game]["f1"]
-        fb = meta_b["per_class"][game]["f1"]
+        fa = meta_a["per_class"].get(game, {}).get("f1")
+        fb = meta_b["per_class"].get(game, {}).get("f1")
         add(f"f1_{game}", fa, fb)
     for key in (
         f"{LOOKALIKE[0]}_to_{LOOKALIKE[1]}",
@@ -767,6 +990,17 @@ def compare_runs(
         "mean_f1",
     ):
         add(f"lookalike_{key}", meta_a["lookalike"][key], meta_b["lookalike"][key])
+    add("six_game_macro_f1", meta_a["six_game"]["macro_f1"], meta_b["six_game"]["macro_f1"])
+    for key in ("false_alarm_rate", "other_detection_rate", "auroc", "coverage", "accuracy_on_covered"):
+        add(f"open_set_{key}", meta_a["open_set"].get(key), meta_b["open_set"].get(key))
+
+    bootstrap = _bootstrap_comparison(
+        _read_prediction_rows(run_a / "eval" / split / "predictions.csv"),
+        _read_prediction_rows(run_b / "eval" / split / "predictions.csv"),
+        float(meta_a["open_set"]["tau"]),
+        float(meta_b["open_set"]["tau"]),
+    )
+    write_json(bootstrap, out_dir / f"{split}.json")
 
     csv_path = out_dir / f"{split}.csv"
     with open(csv_path, "w", encoding="utf-8", newline="") as f:
@@ -788,6 +1022,12 @@ def compare_runs(
     for row in rows_out:
         md_lines.append(
             f"| {row['metric']} | {row['run_a']} | {row['run_b']} | {row['diff_b_minus_a']} |"
+        )
+    md_lines.extend(["", "## Paired bootstrap (95% CI over videos)", ""])
+    for name, result in bootstrap["metrics"].items():
+        md_lines.append(
+            f"- {name}: {result['difference_b_minus_a']} "
+            f"[{result['ci_low']}, {result['ci_high']}]"
         )
     (out_dir / f"{split}.md").write_text("\n".join(md_lines) + "\n", encoding="utf-8")
     return out_dir

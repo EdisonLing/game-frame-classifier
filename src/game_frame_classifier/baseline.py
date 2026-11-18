@@ -20,13 +20,14 @@ from typing import Any, Sequence
 import numpy as np
 
 from game_frame_classifier.split_manifest import (
-    LABELS,
     SlotRow,
     image_path,
+    labels_for_set,
     load_image_u8,
     load_split,
     split_hashes,
 )
+from game_frame_classifier.sourcing.labels import CLASSES, GAMES, OTHER
 from game_frame_classifier.sourcing.manifests import write_json
 
 _SCHEMA = "gfc.baseline/1"
@@ -128,6 +129,9 @@ def load_config(path: Path) -> dict[str, Any]:
         raise BaselineError("c_grid must be a non-empty list", 2)
     if int(config["bins"]) < 1:
         raise BaselineError("bins must be >= 1", 2)
+    config.setdefault("label_set", "seven")
+    if config["label_set"] not in {"six", "seven"}:
+        raise BaselineError("label_set must be 'six' or 'seven'", 2)
     return config
 
 
@@ -256,8 +260,8 @@ def load_baseline_predictor(run_dir: Path) -> BaselinePredictor:
     if meta.get("model_type") != "baseline":
         raise ValueError(f"{run_dir}: model_type is not 'baseline'")
     labels = tuple(meta["labels"])
-    if labels != LABELS:
-        raise ValueError(f"{run_dir}: labels do not match LABELS order")
+    if labels not in {GAMES, CLASSES}:
+        raise ValueError(f"{run_dir}: labels do not match a supported label set")
     bins = int(meta["config"]["bins"])
     pipeline = joblib.load(run_dir / "model.joblib")
     return BaselinePredictor(labels=labels, pipeline=pipeline, bins=bins)
@@ -281,14 +285,18 @@ def train_baseline(
 
     seed = int(config["seed"])
     bins = int(config["bins"])
+    label_set = str(config.get("label_set", "seven"))
+    labels = labels_for_set(label_set)
     _seed_everything(seed)
 
-    train_rows = load_split(split_dir, "train")
-    val_rows = load_split(split_dir, "val")
+    train_rows = load_split(split_dir, "train", label_set=label_set)
+    val_rows = load_split(split_dir, "val", label_set=label_set)
     if not train_rows:
         raise BaselineError("train split is empty", 2)
     if not val_rows:
         raise BaselineError("val split is empty", 2)
+    if label_set == "seven" and not any(row.game == OTHER for row in train_rows):
+        raise BaselineError("no Other frames in train; use label_set six", 2)
     train_games = sorted({row.game for row in train_rows})
     if len(train_games) < 2:
         raise BaselineError(
@@ -330,7 +338,8 @@ def train_baseline(
     payload: dict[str, Any] = {
         "run_id": run_dir.name,
         "model_type": "baseline",
-        "labels": list(LABELS),
+        "label_set": label_set,
+        "labels": list(labels),
         "split_dir": str(split_dir),
         "split_id": split_id,
         "split_hashes": split_hashes(split_dir),

@@ -26,17 +26,17 @@ def test_forward_shape():
     model = FrameCNN()
     x = torch.randn(2, 3, 144, 256)
     y = model(x)
-    assert y.shape == (2, 6)
+    assert y.shape == (2, 7)
 
 
 def test_parameter_count_flatten():
     model = FrameCNN(head="flatten")
-    assert count_parameters(model) == 9_827_878
+    assert count_parameters(model) == 9_828_135
 
 
 def test_parameter_count_gap():
     model = FrameCNN(head="gap")
-    assert count_parameters(model) == 390_438
+    assert count_parameters(model) == 390_695
 
 
 def test_eval_mode_deterministic():
@@ -86,7 +86,7 @@ def test_other_channel_tuple_builds(channels):
     model = FrameCNN(channels=channels, fc_dim=64, head="flatten")
     x = torch.randn(1, 3, 144, 256)
     y = model(x)
-    assert y.shape == (1, 6)
+    assert y.shape == (1, 7)
     assert count_parameters(model) > 0
 
 

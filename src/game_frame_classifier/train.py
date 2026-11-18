@@ -33,12 +33,13 @@ from game_frame_classifier.dataset import (
 )
 from game_frame_classifier.model import FrameCNN, count_parameters
 from game_frame_classifier.split_manifest import (
-    LABELS,
     SlotRow,
     class_weights,
+    labels_for_set,
     load_split,
     split_hashes,
 )
+from game_frame_classifier.sourcing.labels import OTHER
 
 SCHEMA = "gfc.train_cnn/1"
 NORMALISATION = {"mean": [0.5, 0.5, 0.5], "std": [0.5, 0.5, 0.5]}
@@ -111,10 +112,12 @@ def _nonnegative_number(value: Any, path: str) -> float:
 
 def validate_config(config: dict[str, Any]) -> None:
     """Validate the resolved config before constructing data or model objects."""
+    config.setdefault("label_set", "seven")
     root = _require_keys(
         config,
         {
             "schema",
+            "label_set",
             "seed",
             "model",
             "optim",
@@ -131,6 +134,8 @@ def validate_config(config: dict[str, Any]) -> None:
     )
     if root["schema"] != SCHEMA:
         raise TrainError(f"config schema must be {SCHEMA!r}")
+    if root["label_set"] not in {"six", "seven"}:
+        raise TrainError("label_set must be 'six' or 'seven'")
     _whole_number(root["seed"], "seed", 0)
     _whole_number(root["batch_size"], "batch_size", 1)
     _whole_number(root["epochs"], "epochs", 1)
@@ -316,7 +321,7 @@ def make_run_id(tag: str | None = None) -> str:
     return base
 
 
-def model_from_config(model_cfg: dict[str, Any], num_classes: int = 6) -> FrameCNN:
+def model_from_config(model_cfg: dict[str, Any], num_classes: int = 7) -> FrameCNN:
     return FrameCNN(
         channels=tuple(model_cfg["channels"]),
         fc_dim=int(model_cfg["fc_dim"]),
@@ -623,11 +628,13 @@ def train_run(
         raise TrainError(f"run folder already exists: {run_dir}") from exc
 
     seed = int(config["seed"])
+    label_set = str(config["label_set"])
+    labels = labels_for_set(label_set)
     seed_everything(seed)
     device = resolve_device(str(config["device"]))
 
-    train_rows = load_split(split_dir, "train")
-    val_rows = load_split(split_dir, "val")
+    train_rows = load_split(split_dir, "train", label_set=label_set)
+    val_rows = load_split(split_dir, "val", label_set=label_set)
     if limit is not None:
         n = int(limit)
         if n < 1:
@@ -638,15 +645,17 @@ def train_run(
         raise TrainError("train split is empty")
     if not val_rows:
         raise TrainError("val split is empty")
+    if label_set == "seven" and not any(row.game == OTHER for row in train_rows):
+        raise TrainError("no Other frames in train; use label_set six")
 
     summary = json.loads((split_dir / "summary.json").read_text(encoding="utf-8"))
     split_id = str(summary.get("split_id", split_dir.name))
     hashes = split_hashes(split_dir)
 
-    weights = class_weights(train_rows)
+    weights = class_weights(train_rows, labels)
     weight_t = torch.tensor(weights, dtype=torch.float32, device=device)
 
-    model = model_from_config(config["model"], num_classes=len(LABELS))
+    model = model_from_config(config["model"], num_classes=len(labels))
     model.to(device)
     param_count = count_parameters(model)
 
@@ -706,7 +715,7 @@ def train_run(
             model, train_loader, criterion, optimiser, device
         )
         val_loss, val_acc, val_f1, _, _ = _run_eval(
-            model, val_loader, criterion, device, len(LABELS)
+            model, val_loader, criterion, device, len(labels)
         )
         seconds = time.perf_counter() - t0
         lr = float(optimiser.param_groups[0]["lr"])
@@ -741,7 +750,7 @@ def train_run(
                 "val_macro_f1": val_f1,
             }
             best_state = _checkpoint_payload(
-                model, config, LABELS, epoch, best_val_metrics
+                model, config, labels, epoch, best_val_metrics
             )
             epochs_without_improve = 0
         else:
@@ -754,7 +763,7 @@ def train_run(
     last_payload = _checkpoint_payload(
         model,
         config,
-        LABELS,
+        labels,
         int(history_rows[-1]["epoch"]),
         {
             "val_loss": float(history_rows[-1]["val_loss"]),
@@ -778,7 +787,8 @@ def train_run(
     run_meta: dict[str, Any] = {
         "run_id": run_id,
         "model_type": "cnn",
-        "labels": list(LABELS),
+        "label_set": label_set,
+        "labels": list(labels),
         "split_dir": str(split_dir),
         "split_id": split_id,
         "split_hashes": hashes,

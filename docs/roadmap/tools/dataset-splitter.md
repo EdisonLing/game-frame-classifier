@@ -50,6 +50,7 @@ Exit codes: `0` success, `1` policy conflict (see Ledger rules), `2` usage or mi
   "targets": { "train": 0.70, "val": 0.15, "test_session": 0.15 },
   "session_gap_min": 30,
   "holdout_sources": {},
+  "holdout_other": [],
   "max_source_share": 0.0667,
   "max_slots_per_source": 0,
   "train_slots_per_source": 0,
@@ -65,6 +66,7 @@ Exit codes: `0` success, `1` policy conflict (see Ledger rules), `2` usage or mi
 | `targets` | Share of each game's slots per split, among sources that are not held out |
 | `session_gap_min` | Session rule (below) |
 | `holdout_sources` | `{ "<Game>": ["<source-or-group>", ...] }`; every clip of those sources (or every source in a named group) for that game goes to `test_source` |
+| `holdout_other` | `["<other_name>", ...]`; every Other clip with one of those names goes to `test_source`, regardless of source |
 | `max_source_share` | Largest share of one game's **train** slots a single **group** may hold (section 3). Default `0.0667` (1/15, the proposal); `1.0` = no cap |
 | `train_slots_per_source` | Most **train** slots one **group** may hold in one game (section 3); `0` = no limit. Optional, default `0` |
 | `max_slots_per_source` | Most kept slots one source may contribute to one game, all splits together; `0` = no limit (section 3a). Optional, default `0` |
@@ -91,7 +93,7 @@ Splits, from least to most held out: `train` < `val` < `test_session` < `test_so
 
 For each session:
 
-1. **Held-out source.** If the source is in the expanded held-out set for that game (a listed source, or a member of a listed group), the session is `test_source`. Listing one source of a multi-source group without the others is a policy error (exit 1).
+1. **Held-out source or Other name.** If the source is in the expanded held-out set for that game (a listed source, or a member of a listed group), or an Other clip's `other_name` is in `holdout_other`, the session is `test_source`. Listing one source of a multi-source group without the others is a policy error (exit 1).
 2. **Known clips.** Otherwise, if any of its clips is already in the ledger, the session takes the most held-out split among them. This matters when a new clip bridges two sessions that were assigned to different splits:
    - **Draft:** clips that were in a less held-out split move up and are listed in `reassigned.csv`.
    - **Frozen:** no assigned clip moves, because a model trained earlier may already have seen it. The bridging clip is left out (`unused.csv`, reason `bridges_splits`) and the two old sessions stay as they were; in the split files each part is labelled `<session>.<split>`, so no session label spans two splits.
@@ -103,7 +105,7 @@ Every clip of the session is then written to the ledger.
 
 - A clip never moves to a less held-out split. After freezing, it never moves at all.
 - Freezing locks the policy and every existing assignment, not the contents: new footage still lands in all splits, so the test sets grow. Every result records the split hashes, and [`--compare`](evaluation.md#comparison---compare) only pairs runs scored on the same snapshot. For the final report, all models are scored on one snapshot.
-- A ledger entry that contradicts the config (a clip in `train` or `val` whose source is now held out, or a `test_source` clip whose source is no longer held out) is a policy change: the run stops with exit code `1` and asks for a new `split_id`. Contradiction checks use the expanded held-out source list.
+- A ledger entry that contradicts the config (a clip in `train` or `val` whose source is now held out, or a `test_source` clip whose source is no longer held out) is a policy change: the run stops with exit code `1` and asks for a new `split_id`. Contradiction checks use the expanded held-out source list. A clip contradicting `holdout_other` is handled the same way.
 - A source with no ledger entries yet can be added to `holdout_sources` at any time, including after freezing.
 - `--reset` exists only for drafts.
 
@@ -144,6 +146,7 @@ No downsampling. All kept slots are used (subject to the source cap); the traine
 | `sessions.csv` | `clip_key, game, source, session, recorded_start_utc, recorded_start_source, duration_s, slots_kept, split` |
 | `counts.csv` | `game, split, slots, slots_full, slots_low, slots_quick, clips, sessions, sources, groups`, with `ALL` rows per game and per split |
 | `sources.csv` | `game, source, group, source_kind, split, slots, share` (share of that game's slots in that split) |
+| `other_names.csv` | `other_name, split, slots, sessions, sources, share` (share of the split's Other slots) |
 | `unused.csv` | Kept slots not used, with reason (`source_limit`, `source_cap`, `bridges_splits`) |
 | `reassigned.csv` | Clips moved to a more held-out split, with the run time and reason |
 | `summary.json` | Resolved config, resolved `source_groups`, input file hashes, `split_hashes` (`{split name: SHA-256 of its CSV}`, read by `split_manifest.split_hashes`), counts, warnings, `frozen` |
@@ -154,7 +157,7 @@ No downsampling. All kept slots are used (subject to the source cap); the traine
 | Column | Notes |
 |---|---|
 | `slot_id`, `clip_key`, `bucket`, `target_time_s` | From `slots_clean` |
-| `game`, `label` | Label index per [training pipeline 3.2](../../training-pipeline.md) |
+| `game`, `other_name`, `label` | Label index per [training pipeline 3.2](../../training-pipeline.md); `other_name` is empty for the six games |
 | `source`, `source_kind`, `session` | For per-source and per-clip breakdowns |
 | `split`, `tier` | |
 | `path` | The image to use (relative to the data root) |
@@ -208,7 +211,7 @@ Decided 2026-11-18: the proposal's 1/15 share cap on `train`, with the median fa
 | **Unit: sessions** | Overlapping clips share a session; gap just under / just over the limit; untimed clips are singletons; grouping never crosses game or source |
 | **Unit: assignment** | No session in two splits; shares approach targets on a synthetic set of 40 sessions; first three sessions of a game land in three different splits; same seed gives the same result, another seed a different order |
 | **Unit: ledger** | Rerun with added clips leaves every earlier clip's split unchanged; in a draft a bridging clip moves the less held-out side up and writes `reassigned.csv`; after freeze the bridging clip is unused with `bridges_splits` and nothing moves; config contradicting the ledger exits `1`; `--reset` refused after freeze |
-| **Unit: holdout and cap** | Held-out source appears only in `test_source`; cap thins train only and deterministically; `1.0` drops nothing; a cap below `1 / k` uses the median fallback |
+| **Unit: holdout and cap** | Held-out source and held-out Other name appear only in `test_source`; label 6 is assigned to Other; `other_names.csv` counts it; cap thins train only and deterministically; `1.0` drops nothing; a cap below `1 / k` uses the median fallback from three groups up |
 | **Unit: source groups** | Duplicate membership and bad group names exit 2; two-source group capped as one (share and median); `train_slots_per_source` per group; raising the cap is nested; holdout by group name; half-listed group exits 1; `sources.csv` has `group`, `counts.csv` has `groups` |
 | **Unit: tier** | Rule matches the formula; each clip is half and half to within one slot; unchanged by adding clips |
 | **System** | Temp manifests → CLI → reload every split file: disjoint clip sets, disjoint sessions, every `path` equals the path of its tier, counts in `counts.csv` match the files; `--freeze` refused with empty `test_design`, accepted when set; CLI with a group is stable on rerun |
@@ -222,6 +225,7 @@ Decided 2026-11-18: the proposal's 1/15 share cap on `train`, with the median fa
 - [x] No clip or session in more than one split
 - [x] Rerun after adding footage changes no existing assignment
 - [x] Held-out sources absent from `train` and `val`
+- [x] Held-out Other names absent from `train` and `val`
 - [x] Tier shares about half and half per game and split
 - [x] `counts.csv` and `sources.csv` give frames, clips, sessions and sources per game
 - [x] `--freeze` blocked until `test_design` is filled in

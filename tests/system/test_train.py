@@ -37,29 +37,38 @@ _CLASS_COLOURS = {
     0: (220, 30, 30),
     1: (30, 220, 30),
     2: (30, 30, 220),
+    6: (180, 180, 30),
 }
 
 
-def _overfit_fixture(root: Path, *, n_per_class: int = 8, n_val: int = 2) -> tuple[Path, Path]:
+def _overfit_fixture(
+    root: Path,
+    *,
+    n_per_class: int = 8,
+    n_val: int = 2,
+    include_other: bool = False,
+) -> tuple[Path, Path]:
     """3 games × n_per_class train frames (+ small val) with distinct colours."""
     data_root = root / "data"
     split_dir = data_root / "manifests" / "splits" / "v1"
     split_dir.mkdir(parents=True, exist_ok=True)
 
-    games = list(LABELS[:3])
+    games = list(LABELS[:3]) + ([LABELS[6]] if include_other else [])
     train_rows: list[dict] = []
     val_rows: list[dict] = []
     bucket = 0
     for game_i, game in enumerate(games):
+        label = 6 if game == "Other" else game_i
         for j in range(n_per_class):
             row = make_slot_dict(
                 game=game,
-                label=game_i,
+                label=label,
                 source="src_a",
                 session=f"src_a:{game}:s001",
                 split="train",
                 tier="full",
-                clip_key=f"c{game_i:012x}",
+                clip_key=f"c{label:012x}",
+                other_name="desktop" if game == "Other" else "",
                 bucket=bucket,
             )
             train_rows.append(row)
@@ -67,12 +76,13 @@ def _overfit_fixture(root: Path, *, n_per_class: int = 8, n_val: int = 2) -> tup
         for j in range(n_val):
             row = make_slot_dict(
                 game=game,
-                label=game_i,
+                label=label,
                 source="src_a",
                 session=f"src_a:{game}:s002",
                 split="val",
                 tier="full",
-                clip_key=f"c{game_i + 10:012x}",
+                clip_key=f"c{label + 10:012x}",
+                other_name="desktop" if game == "Other" else "",
                 bucket=bucket,
             )
             val_rows.append(row)
@@ -92,6 +102,7 @@ def _overfit_fixture(root: Path, *, n_per_class: int = 8, n_val: int = 2) -> tup
 
 def _no_aug_config(config_path: Path) -> dict:
     cfg = load_config(config_path)
+    cfg["label_set"] = "six"
     cfg["device"] = "cpu"
     cfg["epochs"] = 30
     cfg["batch_size"] = 8
@@ -139,7 +150,7 @@ def test_overfit_and_run_folder(tmp_path):
     assert np.allclose(probs.sum(axis=1), 1.0, atol=1e-5)
 
     ckpt = torch.load(run_dir / "best.pt", map_location="cpu", weights_only=True)
-    model = FrameCNN()
+    model = FrameCNN(num_classes=6)
     model.load_state_dict(ckpt["model_state"])
     model.eval()
     ds = FrameDataset(val_rows, data_root, transform=eval_transform(), cache="none")
@@ -396,6 +407,8 @@ def test_cli_set_gap_and_main(tmp_path):
             "augment.jitter_p=0",
             "--set",
             "batch_size=8",
+            "--set",
+            "label_set=six",
             "--tag",
             "cli",
         ]
@@ -404,3 +417,39 @@ def test_cli_set_gap_and_main(tmp_path):
     meta = json.loads((out / "run.json").read_text(encoding="utf-8"))
     assert meta["config"]["model"]["head"] == "gap"
     assert meta["param_count"] == 390_438
+
+
+def test_seven_way_cnn_records_labels_and_parameter_count(tmp_path):
+    data_root, split_dir = _overfit_fixture(
+        tmp_path, n_per_class=2, n_val=1, include_other=True,
+    )
+    config = _no_aug_config(Path("config/train_cnn.json"))
+    config["label_set"] = "seven"
+    config["epochs"] = 1
+    meta = train_run(
+        split_dir=split_dir,
+        data_root=data_root,
+        config=config,
+        run_dir=tmp_path / "seven",
+        run_id="seven",
+    )
+    assert meta["label_set"] == "seven"
+    assert meta["labels"] == list(LABELS)
+    assert meta["param_count"] == 9_828_135
+    assert load_cnn_predictor(tmp_path / "seven").predict_proba(
+        load_split(split_dir, "val"), data_root,
+    ).shape[1] == 7
+
+
+def test_seven_way_cnn_refuses_without_other(tmp_path):
+    data_root, split_dir = _overfit_fixture(tmp_path, n_per_class=1, n_val=1)
+    config = _no_aug_config(Path("config/train_cnn.json"))
+    config["label_set"] = "seven"
+    with pytest.raises(TrainError, match="no Other frames"):
+        train_run(
+            split_dir=split_dir,
+            data_root=data_root,
+            config=config,
+            run_dir=tmp_path / "seven",
+            run_id="seven",
+        )

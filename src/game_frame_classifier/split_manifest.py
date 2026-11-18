@@ -14,9 +14,9 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from game_frame_classifier.sourcing.labels import GAMES
+from game_frame_classifier.sourcing.labels import CLASSES, GAMES, OTHER
 
-LABELS: tuple[str, ...] = GAMES
+LABELS: tuple[str, ...] = CLASSES
 
 _TEST_SPLITS = frozenset({"test_session", "test_source"})
 _ALLOWED_SPLITS = frozenset({"train", "val", "test_session", "test_source"})
@@ -26,6 +26,7 @@ SPLIT_COLUMNS = (
     "slot_id",
     "clip_key",
     "game",
+    "other_name",
     "label",
     "source",
     "source_kind",
@@ -60,6 +61,7 @@ class SlotRow:
     bucket: int
     target_time_s: float
     public_examples_ok: bool
+    other_name: str = ""
 
 
 def _parse_bool(value: str) -> bool:
@@ -96,10 +98,25 @@ def _row_from_csv(raw: dict[str, str]) -> SlotRow:
         bucket=int(raw["bucket"]),
         target_time_s=float(raw["target_time_s"]),
         public_examples_ok=_parse_bool(raw["public_examples_ok"]),
+        other_name=raw.get("other_name", ""),
     )
 
 
-def load_split(split_dir: Path, name: str, *, allow_test: bool = False) -> list[SlotRow]:
+def labels_for_set(label_set: str) -> tuple[str, ...]:
+    if label_set == "six":
+        return GAMES
+    if label_set == "seven":
+        return CLASSES
+    raise ValueError(f"unknown label_set: {label_set!r}")
+
+
+def load_split(
+    split_dir: Path,
+    name: str,
+    *,
+    allow_test: bool = False,
+    label_set: str = "seven",
+) -> list[SlotRow]:
     """Load one split CSV; refuse test splits unless allow_test=True."""
     if name not in _ALLOWED_SPLITS:
         raise ValueError(f"unknown split name: {name!r}")
@@ -110,10 +127,17 @@ def load_split(split_dir: Path, name: str, *, allow_test: bool = False) -> list[
     path = Path(split_dir) / f"{name}.csv"
     with open(path, encoding="utf-8", newline="") as f:
         reader = csv.DictReader(f)
-        missing = [c for c in SPLIT_COLUMNS if c not in (reader.fieldnames or [])]
+        missing = [
+            c for c in SPLIT_COLUMNS
+            if c != "other_name" and c not in (reader.fieldnames or [])
+        ]
         if missing:
             raise ValueError(f"{path}: missing columns {missing}")
-        return [_row_from_csv(row) for row in reader]
+        rows = [_row_from_csv(row) for row in reader]
+    labels_for_set(label_set)
+    if label_set == "six":
+        rows = [row for row in rows if row.game != OTHER]
+    return rows
 
 
 def split_hashes(split_dir: Path) -> dict[str, str]:
@@ -153,9 +177,9 @@ def load_image_u8(path: Path) -> np.ndarray:
         return np.asarray(rgb, dtype=np.uint8)
 
 
-def class_weights(rows: list[SlotRow]) -> np.ndarray:
-    """Balanced weights n / (k * count_c) over LABELS; 0 when count_c is 0."""
-    k = len(LABELS)
+def class_weights(rows: list[SlotRow], labels: tuple[str, ...] = LABELS) -> np.ndarray:
+    """Balanced weights n / (k * count_c) over labels; 0 when count_c is 0."""
+    k = len(labels)
     counts = np.zeros(k, dtype=np.float64)
     for row in rows:
         counts[row.label] += 1.0

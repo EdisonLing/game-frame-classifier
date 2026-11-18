@@ -16,8 +16,8 @@ Frame sources are native resolution and spread over per-clip folders with per-pa
 
 | | |
 |---|---|
-| **Reads** | `data/frame_sources/<Game>/<source>/<clip_key>/` (tier folders + `clip.json`), `_index/by_sha256.json`, `_packs/<pack_id>/pack_manifest.json`, `config/recipe.json` |
-| **Writes** | `data/frames/<Game>/<source>/<clip_key>/<tier>/*.jpg`, `data/manifests/clips_index.csv/json`, `data/manifests/slots.csv/json` |
+| **Reads** | `data/frame_sources/<Game>/<source>/<clip_key>/` and `_other/<name>/<source>/<clip_key>/`, `_index/by_sha256.json`, `_packs/<pack_id>/pack_manifest.json`, `config/recipe.json` |
+| **Writes** | `data/frames/<Game>/<source>/<clip_key>/` or `data/frames/_other/<name>/<source>/<clip_key>/`, `data/manifests/clips_index.csv/json`, `data/manifests/slots.csv/json` |
 | **Previous step** | [`gfc-make-sources`](make-sources.md), [`gfc-ingest-pack`](ingest-pack.md) |
 | **Next step** | [`gfc-clean-frames --slots`](frame-cleaner.md) |
 
@@ -26,6 +26,7 @@ Frame sources are native resolution and spread over per-clip folders with per-pa
 ```text
 gfc-derive-frames
 gfc-derive-frames --game Valorant
+gfc-derive-frames --game Other
 gfc-derive-frames --force
 gfc-derive-frames --index-only
 python -m game_frame_classifier.derive_frames
@@ -43,7 +44,7 @@ Exit codes: `0` success, `1` at least one clip failed, `2` usage or missing inpu
 
 ## Behaviour
 
-1. **Find clips.** Every `frame_sources/<Game>/<source>/<clip_key>/clip.json` where `<Game>` is one of the six games. Folders starting with `_` (`_other`, `_packs`, `_personal`, `_index`, `_stats`, `_tmp`) are not clips. `_other` material is not derived in v1.
+1. **Find clips.** Every `frame_sources/<Game>/<source>/<clip_key>/clip.json` for the six games, plus `_other/<name>/<source>/<clip_key>/clip.json`. Other internal folders (`_packs`, `_personal`, `_index`, `_stats`, `_tmp`) are skipped.
 2. **Tiers.** Tier folders present in the clip folder. A clip must have `full` and at most one `crf<N>` tier matching the recipe. A clip with only `full` is a quick-mode clip (D04): it is kept, with `low_tier` empty. Anything else is reported and left out of the tables.
 3. **Slots.** Parse `bucket` from `<clip_key>_<tier>_b<bucket>.jpg`. A slot exists when every tier of the clip has that bucket (for a quick-mode clip, every `full` file is a slot). Unpaired files are counted and ignored.
 4. **Derive.** For each tier folder, `sourcing.derive` pad-then-scale (`pad` to 16:9 when the aspect is off by more than the tolerance, `scale=256:144:flags=bicubic`, JPEG `q2`) into `data/frames/<Game>/<source>/<clip_key>/<tier>/` with the **same file names**. A clip is skipped when its output folders already hold one image per slot per tier. A clip is derived again when any source still is newer than its derived copy (re-extracted clips).
@@ -60,7 +61,7 @@ Exit codes: `0` success, `1` at least one clip failed, `2` usage or missing inpu
 | Column | Notes |
 |---|---|
 | `clip_key`, `clip_sha256` | Identity |
-| `game`, `source` | Folder names |
+| `game`, `other_name`, `source` | `game` is `Other` and `other_name` is the normalised `_other` folder for non-six content; `other_name` is empty for the six games |
 | `source_kind` | `contributor` when `source` starts with `contributor_`, `public` when it starts with `public_`, else `personal` |
 | `origin` | `pack_id` from the index (`personal:<run_id>` for make-sources) |
 | `public_examples_ok` | `true` for personal sources; for contributor sources the pack's `consent.public_examples`; `false` when unknown |
@@ -78,7 +79,7 @@ Exit codes: `0` success, `1` at least one clip failed, `2` usage or missing inpu
 |---|---|
 | `slot_id` | `c1a2b3c4d5e6f:b000012` |
 | `clip_key` | `c1a2b3c4d5e6f` |
-| `game`, `source` | `Valorant`, `contributor_alex` |
+| `game`, `other_name`, `source` | `Valorant`, empty, `contributor_alex`; or `Other`, `Apex_Legends`, `contributor_alex` |
 | `bucket`, `target_time_s` | `12`, `60.0` (`bucket × interval_s`) |
 | `path_full` | `frames/Valorant/contributor_alex/c1a2b3c4d5e6f/full/c1a2b3c4d5e6f_full_b000012.jpg` |
 | `path_low` | `frames/Valorant/contributor_alex/c1a2b3c4d5e6f/crf45/c1a2b3c4d5e6f_crf45_b000012.jpg`; empty for a quick-mode clip |

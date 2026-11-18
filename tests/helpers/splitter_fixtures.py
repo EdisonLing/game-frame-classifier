@@ -12,7 +12,8 @@ def write_split_config(path: Path, **overrides: object) -> Path:
     config = {
         "schema": "gfc.split/1", "split_id": "v1", "seed": 360,
         "targets": {"train": 0.70, "val": 0.15, "test_session": 0.15},
-        "session_gap_min": 30, "holdout_sources": {}, "max_source_share": 1.0,
+        "session_gap_min": 30, "holdout_sources": {}, "holdout_other": [],
+        "max_source_share": 1.0,
         "test_design": "",
     }
     config.update(overrides)
@@ -26,7 +27,7 @@ def write_split_inputs(data_root: Path, clips: list[dict[str, object]], *, slots
     manifest_dir = data_root / "manifests"
     manifest_dir.mkdir(parents=True, exist_ok=True)
     clip_columns = (
-        "clip_key", "game", "source", "source_kind", "public_examples_ok",
+        "clip_key", "game", "other_name", "source", "source_kind", "public_examples_ok",
         "recorded_start_utc", "recorded_start_source", "duration_s",
     )
     with (manifest_dir / "clips_index.csv").open("w", newline="", encoding="utf-8") as file:
@@ -34,7 +35,8 @@ def write_split_inputs(data_root: Path, clips: list[dict[str, object]], *, slots
         writer.writeheader()
         for index, clip in enumerate(clips):
             row = {
-                "clip_key": f"c{index:012x}", "game": "Valorant", "source": "source_a",
+                "clip_key": f"c{index:012x}", "game": "Valorant", "other_name": "",
+                "source": "source_a",
                 "source_kind": "personal", "public_examples_ok": "true",
                 "recorded_start_utc": "", "recorded_start_source": "",
                 "duration_s": "60",
