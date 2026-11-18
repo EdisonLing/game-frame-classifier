@@ -58,7 +58,7 @@ The interim branch (catalog → batch extract → clean → quality) ends at sin
 | Extract | **Done** | One video → frames @ 1/5s + manifest (also used by batch) |
 | Clean | **Done** | Drop black / blur / near-dupes (D11 lobby detector still planned) |
 | Quality encoder | **Done** | Video CRF → extract; **ops = full + low (CRF 45)**; medium=38 docs only (D04) |
-| Frame Export Kit | **Done** | Friends: clips → contributor zip (native full + crf45); v2.1.0 adds mixed-game folders (one pack per game from Medal-style names); release canary pending |
+| Frame Export Kit | **Done** | Friends: clips → contributor zip (native full + crf45); v2.1.2: mixed-game folders (one pack per game from Medal-style names); GPU encode without B-frames, confirmed on an NVIDIA RTX 3060; total time printed and recorded in the pack (`timing.run_wall_s`, `estimated_s`) |
 | Ingest pack | **Done** | `gfc-ingest-pack` → `data/frame_sources/` |
 | `gfc-make-sources` | **Done** | Personal clips into the same `frame_sources` layout (D26) |
 | `gfc-derive-frames` | **Done** | 256×144 frames + `clips_index` / `slots` tables (D27, D29) |
