@@ -27,6 +27,7 @@ gfc-derive-frames = "game_frame_classifier.derive_frames:main"
 gfc-split = "game_frame_classifier.dataset_splitter:main"
 gfc-evaluate = "game_frame_classifier.evaluation:main"
 gfc-train-baseline = "game_frame_classifier.baseline:main"
+gfc-train-cnn = "game_frame_classifier.train:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
