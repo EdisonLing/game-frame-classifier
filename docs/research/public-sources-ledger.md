@@ -33,3 +33,4 @@ Source folder names must start with `public_` so `gfc-derive-frames` / `gfc-spli
 ## Active attribution blurb
 
 Regenerate for reports from rows with `status=active` only. None active until a prototype is activated.
+

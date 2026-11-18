@@ -43,9 +43,9 @@ Dropped by the labelled-media filter: MineDojo YT metadata, LoL-V2T annotations-
 
 **Suggested prototype order**
 
-1. **Gamed** stills — `python scripts/prototype_public_stills.py --dataset gamed`  
-2. **Gameplay Images** Minecraft stills — same script `--dataset gameplay_images`  
-3. Later: VPT / BEDD / MineRL videos via `data/raw/.../public_*/` + `gfc-make-sources`  
+1. **Gamed** stills — `python scripts/prototype_public_stills.py --dataset gamed`
+2. **Gameplay Images** Minecraft stills — same script `--dataset gameplay_images`
+3. Later: VPT / BEDD / MineRL videos via `data/raw/.../public_*/` + `gfc-make-sources`
 4. OW2 / Rivals: personal/friends first; optional Game-Intention / MARVELRIVALSYOLO for D12
 
 ---
@@ -54,11 +54,11 @@ Dropped by the labelled-media filter: MineDojo YT metadata, LoL-V2T annotations-
 
 Common steps for every public source:
 
-1. Add a ledger row (`status: planned` → `active` when files land).  
-2. Create **one** folder `data/raw/<Game>/<source_id>/` (and later the same `<source_id>` under `frame_sources` / `frames`). Never mix datasets in one source folder.  
-3. Record URL, license SPDX, attribution blurb, date accessed, and “commercial OK?” on the ledger.  
-4. Ingest → clean → split with **clip/session** units (D01/D02); enforce source caps (D33).  
-5. Cite active ledger rows in the progress/final report ethics section.  
+1. Add a ledger row (`status: planned` → `active` when files land).
+2. Create **one** folder `data/raw/<Game>/<source_id>/` (and later the same `<source_id>` under `frame_sources` / `frames`). Never mix datasets in one source folder.
+3. Record URL, license SPDX, attribution blurb, date accessed, and “commercial OK?” on the ledger.
+4. Ingest → clean → split with **clip/session** units (D01/D02); enforce source caps (D33).
+5. Cite active ledger rows in the progress/final report ethics section.
 6. To drop a source: set ledger `status: retired`, delete that source’s raw/frame_sources/frames rows, rebuild catalog/split, retrain if needed, regenerate attributions from **active** rows only.
 
 | Source id (proposed) | Game(s) | Tier | Before first use | Ingest notes | Attribution obligation (while active) | Drop before monetize? |
@@ -82,7 +82,7 @@ Common steps for every public source:
 
 Use **two layers**, both keyed by the same `<source_id>`:
 
-1. **On disk (already decided layout):** `data/raw/<Game>/<source_id>/` and `data/frame_sources/<Game>/<source_id>/…` — deleting the tree removes the data from training once catalog/split are rebuilt (D19, D26).  
+1. **On disk (already decided layout):** `data/raw/<Game>/<source_id>/` and `data/frame_sources/<Game>/<source_id>/…` — deleting the tree removes the data from training once catalog/split are rebuilt (D19, D26).
 2. **Tracked ledger (new):** `docs/research/public-sources-ledger.md` (or later a generated CSV the catalog can read) — the **only** place that lists which public datasets are **active**, their SPDX license, and the exact attribution sentence for reports.
 
 Personal and friends’ sources stay out of this ledger (they are not third-party dataset attributions). Optional: a `kind=personal|contributor|public` field in a future catalog ethics column; until then, the `public_` prefix marks public rows.
@@ -120,16 +120,17 @@ While any public row is active, the ethics / data section can say:
 
 ### What we are *not* doing in this draft
 
-- Committing raw public videos or frames to git.  
-- Putting attribution only in a one-off README sentence with no ledger (easy to forget a drop).  
+- Committing raw public videos or frames to git.
+- Putting attribution only in a one-off README sentence with no ledger (easy to forget a drop).
 - Closing D12 or editing source-acquisition policy until you approve names for LoL / OW2 / Rivals.
 
 ---
 
 ## Open for your approval
 
-1. Keep `public_gamed` + `public_gameplay_images` active for course experiments, or retire them after the smoke?  
-2. Next video prototype: `public_vpt_contractor` / `public_bedd_basalt` / `public_minerl`?  
+1. Keep `public_gamed` + `public_gameplay_images` active for course experiments, or retire them after the smoke?
+2. Next video prototype: `public_vpt_contractor` / `public_bedd_basalt` / `public_minerl`?
 3. For D12 (OW2 / Rivals): personal/friends only, or also `public_game_intention_ow` / `public_marvelrivals_yolo`?
 
 Prototype stills for Gamed and Gameplay Images were downloaded into this worktree’s gitignored `data/` only (not the main checkout).
+
