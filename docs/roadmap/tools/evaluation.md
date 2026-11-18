@@ -1,8 +1,10 @@
 # Evaluation and report figures (`gfc-evaluate`)
 
 **Stage:** 4–5 — shared by the baseline and the CNN  
-**Status:** planned  
+**Status:** implemented  
 **Back to:** [ROADMAP.md](../ROADMAP.md) · [training pipeline](../../training-pipeline.md)
+
+> Spec answers while building: matplotlib is required in `.venv-rocm` via the `train` optional group and is checked in [amd-gpu-setup.md](../../amd-gpu-setup.md) §2.3; figure writers still skip with a printed note if matplotlib is missing so metrics work in lean environments.
 
 ## What it does (high level)
 
@@ -19,6 +21,8 @@ Both models must be measured by the same code on the same rows, or their compari
 | **Reads** | A run folder from [`gfc-train-baseline`](baseline.md) or [`gfc-train-cnn`](cnn-trainer.md); split manifests from [`gfc-split`](dataset-splitter.md) through the [loader](dataset-loader.md) |
 | **Writes** | `<run>/eval/<split>/`, `data/runs/holdout_access.jsonl`, comparison and data-report folders |
 | **Called by** | Both trainers at the end of training (`split = val`), and by hand |
+
+`run.json` fields evaluation relies on (trainers must write these): `run_id`, `model_type`, `labels`, `split_dir`, `split_id`, `split_hashes` (`{split name: sha256}`, same shape as `split_manifest.split_hashes`).
 
 ## Usage
 
@@ -131,11 +135,11 @@ Writes to `<split_dir>/report/`: `class_counts.png` (slots per game, stacked by 
 
 ## Acceptance checks
 
-- [ ] Baseline and CNN evaluated by the same command with identical output layout
-- [ ] Confusion matrix and example grid generated for `val`
-- [ ] Test splits unreachable before freeze, and every access logged
-- [ ] Comparison table produced from two runs
-- [ ] CLI entry `gfc-evaluate` in `pyproject.toml`
+- [x] Baseline and CNN evaluated by the same command with identical output layout
+- [x] Confusion matrix and example grid generated for `val`
+- [x] Test splits unreachable before freeze, and every access logged
+- [x] Comparison table produced from two runs
+- [x] CLI entry `gfc-evaluate` in `pyproject.toml`
 
 ## Ties to proposal and decisions
 

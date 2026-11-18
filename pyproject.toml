@@ -25,6 +25,7 @@ gfc-ingest-pack = "game_frame_classifier.ingest_pack:main"
 gfc-make-sources = "game_frame_classifier.make_sources:main"
 gfc-derive-frames = "game_frame_classifier.derive_frames:main"
 gfc-split = "game_frame_classifier.dataset_splitter:main"
+gfc-evaluate = "game_frame_classifier.evaluation:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

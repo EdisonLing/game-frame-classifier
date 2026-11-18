@@ -75,10 +75,16 @@ The `device-…` extra pulls the GPU kernels for that architecture only (`rocm-s
 
 ```powershell
 python -m pip install -e ".[dev,train]"
-python -c "import torch, torchvision; print(torch.__version__, torchvision.__version__)"
+python -c "import torch, torchvision, matplotlib; print(torch.__version__, torchvision.__version__, matplotlib.__version__)"
 ```
 
-The second line must still print `+rocm10.1.0` versions (tested: `2.14.0+rocm10.1.0 0.29.0a0+rocm10.1.0`). Until a `train` group exists in `pyproject.toml`, pip prints `WARNING: game-frame-classifier 0.1.0 does not provide the extra 'train'` and installs only the `dev` group plus the package; that is harmless here, because the ROCm wheels from 2.2 already bring `torch`, `torchvision`, NumPy and Pillow. Once the group exists it must not pin `torch`, so pip keeps the ROCm build that is already installed. If a plain `torch` from PyPI ever replaces it, repeat 2.2.
+The `train` optional group (`numpy`, `torch`, `torchvision`, `scikit-learn`, `matplotlib`) is what evaluation figures and the baseline need at the end of a GPU training run. It must not pin `torch`, so pip keeps the ROCm build from 2.2. The check line must still print `+rocm10.1.0` for torch and torchvision (tested: `2.14.0+rocm10.1.0 0.29.0a0+rocm10.1.0`) plus a matplotlib version. If a plain `torch` from PyPI ever replaces the ROCm build, repeat 2.2.
+
+If the environment already has the ROCm wheels and only figure or baseline packages are missing, install them without touching torch:
+
+```powershell
+python -m pip install matplotlib scikit-learn
+```
 
 ---
 
