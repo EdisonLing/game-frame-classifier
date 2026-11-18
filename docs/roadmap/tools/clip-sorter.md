@@ -33,7 +33,7 @@ python -m game_frame_classifier.clip_sorter ...
 | Flag | Meaning |
 |---|---|
 | `<folder>` | Folder of videos, searched recursively (the `_archive` subfolder is ignored) |
-| `--source` | Source name for the copies, normalised with `normalize_handle` (for example `edison`, `friend_alex`). Must not start with `contributor_` (reserved for packs) |
+| `--source` | Source name for the copies, normalised with `normalize_handle` (for example `tester`, `friend_alex`). Must not start with `contributor_` (reserved for packs) |
 | `--session` | Session name (default: `<folder name>_<source>`); the session folder is `data/sorting/<session>/` |
 | `--hints` | CSV `file,game,other_name` (file relative to `<folder>`): suggested labels |
 | `--data-root` | Data root (default `data`) |
