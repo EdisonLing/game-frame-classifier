@@ -265,6 +265,24 @@ def test_cpu_flag_skips_the_gpu_without_a_warning(tmp_path, monkeypatch, capsys)
 
 
 @requires_ffmpeg
+def test_pack_records_timing_and_prints_total(tmp_path, monkeypatch, capsys):
+    code, manifest, zip_path = _one_clip_run(tmp_path, monkeypatch, extra=["--cpu"])
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "Took about " in out
+    timing = manifest["timing"]
+    assert set(timing) == {"wall_s", "run_wall_s", "estimated_s", "estimate_basis"}
+    assert timing["estimate_basis"] == "cpu"
+    assert timing["wall_s"] > 0 and timing["run_wall_s"] >= timing["wall_s"]
+    assert timing["estimated_s"] >= 0
+    rows = pack_table(zip_path, "clips.json")
+    assert timing["wall_s"] == round(sum(r["wall_s"] for r in rows if r["status"] == "ok"), 1)
+    with zipfile.ZipFile(zip_path) as zf:
+        log = next(zf.read(n) for n in zf.namelist() if n.endswith("run_log.txt")).decode("utf-8")
+    assert f"wall_s={timing['wall_s']}" in log
+
+
+@requires_ffmpeg
 def test_clip_level_fallback_warns_then_stops_trying_the_gpu(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(cli.gpu, "detect_gpu", lambda tools, probe_dir: cli.gpu.GpuStatus(True, "Fake GPU"))
     monkeypatch.setattr(cli.gpu, "GPU_ENCODER", "h264_no_such_encoder")

@@ -62,6 +62,9 @@ class RunContext:
     gpu: GpuStatus | None = None  # None: the GPU was not tried (--cpu or recipe encoder x264)
     gpu_stopped: str = ""  # set when repeated GPU failures switched the rest of the run to the CPU
     decode: DecodeCheck | None = None  # None: decode on the CPU (--cpu); else per-codec GPU decode check
+    estimated_s: float | None = None  # lower bound shown as "Estimated time: about A to B" (B = 2A)
+    estimate_basis: str = ""  # "gpu" or "cpu" — same flag passed to estimate_seconds
+    run_t0: float | None = None  # perf_counter at the start of process; for timing.run_wall_s
 
     @property
     def selected(self) -> list[ScanItem]:
@@ -70,6 +73,14 @@ class RunContext:
     @property
     def use_gpu(self) -> bool:
         return self.gpu is not None and self.gpu.available and not self.gpu_stopped
+
+
+@dataclass(frozen=True)
+class PackResult:
+    """Path of the finished zip (or pack folder) plus the clip-sum wall time for the Done line."""
+
+    path: Path
+    wall_s: float
 
 
 def _replace_ci(text: str, old: str, new: str) -> str:
@@ -205,6 +216,7 @@ def process(
     log: RunLog,
 ) -> tuple[dict[str, dict[str, Any]], dict[str, str]]:
     """Extract every selected clip not already done; returns (done, failed) keyed by quick id."""
+    ctx.run_t0 = time.perf_counter()
     pack = pack_dir(work, state)
     frames_root = pack / "frames"
     probe_dir = pack / "probe"
@@ -222,7 +234,7 @@ def process(
     if done:
         print(f"Already done in an earlier run: {len(done)} clips.")
     remaining_s = sum(it.info.duration_s for it in todo)
-    started = time.perf_counter()
+    started = ctx.run_t0
     footage_done = 0.0
     gpu_streak = 0
     for n, it in enumerate(todo, 1):
@@ -418,7 +430,7 @@ def finalize(
     budget_min: int,
     make_zip: bool,
     zip_dir: Path,
-) -> Path:
+) -> PackResult:
     """Write tables and manifest; zip into zip_dir, record history and delete the work dir (unless make_zip is False).
 
     zip_dir is the tool's output folder, or the existing folder the user named with --output.
@@ -442,13 +454,20 @@ def finalize(
             images.extend(d["result"]["images"])
     write_table(rows, CLIP_COLUMNS, pack / "clips.csv", pack / "clips.json")
     write_table(images, FRAME_COLUMNS, pack / "frames.csv", pack / "frames.json")
-    log.write(f"run done ok={len(done)} failed={len(failed)}")
+    wall_s = round(sum(d["wall_s"] for d in done.values()), 1)
+    log.write(f"run done ok={len(done)} failed={len(failed)} wall_s={wall_s}")
     shutil.copyfile(log.path, pack / "run_log.txt")
     files = [p for p in pack.rglob("*") if p.is_file() and p.name != "pack_manifest.json"]
     ok_items = [it for it in ctx.items if it.status == "selected" and it.quick_id in done]
     over = [it for it in ctx.items if it.detail == "over_budget"]
     selected_s = sum(it.info.duration_s for it in ctx.items if it.status == "selected")
     x264 = next((d["result"]["x264_core"] for d in done.values() if d["result"]["x264_core"]), "")
+    if ctx.estimated_s is None:
+        basis = "gpu" if ctx.use_gpu else "cpu"
+        estimated_s = round(estimate_seconds(ctx.selected, ctx.recipe, gpu=ctx.use_gpu), 1)
+    else:
+        basis = ctx.estimate_basis or ("gpu" if ctx.use_gpu else "cpu")
+        estimated_s = round(ctx.estimated_s, 1)
     manifest = {
         "schema": SCHEMA_PACK,
         "pack_id": state["pack_id"],
@@ -501,11 +520,22 @@ def finalize(
             "file_count": len(files),
             "uncompressed_bytes": sum(p.stat().st_size for p in files),
         },
-        "timing": {"wall_s": round(sum(d["wall_s"] for d in done.values()), 1)},
+        "timing": {
+            "wall_s": wall_s,
+            # Process start through pack seal (tables + manifest). Zip I/O is after the
+            # manifest is written, so it is not included (rewriting the zip only to patch
+            # this field would double large-pack write time).
+            "run_wall_s": round(
+                time.perf_counter() - (ctx.run_t0 if ctx.run_t0 is not None else time.perf_counter()),
+                1,
+            ),
+            "estimated_s": estimated_s,
+            "estimate_basis": basis,
+        },
     }
     write_json(manifest, pack / "pack_manifest.json")
     if not make_zip:
-        return pack
+        return PackResult(pack, wall_s)
     zip_path = _zip_name(ctx, zip_dir)
     write_pack_zip(pack, zip_path)
     history = settings.load_history()
@@ -519,4 +549,4 @@ def finalize(
         }
     settings.save_history(history)
     shutil.rmtree(paths.ensure_inside_home(work))
-    return zip_path
+    return PackResult(zip_path, wall_s)

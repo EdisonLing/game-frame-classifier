@@ -27,6 +27,7 @@ from . import __version__, paths, settings
 from .run import (
     DISK_FACTOR,
     DiskSpaceError,
+    PackResult,
     RunContext,
     RunLog,
     estimate_bytes,
@@ -595,10 +596,15 @@ def _confirm_start(
     out_dir: Path,
     zip_dir: Path,
     heading: str | None = None,
+    estimated_s: float | None = None,
 ) -> str:
-    """Return 'yes', 'no', or 'mode'. Prints estimates and asks Start when interactive."""
+    """Return 'yes', 'no', or 'mode'. Prints estimates and asks Start when interactive.
+
+    estimated_s is the lower bound of the printed range (upper is 2×); when omitted it is
+    computed here from estimate_seconds.
+    """
     est = estimate_bytes(selected, recipe)
-    secs = estimate_seconds(selected, recipe, gpu=use_gpu)
+    secs = estimated_s if estimated_s is not None else estimate_seconds(selected, recipe, gpu=use_gpu)
     free = shutil.disk_usage(out_dir).free
     if heading:
         print(heading)
@@ -668,6 +674,8 @@ def _run_one_pack(
     else:
         ctx.gpu = choose_encoder(args, recipe, tools, work.parent / f"gpu_probe_{work.name}")
         ctx.decode = None if args.cpu else gpu.DecodeCheck()
+    ctx.estimate_basis = "gpu" if ctx.use_gpu else "cpu"
+    ctx.estimated_s = round(estimate_seconds(selected, recipe, gpu=ctx.use_gpu), 1)
 
     state = load_state(work)
     if state is not None:
@@ -683,6 +691,7 @@ def _run_one_pack(
     if confirm:
         decision = _confirm_start(
             args, interactive, user, selected, recipe, mode, ctx.use_gpu, out_dir, zip_dir,
+            estimated_s=ctx.estimated_s,
         )
         if decision == "disk":
             return EXIT_DISK
@@ -717,21 +726,24 @@ def _run_one_pack(
     if not done:
         print(f"\nNo clips could be processed. Send me this file: {work.relative_to(home) / 'run_log.txt'}")
         return EXIT_FAIL
-    result = finalize(ctx, work, state, done, failed, log, budget_min, make_zip=not args.no_zip, zip_dir=zip_dir)
+    result: PackResult = finalize(
+        ctx, work, state, done, failed, log, budget_min, make_zip=not args.no_zip, zip_dir=zip_dir,
+    )
     skipped = sum(1 for it in items if it.status == "skipped")
     print(f"\nDone. {len(done)} clips OK, {len(failed)} failed, {skipped} skipped.")
+    print(f"Took about {fmt_duration(result.wall_s)}.")
     print_encoder_note(ctx, done)
     if args.no_zip:
-        print(f"Pack folder (not zipped): {result}")
+        print(f"Pack folder (not zipped): {result.path}")
         return EXIT_OK
-    shown = result.relative_to(home) if result.is_relative_to(home) else result
-    print(f"Send this file: {shown}  ({fmt_bytes(result.stat().st_size)})")
+    shown = result.path.relative_to(home) if result.path.is_relative_to(home) else result.path
+    print(f"Send this file: {shown}  ({fmt_bytes(result.path.stat().st_size)})")
     if announce:
         print("Discord's free limit is 10 MB, so upload it to Google Drive, OneDrive or WeTransfer and send me the link.")
         if over_budget:
             print("Some clips were left for next time. Run it again on the same folder to send more.")
     if open_when_done and not args.no_open:
-        open_explorer(result)
+        open_explorer(result.path)
     return EXIT_OK
 
 

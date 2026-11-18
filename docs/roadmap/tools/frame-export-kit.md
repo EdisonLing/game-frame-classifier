@@ -1,7 +1,7 @@
 # Frame Export Kit (clips → frames zip)
 
 **Stage:** 1 / volume (contributor data)  
-**Status:** v2.1.1 (mixed-folder mode; GPU `-bf 0` for NVIDIA); release checklist (§13) pending  
+**Status:** v2.1.2 (mixed-folder mode; GPU `-bf 0`; pack timing QoL); release checklist (§13) pending  
 **Back to:** [ROADMAP.md](../ROADMAP.md)  
 **Decisions:** [D25](../../design-decisions.md) (pack), [D26](../../design-decisions.md) (frame sources + one extraction path), [D27](../../design-decisions.md) (derive to 256×144), D04 / D22 (tiers), D21 (JPEG)
 
@@ -35,7 +35,7 @@ The frames they send are a **source of truth** in my pipeline (the masters are g
 
 ## 2. Friend user flow
 
-1. **Get the pack.** I send `GFC-FrameExportKit-v2.1.1.zip` (about 130 MB, mostly ffmpeg). They right-click → *Extract All*. Running from inside the zip is detected and explained.
+1. **Get the pack.** I send `GFC-FrameExportKit-v2.1.2.zip` (about 130 MB, mostly ffmpeg). They right-click → *Extract All*. Running from inside the zip is detected and explained.
 2. **Start.** Either drag a folder of clips onto `START HERE.bat`, or double-click it and drag the folder into the window when asked.
 3. **First run only:** a short notice of what is collected, then four prompts, saved to `config/user.json`:
    - name / handle (becomes the source id)
@@ -51,7 +51,7 @@ The frames they send are a **source of truth** in my pipeline (the masters are g
 Example session (abridged):
 
 ```text
-GFC Frame Export Kit v2.1.1
+GFC Frame Export Kit v2.1.2
 Drag the folder with your clips into this window, then press Enter:
 > "D:\Videos\NVIDIA\VALORANT"
 
@@ -69,6 +69,7 @@ Start? [Y/n]:
 [ 1/14] VALORANT 2026.11.02 - 21.14.08.03.DVR.mp4   100%   26 slots   (ETA 38 min)
 ...
 Done. 12 clips OK, 1 failed (see log), 1 skipped.
+Took about 40 min.
 Send this file: output\GFC_Valorant_alex_20261120-2214.zip  (1.04 GB)
 Discord's free limit is 10 MB, so use Google Drive, OneDrive or WeTransfer and send me the link.
 Press Enter to close.
@@ -88,7 +89,7 @@ START HERE.bat <folder> [--game Valorant|Other|Mixed] [--other-name Apex_Legends
 ## 3. What I ship (package layout)
 
 ```text
-GFC-FrameExportKit-v2.1.1/
+GFC-FrameExportKit-v2.1.2/
   START HERE.bat                 # launcher (drag a folder onto it)
   README.txt                     # one page, plain language (template in §14)
   app/                           # pure-stdlib Python source (readable)
@@ -416,7 +417,7 @@ CSV + JSON side by side (D20). All paths inside manifests are relative to the pa
   "schema": "gfc.pack/1",
   "pack_id": "6f1c0e5e-2b7d-4c55-8a1e-0d9b3c7a5f10",
   "created_utc": "2026-11-20T03:44:12Z",
-  "tool": { "name": "gfc-frame-export", "version": "2.1.1", "source_commit": "abc1234" },
+  "tool": { "name": "gfc-frame-export", "version": "2.1.2", "source_commit": "abc1234" },
   "recipe": { "...": "resolved recipe.json with crf_list as a list, plus sampler: bucket_v1" },
   "ffmpeg": { "ffmpeg_version": "n8.1.x-...", "ffprobe_version": "n8.1.x-...", "build": "bundled", "x264_core": "x264 - core 165 r3222 ..." },
   "host": { "os": "Windows-10.0.26100", "cpu_count": 16, "python": "3.13.x", "tz_name": "Eastern Standard Time", "utc_offset_min": -300 },
@@ -426,11 +427,13 @@ CSV + JSON side by side (D20). All paths inside manifests are relative to the pa
   "input": { "files_seen": 15, "videos_found": 14, "clips_ok": 12, "clips_failed": 1, "clips_skipped": 1, "input_bytes": 21474836480, "input_duration_s": 7860.4,
              "footage_budget_min": 180, "eligible_duration_s": 7860.4, "selected_duration_s": 7860.4, "over_budget_clips": 0 },
   "output": { "tiers": ["full", "crf45"], "frame_mode": "native", "slots": 1560, "images": 3120, "file_count": 3134, "uncompressed_bytes": 1116684288 },
-  "timing": { "wall_s": 2412.7 }
+  "timing": { "wall_s": 2412.7, "run_wall_s": 2450.1, "estimated_s": 540.0, "estimate_basis": "gpu" }
 }
 ```
 
 `output.uncompressed_bytes` and `file_count` describe every file in the pack except `pack_manifest.json` itself; ingest checks them before extracting. No hostname, username or absolute path appears anywhere. `ffmpeg.build` is `bundled` in a contributor pack (`env` or `path` when run from a repo checkout).
+
+`timing.wall_s` is the sum of ok clip `wall_s` values (same number printed as `Took about …`). `run_wall_s` is process start through pack seal. `estimated_s` is the lower bound of the pre-run estimate (`estimate_basis` is `gpu` or `cpu`); the printed range is that value to twice that value.
 
 ### 6.3 `clips.csv` / `clips.json` (one row per input file)
 
@@ -500,7 +503,7 @@ Zip ≈ unzipped (stored JPEGs).
 
 **Disk check:** before starting and before each clip, require free space ≥ 2.2 × the estimated output of what remains (staged frames and the zip coexist briefly), using `0.15 bytes/pixel/image` (`15 KB` per image in compact mode). Not enough → stop with a clear message; completed clips stay resumable.
 
-**Time:** with the CPU encoder about 75 % is the x264 re-encode at native resolution; the GPU encoder cut the encode step about 2.2× on the test PC (RX 9070 XT, 1440p60: 20 s → 9 s per footage minute of encode, and about 3.7× less CPU time). The ETA assumes 15 % less work per CRF tier on GPU; re-measure on a friend's PC. The figures below are for the CPU path. Measured 12 / 22 / 51 min per footage hour at 1080p / 1440p / 4K (60 fps H.264) on a fast 8-core; expect about 2× on a typical 6-core, more on older laptops, 2× for 120 fps sources. The tool shows a measured ETA after the first clip, runs ffmpeg at below-normal priority, and states that the PC stays usable but fans may spin up.
+**Time:** with the CPU encoder about 75 % is the x264 re-encode at native resolution; the GPU encoder cut the encode step about 2.2× on the test PC (RX 9070 XT, 1440p60: 20 s → 9 s per footage minute of encode, and about 3.7× less CPU time). The ETA assumes 15 % less work per CRF tier on GPU; re-measure on a friend's PC. The figures below are for the CPU path. Measured 12 / 22 / 51 min per footage hour at 1080p / 1440p / 4K (60 fps H.264) on a fast 8-core; expect about 2× on a typical 6-core, more on older laptops, 2× for 120 fps sources. The tool shows a measured ETA after the first clip, prints the total at Done (`Took about …`, sum of ok clip walls), and records `timing` on every pack (`wall_s`, `run_wall_s`, `estimated_s`, `estimate_basis`) so estimate vs actual can be calibrated later. The printed pre-run range is `estimated_s` … `2 × estimated_s`. `run_wall_s` is from process start through writing the pack (tables + manifest); zip I/O after that is not included. Runs ffmpeg at below-normal priority and states that the PC stays usable but fans may spin up.
 
 ---
 
