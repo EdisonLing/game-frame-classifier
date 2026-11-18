@@ -218,14 +218,17 @@ Package what exists; keep text short and figure-heavy.
 | 2 | [Frame extractor](tools/frame-extractor.md) | 1 | **implemented** | Single-video extract + tests |
 | 3 | [Frame cleaner](tools/frame-cleaner.md) | 1 | **implemented** | Black/blur/dedupe + reject log; D11 planned |
 | 4 | [Quality encoder](tools/quality-encoder.md) | 1 | **implemented** | Ops full+low(45); medium docs-only (D04) |
-| 4b | [Make sources](tools/make-sources.md) | 1 | specified | Personal clips → `frame_sources` |
-| 4c | [Derive frames](tools/derive-frames.md) | 1 | specified | 256×144 + `clips_index` / `slots` |
-| 5 | [Dataset splitter](tools/dataset-splitter.md) | 2 | specified | Sessions, ledger splits, tiers, data tables |
-| 6 | [Dataset loader and augmentation](tools/dataset-loader.md) | 2 | specified | Shared reader + train transforms |
+| 4b | [Make sources](tools/make-sources.md) | 1 | **implemented** | Personal clips → `frame_sources` |
+| 4c | [Derive frames](tools/derive-frames.md) | 1 | **implemented** | 256×144 + `clips_index` / `slots` |
+| 4d | [Clip sorter](tools/clip-sorter.md) | 1 | **implemented** | Contact sheets in a local page; label, disable or trash; copies into `data/raw/` |
+| 4e | [Clip link downloader](tools/clip-link-downloader.md) | 1 | specified | Medal clip links → files with game and time in the name |
+| 5 | [Dataset splitter](tools/dataset-splitter.md) | 2 | **implemented** | Sessions, ledger splits, tiers, data tables, train cap, source groups |
+| 6 | [Dataset loader and augmentation](tools/dataset-loader.md) | 2 | **implemented** | Shared reader + train transforms |
 | 7 | [Source acquisition](tools/source-acquisition.md) | 3 | planned | — |
-| 8 | [Colour-histogram baseline](tools/baseline.md) | 4 | specified | 48-bin histogram + logistic regression |
-| 9 | [CNN trainer](tools/cnn-trainer.md) | 5 | specified | Four-block CNN, 9.83 M parameters |
-| 9b | [Evaluation](tools/evaluation.md) | 4–5 | specified | Shared metrics, figures, comparison |
+| 8 | [Colour-histogram baseline](tools/baseline.md) | 4 | **implemented** | 48-bin histogram + logistic regression |
+| 9 | [CNN trainer](tools/cnn-trainer.md) | 5 | **implemented** | Four-block CNN, 9.83 M parameters |
+| 9b | [Evaluation](tools/evaluation.md) | 4–5 | **implemented** | Shared metrics, figures, comparison, open-set metrics |
+| 9c | [Other class (6-way / 7-way)](tools/other-class.md) | 2–5 | **implemented** | Other as a seventh class, compared with a threshold-only model (D24) |
 | 10 | [Clip tagger (optional demo)](tools/clip-tagger.md) | 7 | deferred | — |
 
 ---
