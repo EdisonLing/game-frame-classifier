@@ -19,6 +19,13 @@ Some contributors keep clips only in Medal's cloud. They have given permission t
 - **Permission is per contributor.** The link list is what the contributor shared; the tool does not discover other clips.
 - **Polite.** One download at a time, a pause between downloads, and a stop on rate limiting (HTTP 429).
 
+## Spike results (2026-11-18, yt-dlp 2026.10.26, three permitted Medal links)
+
+- Download works through the link alone, no login: 21 MB in about 6 s for a 58 s clip.
+- **Quality is Medal's cloud copy, not the original recording:** formats offered were an HLS stream at 720p and an `http-source` file; the downloaded file was H.264 1280×720 at 60 fps, about 2.4 Mbit/s. Cloud clips are therefore 720p re-encodes, unlike local recordings (1080p to 4K). That is enough for 256×144 model input, but it is a recording property that lines up with these sources: the log records it, and run reports check it as a possible shortcut (`run-report`, recording properties per class).
+- `timestamp` (upload time, seconds) and `upload_date` were present for all three; the file-name time works as specified.
+- Clip titles contain emoji. File names use the slug, time and id (never the title), and console output must not fail on such text: set `sys.stdout.reconfigure(encoding="utf-8", errors="replace")` in the CLI and write the log as UTF-8.
+
 ## Connections
 
 | | |
@@ -66,7 +73,7 @@ Exit codes: `0` all done (including nothing new), `1` at least one link failed, 
 4. **Skip finished links.** A link whose `clip_id` (or URL for non-Medal links) has `status = ok` in `fetch_log.csv` and whose file still exists is skipped.
 5. **Download** with the yt-dlp Python API (`yt_dlp.YoutubeDL`), one link at a time, options: `format: "bestvideo*+bestaudio/best"`, `merge_output_format: "mp4"`, `noplaylist: True`, `retries: 3`, `outtmpl` to a temporary name in the output folder, `quiet: True`. Read from the returned info: `timestamp` (or `upload_date`), `title`, `duration`, `id`. Any HTTP 429 stops the run with exit 3.
 6. **Name the file** `<slug or site>__<YYYY-MM-DD>__<HH-MM-SS>__<clip_id>.mp4`, the time being the upload time in local time (from `timestamp`; from `upload_date` at 00-00-00 if only the date is known; from the download time if neither, marked in the log). `sourcing.timeinfo` reads `YYYY-MM-DD__HH-MM-SS` from file names, so recording sessions (D30) come out close to right. Also set the file's modification time to the upload time. The upload time is not the recording time; for Medal clips uploaded automatically they are minutes apart.
-7. **Log** every link in `fetch_log.csv` (append one line per attempt): `utc, url, site, clip_id, slug, game, other_name, status (ok | failed | skipped | rate_limited), file, bytes, sha256, upload_time, time_source (timestamp | upload_date | download), error`. Errors are one line, with local paths removed.
+7. **Log** every link in `fetch_log.csv` (append one line per attempt, UTF-8): `utc, url, site, clip_id, slug, game, other_name, status (ok | failed | skipped | rate_limited), file, bytes, sha256, upload_time, time_source (timestamp | upload_date | download), width, height, fps, format_id, error`. Errors are one line, with local paths removed.
 8. **Hints.** After the run, rewrite `hints.csv` from the log (`file,game,other_name`, one line per `ok` file with a game or Other), for `gfc-sort-clips --hints`.
 9. **Summary**: counts by status and by game.
 
@@ -104,7 +111,7 @@ Written for an agent that builds exactly this and decides nothing. Ask the user 
 2. **`links.py`**: `@dataclass(frozen=True) LinkInfo(url, site, clip_id, slug)`; `read_links(path) -> list[str]` (Behaviour 1); `parse_link(url) -> LinkInfo` with `urllib.parse` (Behaviour 2); `SLUG_GAMES` dict from the table; `game_for_slug(slug) -> tuple[str, str]` returning `(game, other_name)` with `game` in `sourcing.labels.CLASSES` or `("", "")`.
 3. **`naming.py`**: `clip_file_name(info: LinkInfo, upload: datetime | None, upload_date: str | None, now: datetime) -> tuple[str, datetime, str]` returning the file name, the time used and `time_source` (Behaviour 6). Use local time for the name.
 4. **`download.py`**: `class RateLimited(Exception)`; `def ytdlp_download(url, out_dir, temp_name) -> dict` (imports `yt_dlp` inside the function; raises `RateLimited` when the error text contains `HTTP Error 429`); `run(links, source_dir, *, downloader=ytdlp_download, pause_s, limit, dry_run, sleep=time.sleep, now=datetime.now) -> Summary` implementing Behaviour 4–9; the log written with `open(..., "a")` one line per attempt; SHA-256 with `sourcing.hashing.sha256_file`; `os.utime` for the modification time.
-5. **`cli.py`**: argparse as in Usage; normalise `--source`, refuse `contributor_` prefix (exit 2); check `importlib.util.find_spec("yt_dlp")` unless `--dry-run` (missing → message "install the fetch extra: pip install yt-dlp", exit 2); output dir `data_root / "incoming_clips" / source`; map the summary to the exit codes.
+5. **`cli.py`**: `sys.stdout.reconfigure(encoding="utf-8", errors="replace")` first; argparse as in Usage; normalise `--source`, refuse `contributor_` prefix (exit 2); check `importlib.util.find_spec("yt_dlp")` unless `--dry-run` (missing → message "install the fetch extra: pip install yt-dlp", exit 2); output dir `data_root / "incoming_clips" / source`; map the summary to the exit codes.
 6. **`pyproject.toml`**: optional dependency group `fetch = ["yt-dlp"]`; script `gfc-fetch-clips = "game_frame_classifier.clip_fetch.cli:main"`. **`.gitignore`**: `data/incoming_clips/`. **`docs/data-layout.md`**: the folder and its files.
 7. **Tests**: `tests/unit/test_clip_fetch.py` with the cases in the Testing table, a fake `downloader` that writes a few bytes to the requested file and returns `{"timestamp": ..., "id": ..., "title": ...}`, and a fake `sleep`.
 8. Set this spec's status to `implemented` and tick the acceptance checks.
