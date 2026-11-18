@@ -159,6 +159,21 @@ def test_rebuild_removes_valid_clip_folder(tmp_path):
     assert index == {}
 
 
+def test_rebuild_removes_valid_other_clip_folder(tmp_path):
+    fs_root = tmp_path / "frame_sources"
+    clip = fs_root / "_other" / "Apex_Legends" / "tester" / "c000000000001"
+    clip.mkdir(parents=True)
+    index = {
+        "a" * 64: {
+            "clip_key": "c000000000001",
+            "rel_dir": "_other/Apex_Legends/tester/c000000000001",
+        },
+    }
+    assert apply_rebuilds(fs_root, index, ["c000000000001"]) == ["c000000000001"]
+    assert not clip.exists()
+    assert index == {}
+
+
 def test_unique_run_id_never_reuses_a_run_record(tmp_path):
     fs_root = tmp_path / "frame_sources"
     assert unique_run_id(fs_root, "20261117-101500") == "20261117-101500"

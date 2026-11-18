@@ -32,6 +32,7 @@ from game_frame_classifier.sourcing.extract import ClipResult, ExtractError, ext
 from game_frame_classifier.sourcing.ffbin import FFmpegNotFoundError, find_tools, version_line
 from game_frame_classifier.sourcing.hashing import quick_id, sha256_file
 from game_frame_classifier.sourcing.labels import (
+    GAMES,
     OTHER,
     label_hints,
     normalize_handle,
@@ -163,7 +164,24 @@ def apply_rebuilds(fs_root: Path, index: dict[str, Any], clip_keys: list[str]) -
         sha, rec = item
         rel = str(rec.get("rel_dir") or "")
         dest = (fs_root / Path(rel)).resolve()
-        if len(Path(rel).parts) != 3 or dest.parent.parent.parent != fs_root.resolve():
+        parts = Path(rel).parts
+        normal_layout = len(parts) == 3 and parts[0] in GAMES
+        other_layout = (
+            len(parts) == 4
+            and parts[0] == "_other"
+            and bool(normalize_other_name(parts[1]))
+            and normalize_other_name(parts[1]) == parts[1]
+        )
+        try:
+            under_root = dest.relative_to(fs_root.resolve())
+        except ValueError:
+            under_root = None
+        if (
+            not (normal_layout or other_layout)
+            or parts[-1] != key
+            or under_root is None
+            or under_root.parts != parts
+        ):
             raise MakeSourcesError(f"index entry for {key} has an invalid rel_dir {rel!r}; not deleting")
         if dest.is_dir():
             shutil.rmtree(dest)
