@@ -58,3 +58,20 @@ def test_include_packed_keeps_sent_clip(tmp_path):
     items = discover(root, RECIPE, exclude=tmp_path / "tool")
     fingerprint(items, history, include_packed=True)
     assert items[0].status == "eligible" and items[0].packed_game == "CS2"
+
+
+def test_classify_mixed_items_assigns_and_skips(tmp_path):
+    from game_frame_classifier.frame_export.scan import classify_mixed_items
+
+    root = tmp_path / "clips"
+    touch(root / "VALORANT__2023-01-13__20-24-43.mp4")
+    touch(root / "Project-Zomboid__2022-12-13__00-59-15.mp4")
+    touch(root / "plain.mp4")
+    touch(root / "minecraft-and-valorant__2022-04-26__21-46-23.mp4")
+    items = discover(root, RECIPE, exclude=tmp_path / "tool")
+    classify_mixed_items(items, RECIPE.games)
+    by = {it.path.name: it for it in items}
+    assert by["VALORANT__2023-01-13__20-24-43.mp4"].mixed_game == "Valorant"
+    assert by["Project-Zomboid__2022-12-13__00-59-15.mp4"].mixed_game == "Other"
+    assert by["plain.mp4"].detail == "unsupported_mixed_filename_format"
+    assert by["minecraft-and-valorant__2022-04-26__21-46-23.mp4"].detail == "mixed_label_conflict"

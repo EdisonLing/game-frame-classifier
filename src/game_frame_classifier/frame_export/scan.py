@@ -10,12 +10,14 @@ from typing import Any, Callable
 from game_frame_classifier.sourcing.budget import Candidate, select_within_budget
 from game_frame_classifier.sourcing.ffbin import FFTools
 from game_frame_classifier.sourcing.hashing import quick_id
+from game_frame_classifier.sourcing.labels import MixedClassification, OTHER, classify_mixed_filename
 from game_frame_classifier.sourcing.probe import ProbeError, ProbeInfo, probe_file
 from game_frame_classifier.sourcing.recipe import Recipe
 from game_frame_classifier.sourcing.timeinfo import RecordingTimes, local_day, recording_times
 
 MAX_PATH = 259
 Progress = Callable[[int, int], None]
+MIXED_SKIP_DETAILS = frozenset({"unsupported_mixed_filename_format", "mixed_label_conflict"})
 
 
 @dataclass
@@ -30,6 +32,8 @@ class ScanItem:
     aliases: list[str] = field(default_factory=list)
     info: ProbeInfo | None = None
     times: RecordingTimes | None = None
+    mixed_game: str = ""  # assigned category in mixed mode (game label or Other)
+    mixed_title: str = ""  # title__timestamp_v1 title when recognised
 
     def skip(self, detail: str) -> None:
         self.status, self.detail = "skipped", detail
@@ -156,3 +160,41 @@ def apply_budget(items: list[ScanItem], budget_s: float) -> None:
             it.status = "selected"
         else:
             it.skip("over_budget")
+
+
+def classify_mixed_items(items: list[ScanItem], games: tuple[str, ...] | list[str]) -> None:
+    """Assign mixed-mode categories; skip unsupported or conflicting filenames.
+
+    Already-packed clips are classified too so they land in the matching pack's table,
+    but their skip status is left unchanged.
+    """
+    for it in items:
+        if it.status != "eligible" and it.detail != "already_packed":
+            continue
+        result: MixedClassification = classify_mixed_filename(it.path.name, games)
+        it.mixed_title = result.title
+        if result.detail:
+            it.mixed_game = ""
+            if it.status == "eligible":
+                it.skip(result.detail)
+        else:
+            it.mixed_game = result.game
+
+
+def apply_budget_by_category(items: list[ScanItem], budget_s: float) -> None:
+    """Apply the footage budget independently to each mixed-mode category."""
+    for it in items:
+        if it.status == "selected" or (it.status == "skipped" and it.detail == "over_budget"):
+            it.status, it.detail = "eligible", ""
+    categories = sorted({it.mixed_game for it in items if it.status == "eligible" and it.mixed_game})
+    for category in categories:
+        pool = [it for it in items if it.status == "eligible" and it.mixed_game == category]
+        apply_budget(pool, budget_s)
+
+
+def mixed_category_order(games: tuple[str, ...] | list[str]) -> list[str]:
+    """Stable display order: recipe games first, then Other."""
+    order = list(games)
+    if OTHER not in order:
+        order.append(OTHER)
+    return order

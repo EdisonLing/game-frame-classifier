@@ -326,3 +326,79 @@ def test_existing_user_is_asked_once_then_can_change_mode(tmp_path, monkeypatch)
 def test_change_mode_needs_a_terminal(tmp_path, monkeypatch):
     make_home(tmp_path, monkeypatch)
     assert cli.main([str(tmp_path), "--yes", "--change-mode"]) == cli.EXIT_USAGE
+
+
+@requires_ffmpeg
+def test_mixed_folder_makes_one_pack_per_category(tmp_path, monkeypatch, capsys):
+    home = make_home(tmp_path, monkeypatch)
+    clips = tmp_path / "clips"
+    make_testsrc_video(clips / "VALORANT__2023-01-13__20-24-43.mp4", duration_s=6, width=320, height=180)
+    make_testsrc_video(clips / "Counter-Strike-Global-Offensive__2022-04-26__21-46-23.mp4", duration_s=6, width=320, height=180)
+    make_testsrc_video(clips / "Project-Zomboid__2022-12-13__00-59-15.mp4", duration_s=6, width=320, height=180)
+    make_testsrc_video(clips / "plain_clip.mp4", duration_s=6, width=320, height=180)
+    make_testsrc_video(clips / "minecraft-and-valorant__2022-04-26__21-46-23.mp4", duration_s=6, width=320, height=180)
+
+    assert cli.main([str(clips), "--yes", "--game", "Mixed", "--no-open", "--cpu"]) == 0
+    out = capsys.readouterr().out
+    assert "Mixed-folder scan" in out
+    assert "unsupported filename format" in out
+    assert "more than one game" in out
+
+    valorant = sorted((home / "output").glob("GFC_Valorant_tester_*.zip"))
+    cs2 = sorted((home / "output").glob("GFC_CS2_tester_*.zip"))
+    other = sorted((home / "output").glob("GFC_Other-mixed_other_tester_*.zip"))
+    assert len(valorant) == 1 and len(cs2) == 1 and len(other) == 1
+
+    v_manifest = pack_table(valorant[0], "pack_manifest.json")
+    assert v_manifest["game"] == {"label": "Valorant", "other_name": None}
+    assert v_manifest["input"]["clips_ok"] == 1
+    assert v_manifest["notes"]["game_specific"] == {}
+
+    o_manifest = pack_table(other[0], "pack_manifest.json")
+    assert o_manifest["game"] == {"label": "Other", "other_name": "mixed_other"}
+    assert o_manifest["input"]["clips_ok"] == 1
+    assert o_manifest["notes"] == v_manifest["notes"]
+
+    rows = {r["original_filename"]: r for r in pack_table(valorant[0], "clips.json")}
+    assert "VALORANT__2023-01-13__20-24-43.mp4" in rows
+    assert "plain_clip.mp4" not in rows
+
+    from game_frame_classifier.ingest_pack import main as ingest_main
+
+    data_root = tmp_path / "data"
+    recipe = str(ROOT / "config" / "recipe.json")
+    assert ingest_main([str(valorant[0]), "--data-root", str(data_root), "--recipe", recipe]) == 0
+    assert ingest_main([str(other[0]), "--data-root", str(data_root), "--recipe", recipe]) == 0
+    assert any((data_root / "frame_sources" / "Valorant" / "contributor_tester").glob("c*"))
+    assert any((data_root / "frame_sources" / "_other" / "mixed_other" / "contributor_tester").glob("c*"))
+
+    # Second run: already packed, nothing new.
+    assert cli.main([str(clips), "--yes", "--game", "Mixed", "--no-open", "--cpu"]) == 0
+    assert len(list((home / "output").glob("GFC_*.zip"))) == 3
+
+
+@requires_ffmpeg
+def test_mixed_folder_budget_is_per_category(tmp_path, monkeypatch):
+    home = make_home(tmp_path, monkeypatch)
+    clips = tmp_path / "clips"
+    # Two days of Valorant and two of Other; budget fits one clip per category.
+    make_testsrc_video(clips / "VALORANT__2026-10-01__10-00-00.mp4", duration_s=50, width=320, height=180)
+    make_testsrc_video(clips / "VALORANT__2026-10-02__10-00-00.mp4", duration_s=50, width=320, height=180)
+    make_testsrc_video(clips / "Warframe__2026-10-01__11-00-00.mp4", duration_s=50, width=320, height=180)
+    make_testsrc_video(clips / "Warframe__2026-10-02__11-00-00.mp4", duration_s=50, width=320, height=180)
+    # 0.017 h ≈ 1 min: one 50 s clip fits per category, the second is over_budget.
+    args = [str(clips), "--yes", "--game", "Mixed", "--no-open", "--cpu", "--budget-hours", "0.017"]
+
+    assert cli.main(args) == 0
+    (vzip,) = (home / "output").glob("GFC_Valorant_tester_*.zip")
+    (ozip,) = (home / "output").glob("GFC_Other-mixed_other_tester_*.zip")
+    v_manifest = pack_table(vzip, "pack_manifest.json")
+    o_manifest = pack_table(ozip, "pack_manifest.json")
+    assert v_manifest["input"]["clips_ok"] == 1
+    assert v_manifest["input"]["over_budget_clips"] == 1
+    assert o_manifest["input"]["clips_ok"] == 1
+    assert o_manifest["input"]["over_budget_clips"] == 1
+
+    assert cli.main(args) == 0
+    assert len(list((home / "output").glob("GFC_Valorant_tester_*.zip"))) == 2
+    assert len(list((home / "output").glob("GFC_Other-mixed_other_tester_*.zip"))) == 2

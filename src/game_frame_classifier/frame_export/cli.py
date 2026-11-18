@@ -13,6 +13,8 @@ from typing import Any
 from game_frame_classifier.sourcing import ffbin, gpu
 from game_frame_classifier.sourcing.labels import (
     DISPLAY_NAMES,
+    MIXED,
+    MIXED_OTHER_NAME,
     OTHER,
     label_hints,
     normalize_handle,
@@ -38,7 +40,16 @@ from .run import (
     save_state,
     work_dir,
 )
-from .scan import ScanItem, apply_budget, discover, fingerprint, probe_all
+from .scan import (
+    ScanItem,
+    apply_budget,
+    apply_budget_by_category,
+    classify_mixed_items,
+    discover,
+    fingerprint,
+    mixed_category_order,
+    probe_all,
+)
 
 EXIT_OK = 0
 EXIT_FAIL = 1
@@ -53,6 +64,8 @@ REASONS = {
     "unreadable": "could not be read",
     "no_video": "no video stream",
     "too_short": "too short",
+    "unsupported_mixed_filename_format": "name is not title__YYYY-MM-DD__HH-MM-SS",
+    "mixed_label_conflict": "name matches more than one game",
 }
 
 NOTICE = """\
@@ -71,8 +84,8 @@ The data stays on my PC for this project. Ask me any time and I will delete it.
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="gfc-frame-export", description="Turn a folder of game clips into a frames zip.")
-    p.add_argument("folder", nargs="?", help="folder with clips (one game per folder)")
-    p.add_argument("--game", help="game label, for example Valorant, or Other")
+    p.add_argument("folder", nargs="?", help="folder with clips (one game, or Mixed for a mixed folder)")
+    p.add_argument("--game", help="game label, for example Valorant, Other, or Mixed")
     p.add_argument("--other-name", help="game name when using --game Other")
     p.add_argument("--compact", action="store_true", help="save 256x144 pictures instead of native size")
     p.add_argument("--budget-hours", type=float, help="hours of footage to process this run (0 = all)")
@@ -172,9 +185,10 @@ def ask_folder() -> Path | None:
 
 
 def resolve_game(text: str, options: list[str]) -> str | None:
-    key = text.strip().lower()
+    key = text.strip().lower().strip("()")
     for game in options:
-        if key in (game.lower(), DISPLAY_NAMES.get(game, game).lower()):
+        display = DISPLAY_NAMES.get(game, game).lower().strip("()")
+        if key in (game.lower(), display):
             return game
     return None
 
@@ -217,21 +231,28 @@ def choose_game(
         default = suggestion or (user.last_game if user.last_game in options else None)
         while True:
             game = prompt_game(options, default, suggestion)
-            if not hints or game in hints:
+            if game == MIXED or not hints or game in hints:
                 return game
             names = ", ".join(DISPLAY_NAMES.get(h, h) for h in sorted(hints))
             if ask_yes_no(f"The file and folder names suggest {names}. Use {DISPLAY_NAMES.get(game, game)} anyway?", False):
                 return game
-    if hints and game not in hints:
+    if game != MIXED and hints and game not in hints:
         print(f"Warning: the file and folder names suggest {', '.join(sorted(hints))}.")
     return game
 
 
-def ask_notes(recipe: Recipe, game: str, interactive: bool) -> dict[str, Any]:
+def ask_notes(
+    recipe: Recipe,
+    game: str,
+    interactive: bool,
+    *,
+    include_game_specific: bool = True,
+) -> dict[str, Any]:
     notes: dict[str, Any] = {}
     game_specific: dict[str, str] = {}
     questions = [(q, False) for q in recipe.questions.get("all", [])]
-    questions += [(q, True) for q in recipe.questions.get(game, [])]
+    if include_game_specific and game:
+        questions += [(q, True) for q in recipe.questions.get(game, [])]
     if interactive and questions:
         print("\nOptional questions (press Enter to skip):")
     for q, specific in questions:
@@ -281,6 +302,59 @@ def print_selection(items: list[ScanItem], over_budget: bool) -> None:
     days = len({local_day(it.times.start) for it in chosen})
     print(f"This run will process {fmt_duration(sum(it.info.duration_s for it in chosen))}: {len(chosen)} clips across {days} days.")
     print("Run it again later on the same folder to send more.")
+
+
+def print_mixed_summary(items: list[ScanItem], games: list[str]) -> None:
+    """Show how mixed-folder classification grouped the clips."""
+    format_ok = sum(1 for it in items if it.mixed_title)
+    unsupported = sum(1 for it in items if it.detail == "unsupported_mixed_filename_format")
+    conflicts = sum(1 for it in items if it.detail == "mixed_label_conflict")
+    print("Mixed-folder scan:")
+    print(f"  {format_ok} use the supported title__timestamp_v1 name format")
+    for category in mixed_category_order(games):
+        group = [it for it in items if it.mixed_game == category]
+        if not group:
+            continue
+        label = DISPLAY_NAMES.get(category, category)
+        if category == OTHER:
+            label = f"Other ({MIXED_OTHER_NAME})"
+        eligible = [it for it in group if it.status in ("eligible", "selected") or it.detail == "over_budget"]
+        total_s = sum(it.info.duration_s for it in eligible if it.info is not None)
+        print(f"  {label}: {len(eligible)} clips ({fmt_duration(total_s)})")
+    if unsupported:
+        print(f"  skipped (unsupported filename format): {unsupported}")
+    if conflicts:
+        print(f"  skipped (name matches more than one game): {conflicts}")
+
+
+def print_mixed_selection(items: list[ScanItem], games: list[str]) -> bool:
+    """Print per-category budget picks. Returns True if any category is over budget."""
+    over = False
+    for category in mixed_category_order(games):
+        group = [it for it in items if it.mixed_game == category]
+        if not group:
+            continue
+        chosen = [it for it in group if it.status == "selected"]
+        held = [it for it in group if it.detail == "over_budget"]
+        if not held:
+            continue
+        over = True
+        label = DISPLAY_NAMES.get(category, category)
+        if category == OTHER:
+            label = f"Other ({MIXED_OTHER_NAME})"
+        days = len({local_day(it.times.start) for it in chosen}) if chosen else 0
+        print(
+            f"  {label}: this run will process {fmt_duration(sum(it.info.duration_s for it in chosen))}: "
+            f"{len(chosen)} clips across {days} days ({len(held)} left for later)."
+        )
+    if over:
+        print("Run it again later on the same folder to send more of each game.")
+    return over
+
+
+def category_items(items: list[ScanItem], category: str) -> list[ScanItem]:
+    """Clips that belong in one category's pack (assigned to that category only)."""
+    return [it for it in items if it.mixed_game == category]
 
 
 def ask_budget(current_min: int) -> int:
@@ -425,7 +499,7 @@ def _main(args: argparse.Namespace) -> int:
     print()
     print_summary(items)
 
-    options = [*recipe.games, OTHER]
+    options = [*recipe.games, OTHER, MIXED]
     hints = label_hints(root.name)
     for it in items:
         if it.info is not None:
@@ -434,6 +508,24 @@ def _main(args: argparse.Namespace) -> int:
     game = choose_game(args, interactive, options, hints, user)
     if game is None:
         return EXIT_USAGE
+
+    if game == MIXED:
+        return _run_mixed(
+            args=args,
+            interactive=interactive,
+            root=root,
+            home=home,
+            items=items,
+            recipe=recipe,
+            recipe_path=recipe_path,
+            frame_mode=frame_mode,
+            mode=mode,
+            budget_min=budget_min,
+            tools=tools,
+            user=user,
+            chosen_zip_dir=chosen_zip_dir,
+        )
+
     other_name = ""
     if game == OTHER:
         other_name = normalize_other_name(args.other_name or "")
@@ -468,22 +560,46 @@ def _main(args: argparse.Namespace) -> int:
         print("Nothing new to process in this folder.")
         return EXIT_OK
 
-    ctx = RunContext(root, items, recipe, tools, user, game, other_name)
-    work = work_dir(ctx)
-    ctx.gpu = choose_encoder(args, recipe, tools, work.parent / f"gpu_probe_{work.name}")
-    ctx.decode = None if args.cpu else gpu.DecodeCheck()
-    state = load_state(work)
-    if state is not None:
-        print("Continuing an earlier run on this folder.")
-    else:
-        state = new_state(ask_notes(recipe, game, interactive))
+    notes = None  # filled below unless resuming
+    return _run_one_pack(
+        args=args,
+        interactive=interactive,
+        root=root,
+        home=home,
+        items=items,
+        recipe=recipe,
+        mode=mode,
+        budget_min=budget_min,
+        tools=tools,
+        user=user,
+        game=game,
+        other_name=other_name,
+        chosen_zip_dir=chosen_zip_dir,
+        over_budget=over_budget,
+        notes=notes,
+        include_game_specific=True,
+        save_last_game=game,
+    )
 
+
+def _confirm_start(
+    args: argparse.Namespace,
+    interactive: bool,
+    user: settings.UserSettings,
+    selected: list[ScanItem],
+    recipe: Recipe,
+    mode: str,
+    use_gpu: bool,
+    out_dir: Path,
+    zip_dir: Path,
+    heading: str | None = None,
+) -> str:
+    """Return 'yes', 'no', or 'mode'. Prints estimates and asks Start when interactive."""
     est = estimate_bytes(selected, recipe)
-    secs = estimate_seconds(selected, recipe, gpu=ctx.use_gpu)
-    out_dir = paths.ensure_inside_home(paths.output_dir())
-    out_dir.mkdir(parents=True, exist_ok=True)
-    zip_dir = chosen_zip_dir or out_dir
+    secs = estimate_seconds(selected, recipe, gpu=use_gpu)
     free = shutil.disk_usage(out_dir).free
+    if heading:
+        print(heading)
     print(f"\nThis run: {len(selected)} clips, {fmt_duration(sum(it.info.duration_s for it in selected))} of footage.")
     print(
         f"Estimated time: about {fmt_duration(secs)} to {fmt_duration(secs * 2)}. "
@@ -494,23 +610,87 @@ def _main(args: argparse.Namespace) -> int:
         print(f"The finished zip will be saved in: {zip_dir}")
     if free < est * DISK_FACTOR:
         print(f"Not enough free disk space: this needs about {fmt_bytes(est * DISK_FACTOR)} free on this drive.")
-        return EXIT_DISK
+        return "disk"
     if zip_dir != out_dir and shutil.disk_usage(zip_dir).free < est:
         print(f"Not enough free disk space in {zip_dir}: the zip needs about {fmt_bytes(est)}.")
-        return EXIT_DISK
-    if interactive:
-        answer = ask_start()
-        if answer == "mode":
-            user.quality_mode = ask_quality_mode()
-            settings.save_user(user)
-            print(f"Saved: {mode_label(user.quality_mode)}.\n")
-            args.change_mode = False
+        return "disk"
+    if not interactive:
+        return "yes"
+    answer = ask_start()
+    if answer == "mode":
+        user.quality_mode = ask_quality_mode()
+        settings.save_user(user)
+        print(f"Saved: {mode_label(user.quality_mode)}.\n")
+        args.change_mode = False
+        return "mode"
+    return answer
+
+
+def _run_one_pack(
+    *,
+    args: argparse.Namespace,
+    interactive: bool,
+    root: Path,
+    home: Path,
+    items: list[ScanItem],
+    recipe: Recipe,
+    mode: str,
+    budget_min: int,
+    tools: ffbin.FFTools,
+    user: settings.UserSettings,
+    game: str,
+    other_name: str,
+    chosen_zip_dir: Path | None,
+    over_budget: bool,
+    notes: dict[str, Any] | None,
+    include_game_specific: bool,
+    save_last_game: str,
+    gpu_status: gpu.GpuStatus | None = None,
+    decode: gpu.DecodeCheck | None = None,
+    reuse_encoder: bool = False,
+    confirm: bool = True,
+    open_when_done: bool = True,
+    announce: bool = True,
+) -> int:
+    """Process and finalize one single-game pack from the given items."""
+    selected = [it for it in items if it.status == "selected"]
+    if not selected:
+        print("Nothing new to process in this folder.")
+        return EXIT_OK
+
+    ctx = RunContext(root, items, recipe, tools, user, game, other_name)
+    work = work_dir(ctx)
+    if reuse_encoder:
+        ctx.gpu = gpu_status
+        ctx.decode = decode
+    else:
+        ctx.gpu = choose_encoder(args, recipe, tools, work.parent / f"gpu_probe_{work.name}")
+        ctx.decode = None if args.cpu else gpu.DecodeCheck()
+
+    state = load_state(work)
+    if state is not None:
+        print("Continuing an earlier run on this folder.")
+    else:
+        if notes is None:
+            notes = ask_notes(recipe, game, interactive, include_game_specific=include_game_specific)
+        state = new_state(notes)
+
+    out_dir = paths.ensure_inside_home(paths.output_dir())
+    out_dir.mkdir(parents=True, exist_ok=True)
+    zip_dir = chosen_zip_dir or out_dir
+    if confirm:
+        decision = _confirm_start(
+            args, interactive, user, selected, recipe, mode, ctx.use_gpu, out_dir, zip_dir,
+        )
+        if decision == "disk":
+            return EXIT_DISK
+        if decision == "mode":
             return _main(args)
-        if answer == "no":
+        if decision == "no":
             print("OK, nothing was processed.")
             return EXIT_OK
 
-    user.last_game = game
+    user.last_game = save_last_game
     settings.save_user(user)
     save_state(work, state)
     log = RunLog(work / "run_log.txt", root)
@@ -524,8 +704,9 @@ def _main(args: argparse.Namespace) -> int:
         log.write(f"encoder gpu {gpu.GPU_ENCODER} adapter={ctx.gpu.adapter}")
     else:
         log.write(f"encoder cpu (gpu unavailable: {ctx.gpu.reason}) adapter={ctx.gpu.adapter}")
-    print("Your PC stays usable, but the fans may spin up. You can close this window any time;")
-    print("run it again on the same folder to continue where it left off.\n")
+    if announce:
+        print("Your PC stays usable, but the fans may spin up. You can close this window any time;")
+        print("run it again on the same folder to continue where it left off.\n")
     try:
         done, failed = process(ctx, work, state, log)
     except DiskSpaceError as exc:
@@ -543,12 +724,169 @@ def _main(args: argparse.Namespace) -> int:
         return EXIT_OK
     shown = result.relative_to(home) if result.is_relative_to(home) else result
     print(f"Send this file: {shown}  ({fmt_bytes(result.stat().st_size)})")
-    print("Discord's free limit is 10 MB, so upload it to Google Drive, OneDrive or WeTransfer and send me the link.")
-    if over_budget:
-        print("Some clips were left for next time. Run it again on the same folder to send more.")
-    if not args.no_open:
+    if announce:
+        print("Discord's free limit is 10 MB, so upload it to Google Drive, OneDrive or WeTransfer and send me the link.")
+        if over_budget:
+            print("Some clips were left for next time. Run it again on the same folder to send more.")
+    if open_when_done and not args.no_open:
         open_explorer(result)
     return EXIT_OK
+
+
+def _run_mixed(
+    *,
+    args: argparse.Namespace,
+    interactive: bool,
+    root: Path,
+    home: Path,
+    items: list[ScanItem],
+    recipe: Recipe,
+    recipe_path: Path,
+    frame_mode: str,
+    mode: str,
+    budget_min: int,
+    tools: ffbin.FFTools,
+    user: settings.UserSettings,
+    chosen_zip_dir: Path | None,
+) -> int:
+    """Classify a mixed folder and produce one pack per detected category."""
+    classify_mixed_items(items, recipe.games)
+    print_mixed_summary(items, list(recipe.games))
+
+    conflicts = [
+        it for it in items
+        if it.status == "eligible" and it.packed_game and it.mixed_game and it.packed_game != it.mixed_game
+    ]
+    if conflicts:
+        print(f"{len(conflicts)} of these clips were sent before as a different game.")
+        if interactive and not ask_yes_no("Include them anyway?", False):
+            for it in conflicts:
+                it.skip("already_packed")
+
+    apply_budget_by_category(items, budget_min * 60)
+    over_budget = print_mixed_selection(items, list(recipe.games))
+    if over_budget and interactive and args.budget_hours is None:
+        new_min = ask_budget(budget_min)
+        if new_min != budget_min:
+            budget_min = new_min
+            recipe = load_recipe(
+                recipe_path, {"frame_mode": frame_mode, "footage_budget_min": budget_min, **mode_overrides(mode)},
+            )
+            apply_budget_by_category(items, budget_min * 60)
+            over_budget = print_mixed_selection(items, list(recipe.games))
+
+    categories = [
+        cat for cat in mixed_category_order(recipe.games)
+        if any(it.status == "selected" and it.mixed_game == cat for it in items)
+    ]
+    if not categories:
+        print("Nothing new to process in this folder.")
+        return EXIT_OK
+
+    selected = [it for it in items if it.status == "selected"]
+    out_dir = paths.ensure_inside_home(paths.output_dir())
+    out_dir.mkdir(parents=True, exist_ok=True)
+    zip_dir = chosen_zip_dir or out_dir
+
+    # Probe GPU once for the whole mixed run (use a stable probe dir).
+    probe_dir = out_dir / "_work" / "gpu_probe_mixed"
+    gpu_status = choose_encoder(args, recipe, tools, probe_dir)
+    decode = None if args.cpu else gpu.DecodeCheck()
+    use_gpu = bool(gpu_status and gpu_status.available)
+
+    decision = _confirm_start(
+        args, interactive, user, selected, recipe, mode, use_gpu, out_dir, zip_dir,
+        heading=f"\nMixed mode will create {len(categories)} pack(s): "
+        + ", ".join(
+            f"Other ({MIXED_OTHER_NAME})" if c == OTHER else DISPLAY_NAMES.get(c, c)
+            for c in categories
+        ),
+    )
+    if decision == "disk":
+        return EXIT_DISK
+    if decision == "mode":
+        return _main(args)
+    if decision == "no":
+        print("OK, nothing was processed.")
+        return EXIT_OK
+
+    resuming = False
+    for category in categories:
+        other = MIXED_OTHER_NAME if category == OTHER else ""
+        probe = RunContext(root, category_items(items, category), recipe, tools, user, category, other)
+        if load_state(work_dir(probe)) is not None:
+            resuming = True
+            break
+    if resuming:
+        print("Continuing an earlier mixed run on this folder.")
+        notes: dict[str, Any] | None = None
+    else:
+        notes = ask_notes(recipe, "", interactive, include_game_specific=False)
+    user.last_game = MIXED
+    settings.save_user(user)
+
+    results: list[Path] = []
+    any_over = False
+    last_code = EXIT_OK
+    for n, category in enumerate(categories, 1):
+        cat_items = category_items(items, category)
+        other_name = MIXED_OTHER_NAME if category == OTHER else ""
+        label = f"Other ({MIXED_OTHER_NAME})" if category == OTHER else DISPLAY_NAMES.get(category, category)
+        print(f"\n--- Pack {n}/{len(categories)}: {label} ---")
+        cat_over = any(it.detail == "over_budget" for it in cat_items)
+        any_over = any_over or cat_over
+        code = _run_one_pack(
+            args=args,
+            interactive=False,  # already confirmed once for the whole mixed run
+            root=root,
+            home=home,
+            items=cat_items,
+            recipe=recipe,
+            mode=mode,
+            budget_min=budget_min,
+            tools=tools,
+            user=user,
+            game=category,
+            other_name=other_name,
+            chosen_zip_dir=chosen_zip_dir,
+            over_budget=cat_over,
+            notes=notes,
+            include_game_specific=False,
+            save_last_game=MIXED,
+            gpu_status=gpu_status,
+            decode=decode,
+            reuse_encoder=True,
+            confirm=False,
+            open_when_done=False,
+            announce=False,
+        )
+        if code == EXIT_DISK:
+            return EXIT_DISK
+        if code == EXIT_INTERRUPTED:
+            return EXIT_INTERRUPTED
+        if code != EXIT_OK:
+            last_code = code
+            continue
+        # Locate the pack just written for the final Explorer open.
+        if args.no_zip:
+            continue
+        pattern = f"GFC_Other-{MIXED_OTHER_NAME}_{user.handle}_*.zip" if category == OTHER else f"GFC_{category}_{user.handle}_*.zip"
+        zips = sorted(zip_dir.glob(pattern), key=lambda p: p.stat().st_mtime)
+        if zips:
+            results.append(zips[-1])
+
+    if results:
+        print(f"\nMixed mode finished. {len(results)} pack(s) ready to send:")
+        for path in results:
+            shown = path.relative_to(home) if path.is_relative_to(home) else path
+            print(f"  {shown}  ({fmt_bytes(path.stat().st_size)})")
+        print("Discord's free limit is 10 MB, so upload them to Google Drive, OneDrive or WeTransfer and send me the links.")
+        if any_over:
+            print("Some clips were left for next time. Run it again on the same folder to send more.")
+        if not args.no_open:
+            open_explorer(results[-1])
+        return EXIT_OK
+    return last_code
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -1,7 +1,7 @@
 # Frame Export Kit (clips → frames zip)
 
 **Stage:** 1 / volume (contributor data)  
-**Status:** v1 implemented; release checklist (§13) pending  
+**Status:** v2.1.0 (mixed-folder mode); release checklist (§13) pending  
 **Back to:** [ROADMAP.md](../ROADMAP.md)  
 **Decisions:** [D25](../../design-decisions.md) (pack), [D26](../../design-decisions.md) (frame sources + one extraction path), [D27](../../design-decisions.md) (derive to 256×144), D04 / D22 (tiers), D21 (JPEG)
 
@@ -18,7 +18,7 @@ The frames they send are a **source of truth** in my pipeline (the masters are g
 | # | Goal |
 |---|---|
 | G1 | Works out of the box on a stock Windows 10 22H2+ / 11 PC. Nothing to install. |
-| G2 | One action per folder of clips: name asked once (remembered), game asked per run. |
+| G2 | One action per folder of clips: name asked once (remembered), game asked per run (or Mixed for a multi-game folder). |
 | G3 | Output is ingest-ready and self-describing: game, source, clip identity, timestamps, tiers, probe metadata, recipe, tool and ffmpeg versions. |
 | G4 | Same recipe as my own clips (D22 video CRF, then stills), produced by the **same code** (D26), so friend data and personal data are interchangeable. |
 | G5 | Future-proof within reason: native-resolution stills so I can change train size, aspect policy, HUD crops (D15) or augmentation later without asking again. |
@@ -35,7 +35,7 @@ The frames they send are a **source of truth** in my pipeline (the masters are g
 
 ## 2. Friend user flow
 
-1. **Get the pack.** I send `GFC-FrameExportKit-v2.0.0.zip` (about 130 MB, mostly ffmpeg). They right-click → *Extract All*. Running from inside the zip is detected and explained.
+1. **Get the pack.** I send `GFC-FrameExportKit-v2.1.0.zip` (about 130 MB, mostly ffmpeg). They right-click → *Extract All*. Running from inside the zip is detected and explained.
 2. **Start.** Either drag a folder of clips onto `START HERE.bat`, or double-click it and drag the folder into the window when asked.
 3. **First run only:** a short notice of what is collected, then four prompts, saved to `config/user.json`:
    - name / handle (becomes the source id)
@@ -43,15 +43,15 @@ The frames they send are a **source of truth** in my pipeline (the masters are g
    - "OK if a few of your frames appear in my report or README?" (default yes)
    - quick mode: full quality only, about 4× faster, less useful pictures (default no; §4.2)
 4. **Scan summary.** Clip count, total duration, resolutions, files skipped and why, estimated output size and time, free disk space. Over the footage budget (default 3 h per game), it picks clips spread across recording days and says to run again later for more (§5.2a).
-5. **Game prompt.** Numbered list of the six games plus *Other*. Pre-selected when folder/file names agree on one game; a warning (and confirmation) when names suggest a different game than the one picked.
-6. **Optional notes** (Enter skips each): colourblind mode, graphics preset, one game-specific question from the recipe (for example Minecraft shaders), free text.
-7. **Confirm and run.** Per-clip progress with percentage and a measured ETA after the first clip. Closing the window or Ctrl+C stops cleanly; running again on the same folder resumes.
-8. **Done.** The zip path and size are printed and Explorer opens with the zip selected. Clips already sent in an earlier run are skipped by default.
+5. **Game prompt.** Numbered list of the six games plus *Other* and *(mixed)*. Pre-selected when folder/file names agree on one game; a warning (and confirmation) when names suggest a different game than the one picked. Choosing *(mixed)* groups clips by filename (§9a) and builds one pack per category.
+6. **Optional notes** (Enter skips each): colourblind mode, graphics preset, one game-specific question from the recipe (for example Minecraft shaders), free text. Mixed mode asks only the general questions once and copies the answers into every pack (no game-specific questions).
+7. **Confirm and run.** Per-clip progress with percentage and a measured ETA after the first clip. Closing the window or Ctrl+C stops cleanly; running again on the same folder resumes. Mixed mode confirms once, then processes each category's pack in turn.
+8. **Done.** The zip path and size are printed and Explorer opens with the zip selected. Mixed mode lists every pack it wrote. Clips already sent in an earlier run are skipped by default.
 
 Example session (abridged):
 
 ```text
-GFC Frame Export Kit v2.0.0
+GFC Frame Export Kit v2.1.0
 Drag the folder with your clips into this window, then press Enter:
 > "D:\Videos\NVIDIA\VALORANT"
 
@@ -77,16 +77,18 @@ Press Enter to close.
 Power-user flags (also used by me for testing and for my own clips):
 
 ```text
-START HERE.bat <folder> [--game Valorant] [--other-name Apex_Legends] [--compact]
+START HERE.bat <folder> [--game Valorant|Other|Mixed] [--other-name Apex_Legends] [--compact]
                [--budget-hours N] [--yes] [--include-packed] [--no-zip] [--output <dir>] [--no-open]
 ```
+
+**Mixed folder (`--game Mixed` / menu *(mixed)*):** for contributors who keep every game in one folder with Medal-style names (`Title__YYYY-MM-DD__HH-MM-SS.ext`). The kit auto-detects that format only (§9a), assigns each clip to a target game or to `Other` (`other_name` = `mixed_other`), applies the footage budget **independently per category** (default 3 h of each), and writes one ordinary single-game pack per category. Filenames that are not in the supported format, or that match more than one target game, are skipped and listed. Pack format and ingest are unchanged.
 
 ---
 
 ## 3. What I ship (package layout)
 
 ```text
-GFC-FrameExportKit-v2.0.0/
+GFC-FrameExportKit-v2.1.0/
   START HERE.bat                 # launcher (drag a folder onto it)
   README.txt                     # one page, plain language (template in §14)
   app/                           # pure-stdlib Python source (readable)
@@ -182,7 +184,7 @@ Two files, so I can ship an updated recipe without touching a friend's name or c
 | `frame_mode` | `native` (default) or `compact` (256×144 via §5.7) | enum |
 | `hdr_policy` | Tone-map HDR sources to SDR before every tier (§5.3) | enum |
 | `derive` | Aspect + scaler used for compact mode; identical to my pipeline's derive step (D27) | — |
-| `footage_budget_min` | Max minutes of footage processed per run (one run = one game); `0` = no limit. Extra clips wait for the next run (§5.2a) | int ≥ 0 |
+| `footage_budget_min` | Max minutes of footage processed per run (one run = one game; in Mixed mode, per category); `0` = no limit. Extra clips wait for the next run (§5.2a) | int ≥ 0 |
 | `budget_selection` | How clips are picked when over budget | enum |
 | `questions` | Optional per-run notes; data-driven so I can change them without code | — |
 
@@ -242,7 +244,7 @@ At least one tier must exist (`include_full` or a non-empty `crf_list`). The too
 
 ### 5.2a Footage budget (`spread_days_v1`)
 
-Friends with large libraries would otherwise face many hours of processing and a huge upload for far more frames than one person's share of a game. Each run processes at most `footage_budget_min` of footage (default 180), spread across as many recording days as possible.
+Friends with large libraries would otherwise face many hours of processing and a huge upload for far more frames than one person's share of a game. Each run processes at most `footage_budget_min` of footage (default 180), spread across as many recording days as possible. In Mixed mode the same budget is applied **independently to each category** (each target game and `Other`), so one folder can contribute up to 3 h of Valorant plus 3 h of Other in a single run.
 
 1. **Eligible** = probed OK, not `already_packed`, not a duplicate. If their total duration ≤ budget (or budget is `0`), take all.
 2. **Recording start** per clip = `recorded_start_utc` (§5.2b). **Day** = local calendar date of that start.
@@ -379,7 +381,7 @@ Batched per tier folder as one image-sequence ffmpeg call, falling back to one f
 |---|---|
 | `ok` | All tiers extracted and aligned; ≥ 1 complete slot |
 | `failed` | ffmpeg / probe error mid-clip; staged files removed; error text kept |
-| `skipped` | `not_video`, `steam_recording`, `path_too_long`, `unreadable`, `no_video`, `too_short`, `already_packed`, `duplicate_in_run`, `over_budget` |
+| `skipped` | `not_video`, `steam_recording`, `path_too_long`, `unreadable`, `no_video`, `too_short`, `already_packed`, `duplicate_in_run`, `over_budget`, `unsupported_mixed_filename_format`, `mixed_label_conflict` |
 
 A failed clip never stops the run.
 
@@ -414,7 +416,7 @@ CSV + JSON side by side (D20). All paths inside manifests are relative to the pa
   "schema": "gfc.pack/1",
   "pack_id": "6f1c0e5e-2b7d-4c55-8a1e-0d9b3c7a5f10",
   "created_utc": "2026-11-20T03:44:12Z",
-  "tool": { "name": "gfc-frame-export", "version": "2.0.0", "source_commit": "abc1234" },
+  "tool": { "name": "gfc-frame-export", "version": "2.1.0", "source_commit": "abc1234" },
   "recipe": { "...": "resolved recipe.json with crf_list as a list, plus sampler: bucket_v1" },
   "ffmpeg": { "ffmpeg_version": "n8.1.x-...", "ffprobe_version": "n8.1.x-...", "build": "bundled", "x264_core": "x264 - core 165 r3222 ..." },
   "host": { "os": "Windows-10.0.26100", "cpu_count": 16, "python": "3.13.x", "tz_name": "Eastern Standard Time", "utc_offset_min": -300 },
@@ -516,7 +518,7 @@ Zip ≈ unzipped (stored JPEGs).
 | Corrupt or crash-truncated files | Probe failure → skipped; mid-decode error → failed; run continues |
 | Same file twice, or already sent | Quick id + SHA-256 dedupe in run; `history.json` across runs |
 | Hundreds of GB of clips | Quick id instead of full hashing at scan; footage budget spread across days; rerun for more |
-| Mixed games in one folder | Label hints warn; README says one game per folder |
+| Mixed games in one folder | Choose *(mixed)* / `--game Mixed` (§9a); otherwise label hints warn and README says one game per folder |
 | Steam Game Recording folders | Detected and skipped with export instructions |
 | Unicode / long paths | Argument lists only (no shell); ASCII output names; path-length skip |
 | Running inside the zip | Launcher detects missing runtime and explains |
@@ -524,7 +526,25 @@ Zip ≈ unzipped (stored JPEGs).
 | Interrupted run | Per-clip `done.json`; same folder + game + recipe resumes |
 | Watermarks / overlays (Medal, FPS counters) | Kept (gameplay pixels); `encoder_tag` + notes allow shortcut analysis later |
 
-**Label hints** (case-insensitive, on folder and file names): `valorant` → Valorant; `league of legends`, `league_of_legends`, `leagueoflegends`, whole-word `lol` → League_of_Legends; `counter-strike`, `counter strike`, `cs2`, `csgo` → CS2; `minecraft` → Minecraft; `overwatch` → Overwatch_2; `marvel rivals`, `marvel_rivals`, `marvelrivals` → Marvel_Rivals. Steam clip folders `clip_<appid>_…`: 730 → CS2, 2357570 → Overwatch_2, 2767030 → Marvel_Rivals. The table lives in code next to the game list.
+**Label hints** (case-insensitive, on folder and file names): `valorant` → Valorant; `league of legends`, `league_of_legends`, `league-of-legends`, `leagueoflegends`, whole-word `lol` → League_of_Legends; `counter-strike`, `counter strike`, `counter_strike`, `cs2`, `csgo` → CS2; `minecraft` → Minecraft; `overwatch` → Overwatch_2; `marvel rivals`, `marvel_rivals`, `marvel-rivals`, `marvelrivals` → Marvel_Rivals. Steam clip folders `clip_<appid>_…`: 730 → CS2, 2357570 → Overwatch_2, 2767030 → Marvel_Rivals. The table lives in code next to the game list.
+
+### 9a. Mixed-folder filename profile (`title__timestamp_v1`)
+
+Opt-in via the game menu *(mixed)* or `--game Mixed`. Only this profile is classified in v2.1; other naming schemes can be added later as separate, explicitly tested detectors.
+
+| | |
+|---|---|
+| **Format id** | `title__timestamp_v1` |
+| **Pattern** | `<title>__YYYY-MM-DD__HH-MM-SS.<ext>` (title may contain spaces, hyphens or apostrophes; date and time are strict) |
+| **Example** | `Counter-Strike-Global-Offensive__2022-04-26__21-46-23.mp4` |
+| **Target game** | Exactly one label-hint match on `<title>` → that game's pack |
+| **Other** | Well-formed title with no target-game match (other games, desktop, …) → one shared `Other` pack with `other_name` = `mixed_other` (`GFC_Other-mixed_other_<handle>_….zip`) |
+| **Skipped** | Not matching the pattern → `unsupported_mixed_filename_format`; two or more target-game matches → `mixed_label_conflict`. Neither is processed or written to `history.json` |
+| **Budget** | `footage_budget_min` per category (default 180 min each) |
+| **Notes** | General optional questions once; answers copied into every pack; game-specific questions skipped |
+| **Resume / history** | Each category is its own pack and work folder (same as a single-game run); already-sent clips are skipped by quick id across runs |
+
+The single-game flow is unchanged: folders that are one game still pick that game from the menu and accept any filename style the kit already supported.
 
 ---
 
@@ -573,7 +593,7 @@ src/game_frame_classifier/sourcing/      # stdlib only (enforced by a test)
   extract.py     encode_crf(), extract_tier(), extract_clip() → ClipResult
   derive.py      pad-to-16:9 + scale (compact mode here, train frames in the pipeline)
   hashing.py     streaming SHA-256, JPEG dimension reader
-  labels.py      game list, hint table, Steam app ids
+  labels.py      game list, hint table, Steam app ids, mixed title__timestamp_v1 classifier
   manifests.py   pack / clip / frame schemas, CSV + JSON writers and readers
   packzip.py     stored-zip writer + verifier; ingest-side validator
   timeinfo.py    recording time from container, filename and mtime; host timezone
@@ -625,18 +645,20 @@ scripts/build_frame_export.py
 GFC Frame Export Kit, for {collector_name}'s school ML project
 
 1. Right-click the zip, choose Extract All, and open the extracted folder.
-2. Drag ONE game's clip folder onto START HERE.bat.
+2. Drag a clip folder onto START HERE.bat (one game per folder, or a mixed folder — see step 4).
 3. First time only: type a name and answer three yes/no questions. The third is quick mode:
    about 4x faster, but it skips the low-quality copy, which can only be made from your videos.
    Your pictures are then less useful. To change it later, type m at the Start question.
 4. Pick the game, press Enter through the optional questions, confirm Start.
+   If the folder has many games with names like Game__2023-01-13__20-24-43.mp4, pick (mixed):
+   the tool sorts them by name and makes one zip per game (plus Other for the rest).
 5. Wait. Fans may spin up; you can close the window and rerun the same folder later.
    If a WARNING says the graphics card can't be used, the run uses the CPU instead:
    still fine to send, just slower.
-6. Send the zip from the output folder to {collector_contact} via Drive, OneDrive or WeTransfer
+6. Send the zip(s) from the output folder to {collector_contact} via Drive, OneDrive or WeTransfer
    (not Discord: the free limit is too small).
 
-Repeat steps 2 to 6 for each game. Clips are only read. Nothing is uploaded.
+Repeat steps 2 to 6 for each folder. Clips are only read. Nothing is uploaded.
 If Windows blocks it: More info, then Run anyway. Steam clips: export to MP4 first.
 Problems? Send output\...\run_log.txt to {collector_contact}.
 ```
