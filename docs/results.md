@@ -24,6 +24,22 @@ Model results in the order they were run. Each entry states the data snapshot in
 
 Tiers half full, half CRF 45 in every split (D04). Test splits not opened (split not frozen, D13).
 
+**By person and source** (train and val as used by this run and the CNN below; aliases, no names; slots / videos / sessions; "left out" = train slots removed by the source cap, kept on disk):
+
+| Person / source | Kind | Game | train slots / videos / sessions | val slots / videos / sessions | Left out (cap) |
+|---|---|---|---:|---:|---:|
+| P1-a | personal | CS2 | 65 / 2 / 2 | 5 / 1 / 1 | 0 |
+| P1-a | personal | League_of_Legends | 191 / 7 / 7 | 50 / 2 / 2 | 0 |
+| P1-a | personal | Valorant | 141 / 4 / 4 | 37 / 1 / 1 | 0 |
+| P2-a | contributor | CS2 | 145 / 22 / 19 | 56 / 5 / 5 | 81 |
+| P2-a | contributor | Valorant | 358 / 25 / 23 | 44 / 4 / 4 | 0 |
+| P3 | contributor | Valorant | 358 / 22 / 19 | 174 / 7 / 6 | 264 |
+| **All** | | | **1258 / 82 / 74** | **366 / 20 / 19** | **345** |
+
+- P1-a: Person 1 (the author), current PC, own recordings
+- P2-a: Person 2, Frame Export Kit packs
+- P3: Person 3, Frame Export Kit packs
+
 **Run.** `gfc-train-baseline` with the default config: 16-bin RGB histograms, standardised, logistic regression, `C` picked on val (`C = 1.0`).
 
 **Val results.**
@@ -93,6 +109,47 @@ Best epoch 5 (first to reach 1.000); stopped after epoch 11. Train accuracy stay
 **Question.** Does the CNN recognise a game when the player, setup and recordings were never seen in training, or has it learned each person's recording setup?
 
 **Setup.** A separate development split (`dev-srcout-1`, own ledger, frozen only so the held-out set can be scored; the report's held-out design, G1, is still open). One contributor's Valorant footage was held out completely as `test_source`: 939 slots from 34 videos in 28 sessions. Training data: Valorant from the two other sources, League of Legends and CS2 as before (679 train slots after the source cap, 230 val). Both models were trained with their default configs on this split and scored once on the held-out person; the access is logged.
+
+**By person and source** (all splits of `dev-srcout-1`; slots / videos / sessions). P2-b, one raw video of person 2, is in train while P2-a (the same person's packs) has frames in val and test_session; the held-out person P3 appears only in `test_source`, so the unseen-person result is not affected:
+
+| Person / source | Kind | Game | train slots / videos / sessions | val slots / videos / sessions | test_session slots / videos / sessions | test_source slots / videos / sessions | Left out (cap) |
+|---|---|---|---:|---:|---:|---:|---:|
+| P1-a | personal | CS2 | 65 / 2 / 2 | 5 / 1 / 1 | 95 / 3 / 1 | – | 0 |
+| P1-a | personal | League_of_Legends | 87 / 6 / 6 | 50 / 2 / 2 | 59 / 4 / 4 | – | 76 |
+| P1-a | personal | Valorant | 141 / 4 / 4 | 37 / 1 / 1 | – | – | 0 |
+| P2-a | contributor | CS2 | 145 / 22 / 19 | 56 / 5 / 5 | – | – | 81 |
+| P2-a | contributor | Valorant | 229 / 22 / 19 | 82 / 7 / 7 | 98 / 8 / 8 | – | 89 |
+| P2-b | personal | League_of_Legends | 12 / 1 / 1 | – | – | – | 0 |
+| P3 | contributor | Valorant | – | – | – | 939 / 34 / 28 | 0 |
+| **All** | | | **679 / 57 / 51** | **230 / 16 / 16** | **252 / 15 / 13** | **939 / 34 / 28** | **246** |
+
+- P1-a: Person 1 (the author), current PC, own recordings
+- P2-a: Person 2, Frame Export Kit packs
+- P2-b: Person 2, one raw video extracted by gfc-make-sources
+- P3: Person 3, Frame Export Kit packs
+
+**Integrity** (`dev-srcout-1`):
+
+| Pair | Shared clips | Shared sessions | Shared slots |
+|---|---:|---:|---:|
+| train / val | 0 | 0 | 0 |
+| train / test_session | 0 | 0 | 0 |
+| train / test_source | 0 | 0 | 0 |
+| val / test_session | 0 | 0 | 0 |
+| val / test_source | 0 | 0 | 0 |
+| test_session / test_source | 0 | 0 | 0 |
+
+| Pair | Frames compared | aHash ≤ 6 (duplicate) | Smallest distance | Distance > 10 |
+|---|---:|---:|---:|---:|
+| val vs train | 230 | 0 | 7 | 156 |
+| test_session vs train | 252 | 0 | 7 | 182 |
+| test_source vs train | 0 (no frame shares a source with train) | – | – | – |
+
+- `test_session.csv` matches the hash stored at training time
+- `test_source.csv` matches the hash stored at training time
+- `train.csv` matches the hash stored at training time
+- `val.csv` matches the hash stored at training time
+- Held-out access for this run: test_source (development check: unseen Valorant contributor (dev split, not the report test))
 
 **Results.**
 
