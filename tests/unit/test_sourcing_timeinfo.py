@@ -28,6 +28,7 @@ NVIDIA_NAME = "VALORANT/VALORANT 2026.09.29 - 20.00.00.mp4"
         ("VALORANT_replay_2026.11.07-23.36.mp4", datetime(2026, 11, 7, 23, 36, 0)),
         ("clip_730_20261102_211408.mp4", datetime(2026, 11, 2, 21, 14, 8)),
         ("Medal_20261102-211408.mp4", datetime(2026, 11, 2, 21, 14, 8)),
+        ("Counter-Strike-Global-Offensive__2022-04-26__21-46-23.mp4", datetime(2022, 4, 26, 21, 46, 23)),
         ("2025-01-01/VALORANT 2026.11.02 - 21.14.08.mp4", datetime(2026, 11, 2, 21, 14, 8)),
     ],
 )

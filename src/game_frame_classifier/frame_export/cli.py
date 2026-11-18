@@ -228,7 +228,9 @@ def choose_game(
             return None
         game = suggestion
     else:
-        default = suggestion or (user.last_game if user.last_game in options else None)
+        # Names that point at several games suggest a mixed folder.
+        mixed_hint = MIXED if len(hints) > 1 and MIXED in options else None
+        default = suggestion or mixed_hint or (user.last_game if user.last_game in options else None)
         while True:
             game = prompt_game(options, default, suggestion)
             if game == MIXED or not hints or game in hints:
@@ -810,16 +812,18 @@ def _run_mixed(
         print("OK, nothing was processed.")
         return EXIT_OK
 
-    resuming = False
+    earlier: dict[str, Any] | None = None
     for category in categories:
         other = MIXED_OTHER_NAME if category == OTHER else ""
         probe = RunContext(root, category_items(items, category), recipe, tools, user, category, other)
-        if load_state(work_dir(probe)) is not None:
-            resuming = True
+        earlier = load_state(work_dir(probe))
+        if earlier is not None:
             break
-    if resuming:
+    notes: dict[str, Any] | None
+    if earlier is not None:
+        # Packs not started yet in the earlier run get the same answers.
         print("Continuing an earlier mixed run on this folder.")
-        notes: dict[str, Any] | None = None
+        notes = dict(earlier.get("notes") or {})
     else:
         notes = ask_notes(recipe, "", interactive, include_game_specific=False)
     user.last_game = MIXED

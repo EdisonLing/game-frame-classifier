@@ -362,6 +362,8 @@ def test_mixed_folder_makes_one_pack_per_category(tmp_path, monkeypatch, capsys)
     rows = {r["original_filename"]: r for r in pack_table(valorant[0], "clips.json")}
     assert "VALORANT__2023-01-13__20-24-43.mp4" in rows
     assert "plain_clip.mp4" not in rows
+    # The Medal-style name carries the time of day, so sessions are not one per calendar day.
+    assert "20:24:43" in rows["VALORANT__2023-01-13__20-24-43.mp4"]["filename_datetime_local"]
 
     from game_frame_classifier.ingest_pack import main as ingest_main
 

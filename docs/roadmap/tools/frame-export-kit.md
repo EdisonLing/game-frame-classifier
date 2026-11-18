@@ -645,7 +645,7 @@ scripts/build_frame_export.py
 GFC Frame Export Kit, for {collector_name}'s school ML project
 
 1. Right-click the zip, choose Extract All, and open the extracted folder.
-2. Drag a clip folder onto START HERE.bat (one game per folder, or a mixed folder — see step 4).
+2. Drag a clip folder onto START HERE.bat (one game per folder, or a mixed folder: see step 4).
 3. First time only: type a name and answer three yes/no questions. The third is quick mode:
    about 4x faster, but it skips the low-quality copy, which can only be made from your videos.
    Your pictures are then less useful. To change it later, type m at the Start question.
