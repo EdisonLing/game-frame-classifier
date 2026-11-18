@@ -45,3 +45,31 @@ def test_cli_writes_disjoint_manifests_counts_and_quick_tiers(tmp_path) -> None:
     assert main(["--data-root", str(data), "--config", str(config), "--freeze"]) == 0
     assert (output / "freeze.json").is_file()
     assert main(["--data-root", str(data), "--config", str(config), "--plan"]) == 0
+
+
+def test_cli_source_groups_cap_and_ledger_stable(tmp_path) -> None:
+    data = tmp_path / "data"
+    clips = [
+        {"source": src, "recorded_start_utc": f"2026-01-{day:02d}T00:00:00Z"}
+        for src, days in (("tester", range(1, 9)), ("tester_oldpc", range(1, 9)), ("friend", range(1, 5)))
+        for day in days
+    ]
+    write_split_inputs(data, clips, slots_per_clip=4)
+    config = write_split_config(
+        tmp_path / "split.json",
+        max_source_share=0.5,
+        source_groups={"person_a": ["tester", "tester_oldpc"]},
+    )
+    assert main(["--data-root", str(data), "--config", str(config)]) == 0
+    output = data / "manifests" / "splits" / "v1"
+    train = list(csv.DictReader((output / "train.csv").open(encoding="utf-8")))
+    person_a = sum(row["source"] in {"tester", "tester_oldpc"} for row in train)
+    friend = sum(row["source"] == "friend" for row in train)
+    assert person_a <= friend or person_a / max(len(train), 1) <= 0.5 + 1e-9
+    ledger_before = (output / "ledger.csv").read_text(encoding="utf-8")
+    assert main(["--data-root", str(data), "--config", str(config)]) == 0
+    assert (output / "ledger.csv").read_text(encoding="utf-8") == ledger_before
+    sources = list(csv.DictReader((output / "sources.csv").open(encoding="utf-8")))
+    assert {row["group"] for row in sources if row["source"] in {"tester", "tester_oldpc"}} == {"person_a"}
+    counts = list(csv.DictReader((output / "counts.csv").open(encoding="utf-8")))
+    assert "groups" in counts[0]

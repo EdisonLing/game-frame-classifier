@@ -36,9 +36,9 @@ SESSION_COLUMNS = (
 )
 COUNT_COLUMNS = (
     "game", "split", "slots", "slots_full", "slots_low", "slots_quick", "clips",
-    "sessions", "sources",
+    "sessions", "sources", "groups",
 )
-SOURCE_COLUMNS = ("game", "source", "source_kind", "split", "slots", "share")
+SOURCE_COLUMNS = ("game", "source", "group", "source_kind", "split", "slots", "share")
 UNUSED_COLUMNS = ("slot_id", "clip_key", "game", "source", "session", "split", "reason")
 REASSIGNED_COLUMNS = ("clip_key", "from_split", "to_split", "run_utc", "reason")
 
@@ -100,12 +100,88 @@ def load_config(path: Path) -> dict[str, Any]:
     config.setdefault("max_slots_per_source", 0)
     config.setdefault("source_slots", {})
     config.setdefault("train_slots_per_source", 0)
+    config.setdefault("source_groups", {})
     limits = [config["max_slots_per_source"], config["train_slots_per_source"], *config["source_slots"].values()]
     if not isinstance(config["source_slots"], dict) or any(
         not isinstance(value, int) or isinstance(value, bool) or value < 0 for value in limits
     ):
         raise SplitterError("max_slots_per_source, train_slots_per_source and source_slots values must be whole numbers >= 0", 2)
+    _validate_source_groups_shape(config["source_groups"])
     return config
+
+
+def _validate_source_groups_shape(source_groups: Any) -> None:
+    if not isinstance(source_groups, dict):
+        raise SplitterError("source_groups must be an object of group name to source lists", 2)
+    seen: dict[str, str] = {}
+    for group, members in source_groups.items():
+        if not isinstance(group, str) or not group:
+            raise SplitterError("source_groups keys must be non-empty strings", 2)
+        if not isinstance(members, list) or not members or any(not isinstance(member, str) or not member for member in members):
+            raise SplitterError(f"source_groups[{group!r}] must be a non-empty list of source names", 2)
+        for member in members:
+            if member in seen:
+                raise SplitterError(f"source {member!r} is in source_groups {seen[member]!r} and {group!r}", 2)
+            seen[member] = group
+
+
+def resolve_source_groups(source_groups: dict[str, list[str]], sources: Iterable[str]) -> dict[str, str]:
+    """Map each source to its group; unlisted sources are their own group.
+
+    A group name that equals a source name is allowed only when that source is the group's
+    sole member. Duplicate membership is rejected by ``_validate_source_groups_shape``.
+    """
+    known = set(sources)
+    for members in source_groups.values():
+        known.update(members)
+    source_to_group: dict[str, str] = {source: source for source in known}
+    for group, members in source_groups.items():
+        if group in known and members != [group]:
+            raise SplitterError(
+                f"source_groups[{group!r}] reuses a source name but is not that source alone", 2,
+            )
+        for member in members:
+            source_to_group[member] = group
+    return source_to_group
+
+
+def grouped_sources(source_to_group: dict[str, str]) -> dict[str, list[str]]:
+    """Invert source→group into group→sorted sources."""
+    groups: dict[str, list[str]] = defaultdict(list)
+    for source, group in sorted(source_to_group.items()):
+        groups[group].append(source)
+    return dict(groups)
+
+
+def expand_holdout_sources(
+    holdout_sources: dict[str, list[str]],
+    source_to_group: dict[str, str],
+) -> dict[str, set[str]]:
+    """Resolve holdout names (group or source) to source sets; reject a split group."""
+    groups = grouped_sources(source_to_group)
+    heldout: dict[str, set[str]] = {}
+    for game, names in holdout_sources.items():
+        resolved: set[str] = set()
+        for name in names:
+            if name in groups:
+                resolved.update(groups[name])
+            else:
+                resolved.add(name)
+        for group, members in groups.items():
+            member_set = set(members)
+            overlap = resolved & member_set
+            if overlap and overlap != member_set:
+                raise SplitterError(
+                    f"group {group} would be split between held-out and training", 1,
+                )
+        # A holdout name that is only a future source still forms a singleton group.
+        for source in sorted(resolved):
+            if source not in source_to_group:
+                # Treat unknown names as singleton groups for the partial-group check above;
+                # they stay in the expanded set so ledger checks and assignment see them.
+                pass
+        heldout[game] = resolved
+    return heldout
 
 
 def source_limit(config: dict[str, Any], source: str) -> int:
@@ -215,7 +291,10 @@ def _source_kind(source: str) -> str:
     return "personal"
 
 
-def _write_counts(output: Path, used: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _write_counts(
+    output: Path, used: list[dict[str, Any]], source_to_group: dict[str, str] | None = None,
+) -> list[dict[str, Any]]:
+    mapping = source_to_group or {}
     rows: list[dict[str, Any]] = []
     for game in (*GAMES, "ALL"):
         for split in (*SPLITS, "ALL"):
@@ -228,41 +307,53 @@ def _write_counts(output: Path, used: list[dict[str, Any]]) -> list[dict[str, An
                 "clips": len({slot["clip_key"] for slot in subset}),
                 "sessions": len({slot["session"] for slot in subset}),
                 "sources": len({slot["source"] for slot in subset}),
+                "groups": len({mapping.get(slot["source"], slot["source"]) for slot in subset}),
             })
     write_table(rows, COUNT_COLUMNS, output / "counts.csv", output / "counts.json")
     return rows
 
 
-def _write_sources(output: Path, used: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _write_sources(
+    output: Path, used: list[dict[str, Any]], source_to_group: dict[str, str] | None = None,
+) -> list[dict[str, Any]]:
+    mapping = source_to_group or {}
     rows: list[dict[str, Any]] = []
     for game, split in ((game, split) for game in GAMES for split in SPLITS):
         subset = [slot for slot in used if slot["game"] == game and slot["split"] == split]
         total = len(subset)
         for source in sorted({slot["source"] for slot in subset}):
             source_slots = [slot for slot in subset if slot["source"] == source]
-            rows.append({"game": game, "source": source, "source_kind": source_slots[0]["source_kind"], "split": split, "slots": len(source_slots), "share": len(source_slots) / total if total else 0})
+            rows.append({
+                "game": game, "source": source,
+                "group": mapping.get(source, source),
+                "source_kind": source_slots[0]["source_kind"], "split": split,
+                "slots": len(source_slots), "share": len(source_slots) / total if total else 0,
+            })
     write_table(rows, SOURCE_COLUMNS, output / "sources.csv", output / "sources.json")
     return rows
 
 
 def _apply_source_cap(
     slots: list[dict[str, Any]], seed: int, requested_cap: float, train_slots_cap: int = 0,
+    source_to_group: dict[str, str] | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Thin train slots only, per game, so no source dominates (D33). Nothing else is touched.
+    """Thin train slots only, per game, so no person (source group) dominates (D33).
 
-    1. ``train_slots_cap`` (when > 0): at most that many train slots per source.
-    2. Share cap: with k sources, ``requested_cap`` when it is at least 1/k. A lower cap cannot be
-       met (it would trim everyone to the smallest source), so each source is instead capped at
-       the median of the game's per-source train counts.
+    1. ``train_slots_cap`` (when > 0): at most that many train slots per group.
+    2. Share cap: with k groups, ``requested_cap`` when it is at least 1/k. A lower cap cannot be
+       met (it would trim everyone to the smallest group), so each group is instead capped at
+       the median of the game's per-group train counts.
 
-    Within a source, the slots with the highest sha256("<seed>:<slot_id>") are dropped first.
+    Within a group, slots are pooled across its sources and the highest sha256("<seed>:<slot_id>")
+    are dropped first. With an empty ``source_groups`` each source is its own group.
     """
+    mapping = source_to_group or {}
     dropped: list[dict[str, Any]] = []
     removed: set[int] = set()
 
-    def drop(source_slots: list[dict[str, Any]], counts: dict[str, int], source: str) -> None:
-        candidate = source_slots[len(source_slots) - counts[source]]
-        counts[source] -= 1
+    def drop(group_slots: list[dict[str, Any]], counts: dict[str, int], group: str) -> None:
+        candidate = group_slots[len(group_slots) - counts[group]]
+        counts[group] -= 1
         removed.add(id(candidate))
         dropped.append({
             "slot_id": candidate["slot_id"], "clip_key": candidate["clip_key"],
@@ -271,35 +362,36 @@ def _apply_source_cap(
         })
 
     for game in GAMES:
-        by_source: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        by_group: dict[str, list[dict[str, Any]]] = defaultdict(list)
         for slot in slots:
             if slot["game"] == game and slot["split"] == "train":
-                by_source[slot["source"]].append(slot)
-        if not by_source:
+                group = mapping.get(slot["source"], slot["source"])
+                by_group[group].append(slot)
+        if not by_group:
             continue
-        # Highest hash first: each source drops from the front of its list.
-        for source_slots in by_source.values():
-            source_slots.sort(key=lambda slot: _sha256_text(f"{seed}:{slot['slot_id']}"), reverse=True)
-        counts = {source: len(source_slots) for source, source_slots in by_source.items()}
+        # Highest hash first: each group drops from the front of its pooled list.
+        for group_slots in by_group.values():
+            group_slots.sort(key=lambda slot: _sha256_text(f"{seed}:{slot['slot_id']}"), reverse=True)
+        counts = {group: len(group_slots) for group, group_slots in by_group.items()}
         if train_slots_cap > 0:
-            for source in counts:
-                while counts[source] > train_slots_cap:
-                    drop(by_source[source], counts, source)
+            for group in counts:
+                while counts[group] > train_slots_cap:
+                    drop(by_group[group], counts, group)
         k = len(counts)
         if float(requested_cap) >= 1 / k:
             total = sum(counts.values())
             while True:
-                offenders = [source for source, count in counts.items() if count > requested_cap * total]
+                offenders = [group for group, count in counts.items() if count > requested_cap * total]
                 if not offenders:
                     break
-                source = max(offenders, key=lambda name: (counts[name], name))
-                drop(by_source[source], counts, source)
+                group = max(offenders, key=lambda name: (counts[name], name))
+                drop(by_group[group], counts, group)
                 total -= 1
         else:
             limit = int(statistics.median(counts.values()))
-            for source in counts:
-                while counts[source] > limit:
-                    drop(by_source[source], counts, source)
+            for group in counts:
+                while counts[group] > limit:
+                    drop(by_group[group], counts, group)
     return [slot for slot in slots if id(slot) not in removed], dropped
 
 
@@ -336,6 +428,11 @@ def run_split(data_root: Path, config_path: Path, *, plan: bool = False, reset: 
     if unknown:
         raise SplitterError(f"clips_index has games outside the label set: {', '.join(unknown)}", 2)
     slots, limited = apply_source_limits(slots, config)
+    source_to_group = resolve_source_groups(
+        config["source_groups"],
+        {clip["source"] for clip in clips.values()},
+    )
+    resolved_groups = grouped_sources(source_to_group)
     sessions = build_sessions(list(clips.values()), float(config["session_gap_min"]))
     slot_by_clip: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for slot in slots:
@@ -351,7 +448,7 @@ def run_split(data_root: Path, config_path: Path, *, plan: bool = False, reset: 
     if reset and ledger_path.exists():
         ledger_path.unlink()
     ledger = _load_ledger(ledger_path)
-    heldout = {game: set(sources) for game, sources in config["holdout_sources"].items()}
+    heldout = expand_holdout_sources(config["holdout_sources"], source_to_group)
     _validate_ledger(ledger, clips, heldout)
     now, reassigned, unused = _now(), [], list(limited)
     assigned_slots: list[dict[str, Any]] = []
@@ -415,7 +512,8 @@ def run_split(data_root: Path, config_path: Path, *, plan: bool = False, reset: 
                 assigned_slots.append(row)
 
     assigned_slots, capped_unused = _apply_source_cap(
-        assigned_slots, int(config["seed"]), float(config["max_source_share"]), int(config["train_slots_per_source"]),
+        assigned_slots, int(config["seed"]), float(config["max_source_share"]),
+        int(config["train_slots_per_source"]), source_to_group,
     )
     unused.extend(capped_unused)
     output.mkdir(parents=True, exist_ok=True)
@@ -441,8 +539,8 @@ def run_split(data_root: Path, config_path: Path, *, plan: bool = False, reset: 
                 "slots_kept": len(slot_by_clip[clip_key]), "split": entry["split"] if entry else "",
             })
     write_table(sorted(session_rows, key=lambda row: row["clip_key"]), SESSION_COLUMNS, output / "sessions.csv", output / "sessions.json")
-    counts = _write_counts(output, assigned_slots)
-    sources = _write_sources(output, assigned_slots)
+    counts = _write_counts(output, assigned_slots, source_to_group)
+    sources = _write_sources(output, assigned_slots, source_to_group)
     write_table(unused, UNUSED_COLUMNS, output / "unused.csv", output / "unused.json")
     write_table(reassigned, REASSIGNED_COLUMNS, output / "reassigned.csv", output / "reassigned.json")
     warnings: list[str] = []
@@ -460,11 +558,11 @@ def run_split(data_root: Path, config_path: Path, *, plan: bool = False, reset: 
                     warnings.append(f"{game}/{split}: crf45 share outside 45-55%")
         train_slots = [slot for slot in assigned_slots if slot["game"] == game and slot["split"] == "train"]
         if train_slots:
-            by_source = defaultdict(int)
+            by_group: dict[str, int] = defaultdict(int)
             for slot in train_slots:
-                by_source[slot["source"]] += 1
-            if max(by_source.values()) / len(train_slots) > 1 / 15:
-                warnings.append(f"{game}: a source exceeds 1/15 of train slots")
+                by_group[source_to_group.get(slot["source"], slot["source"])] += 1
+            if max(by_group.values()) / len(train_slots) > 1 / 15:
+                warnings.append(f"{game}: a group exceeds 1/15 of train slots")
         game_clips = [clip for clip in clips.values() if clip["game"] == game]
         untimed = sum(not clip.get("recorded_start_utc") for clip in game_clips)
         low_trust = sum(clip.get("recorded_start_source") == "mtime" for clip in game_clips)
@@ -473,7 +571,8 @@ def run_split(data_root: Path, config_path: Path, *, plan: bool = False, reset: 
         if low_trust:
             warnings.append(f"{game}: {low_trust} clip(s) timed from file modification time (low trust)")
     summary = {
-        "config": config, "input_hashes": {"slots_clean.csv": _file_hash(slots_path), "clips_index.csv": _file_hash(clips_path)},
+        "config": config, "source_groups": resolved_groups,
+        "input_hashes": {"slots_clean.csv": _file_hash(slots_path), "clips_index.csv": _file_hash(clips_path)},
         "split_hashes": {split: _file_hash(output / f"{split}.csv") for split in SPLITS},
         "counts": counts, "sources": sources, "warnings": warnings, "frozen": frozen,
     }

@@ -12,6 +12,9 @@ from game_frame_classifier.dataset_splitter import (
     SplitterError,
     _apply_source_cap,
     build_sessions,
+    expand_holdout_sources,
+    load_config,
+    resolve_source_groups,
     run_split,
     tier_for_slot,
 )
@@ -322,13 +325,130 @@ def test_source_limits_blanket_and_override_are_nested(tmp_path) -> None:
 
 
 def test_source_limits_are_validated_and_optional(tmp_path) -> None:
-    from game_frame_classifier.dataset_splitter import load_config
-
     config = json.loads(write_split_config(tmp_path / "old.json").read_text(encoding="utf-8"))
     config.pop("max_slots_per_source", None)
     (tmp_path / "old.json").write_text(json.dumps(config), encoding="utf-8")
     assert load_config(tmp_path / "old.json")["max_slots_per_source"] == 0
+    assert load_config(tmp_path / "old.json")["source_groups"] == {}
     with pytest.raises(SplitterError, match="whole numbers"):
         load_config(write_split_config(tmp_path / "bad.json", source_slots={"me": -1}))
     with pytest.raises(SplitterError, match="whole numbers"):
         load_config(write_split_config(tmp_path / "bad2.json", max_slots_per_source=1.5))
+
+
+def test_source_groups_reject_duplicate_and_name_collision(tmp_path) -> None:
+    with pytest.raises(SplitterError, match="is in source_groups") as dup:
+        load_config(write_split_config(
+            tmp_path / "dup.json",
+            source_groups={"person_a": ["tester", "tester_oldpc"], "other": ["tester"]},
+        ))
+    assert dup.value.exit_code == 2
+    with pytest.raises(SplitterError, match="reuses a source name") as named:
+        resolve_source_groups({"tester": ["tester", "tester_oldpc"]}, {"tester", "tester_oldpc"})
+    assert named.value.exit_code == 2
+    with pytest.raises(SplitterError, match="non-empty list"):
+        load_config(write_split_config(tmp_path / "empty.json", source_groups={"person_a": []}))
+    mapping = resolve_source_groups({"person_a": ["tester", "tester_oldpc"]}, {"tester", "tester_oldpc", "friend"})
+    assert mapping == {"tester": "person_a", "tester_oldpc": "person_a", "friend": "friend"}
+
+
+def test_source_cap_per_group_share_and_median() -> None:
+    # Without grouping: three sources, 0.5 share with k=3 keeps everyone (each already <= 0.5).
+    slots = _train("tester", 40) + _train("tester_oldpc", 40) + _train("friend", 20)
+    kept, dropped = _apply_source_cap(slots, 360, 0.5)
+    assert dropped == [] and kept == slots
+    # Same footage, two sources as one person: k=2 groups, 0.5 share thins the pair to friend's 20.
+    mapping = {"tester": "person_a", "tester_oldpc": "person_a", "friend": "friend"}
+    kept, dropped = _apply_source_cap(slots, 360, 0.5, source_to_group=mapping)
+    assert sum(row["source"] in {"tester", "tester_oldpc"} for row in kept) == 20
+    assert sum(row["source"] == "friend" for row in kept) == 20
+    assert {row["reason"] for row in dropped} == {"source_cap"}
+    # Median fallback: 1/15 with three groups would use median; with two groups (pair + friend)
+    # and counts 80 and 20, median is 50 — pair trimmed to 50, friend untouched.
+    kept, dropped = _apply_source_cap(slots, 360, 1 / 15, source_to_group=mapping)
+    assert sum(row["source"] in {"tester", "tester_oldpc"} for row in kept) == 50
+    assert sum(row["source"] == "friend" for row in kept) == 20
+    assert len(dropped) == 30
+
+
+def test_train_frame_cap_and_nested_raising_per_group() -> None:
+    slots = _train("tester", 30) + _train("tester_oldpc", 30) + _train("friend", 10)
+    mapping = {"tester": "person_a", "tester_oldpc": "person_a", "friend": "friend"}
+    kept, dropped = _apply_source_cap(slots, 360, 1.0, 25, source_to_group=mapping)
+    assert sum(row["source"] in {"tester", "tester_oldpc"} for row in kept) == 25
+    assert sum(row["source"] == "friend" for row in kept) == 10
+    assert len(dropped) == 35
+    tight_ids = {row["slot_id"] for row in kept}
+    kept_open, _ = _apply_source_cap(slots, 360, 1.0, 50, source_to_group=mapping)
+    open_ids = {row["slot_id"] for row in kept_open}
+    assert tight_ids < open_ids
+    assert sum(row["source"] in {"tester", "tester_oldpc"} for row in kept_open) == 50
+
+
+def test_holdout_by_group_and_half_listed_error(tmp_path) -> None:
+    data = tmp_path / "data"
+    clips = [
+        {"source": src, "recorded_start_utc": f"2026-01-0{day}T00:00:00Z"}
+        for src in ("tester", "tester_oldpc", "friend")
+        for day in range(1, 5)
+    ]
+    write_split_inputs(data, clips)
+    groups = {"person_a": ["tester", "tester_oldpc"]}
+    run_split(data, write_split_config(
+        tmp_path / "group.json",
+        source_groups=groups,
+        holdout_sources={"Valorant": ["person_a"]},
+    ))
+    out = data / "manifests/splits/v1"
+    for split in ("train", "val", "test_session"):
+        assert all(row["source"] not in {"tester", "tester_oldpc"} for row in _read(out / f"{split}.csv"))
+    assert {row["source"] for row in _read(out / "test_source.csv")} == {"tester", "tester_oldpc"}
+    with pytest.raises(SplitterError, match="would be split") as half:
+        expand_holdout_sources(
+            {"Valorant": ["tester"]},
+            resolve_source_groups(groups, {"tester", "tester_oldpc", "friend"}),
+        )
+    assert half.value.exit_code == 1
+    with pytest.raises(SplitterError, match="would be split"):
+        run_split(data, write_split_config(
+            tmp_path / "half.json",
+            source_groups=groups,
+            holdout_sources={"Valorant": ["tester"]},
+        ))
+
+
+def test_source_group_tables_and_empty_groups_match_ungrouped(tmp_path) -> None:
+    clips = [
+        {"source": src, "recorded_start_utc": f"2026-01-0{day}T00:00:00Z"}
+        for src in ("tester", "tester_oldpc", "friend")
+        for day in range(1, 4)
+    ]
+    plain = tmp_path / "plain"
+    grouped = tmp_path / "grouped"
+    write_split_inputs(plain, [dict(clip) for clip in clips])
+    write_split_inputs(grouped, [dict(clip) for clip in clips])
+    run_split(plain, write_split_config(tmp_path / "plain.json", max_source_share=1.0))
+    run_split(grouped, write_split_config(
+        tmp_path / "grouped.json",
+        max_source_share=1.0,
+        source_groups={"person_a": ["tester", "tester_oldpc"]},
+    ))
+    plain_out, grouped_out = plain / "manifests/splits/v1", grouped / "manifests/splits/v1"
+    # Empty grouping leaves assignment identical to the default (no source_groups key needed).
+    empty = tmp_path / "empty"
+    write_split_inputs(empty, [dict(clip) for clip in clips])
+    run_split(empty, write_split_config(tmp_path / "empty.json", max_source_share=1.0, source_groups={}))
+    for split in ("train", "val", "test_session", "test_source"):
+        plain_ids = {row["slot_id"] for row in _read(plain_out / f"{split}.csv")}
+        empty_ids = {row["slot_id"] for row in _read(empty / "manifests/splits/v1" / f"{split}.csv")}
+        assert plain_ids == empty_ids
+    sources = _read(grouped_out / "sources.csv")
+    assert all("group" in row for row in sources)
+    by_source = {row["source"]: row["group"] for row in sources if row["game"] == "Valorant" and row["split"] == "train"}
+    assert by_source["tester"] == by_source["tester_oldpc"] == "person_a"
+    assert by_source["friend"] == "friend"
+    counts = _read(grouped_out / "counts.csv")
+    train = next(row for row in counts if row["game"] == "Valorant" and row["split"] == "train")
+    assert int(train["sources"]) == 3 and int(train["groups"]) == 2
+    summary = json.loads((grouped_out / "summary.json").read_text(encoding="utf-8"))
+    assert summary["source_groups"]["person_a"] == ["tester", "tester_oldpc"]

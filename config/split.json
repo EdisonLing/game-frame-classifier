@@ -13,5 +13,6 @@
   "max_slots_per_source": 0,
   "train_slots_per_source": 0,
   "source_slots": {},
+  "source_groups": {},
   "test_design": ""
 }
