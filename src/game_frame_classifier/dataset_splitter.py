@@ -156,8 +156,12 @@ def _validate_ledger(ledger: dict[str, dict[str, str]], clips: dict[str, dict[st
             raise SplitterError("ledger contradicts holdout_sources; use a new split_id", 1)
 
 
-def _choose_split(current: dict[str, int], targets: dict[str, float]) -> str:
-    """Greedy fill: the split with the largest deficit for this game's kept slots so far."""
+def _choose_split(current: dict[str, int], sessions: dict[str, int], targets: dict[str, float]) -> str:
+    """Greedy fill for one game: first any split with no session yet (train, val, test_session),
+    then the split with the largest deficit of kept slots."""
+    for split in ASSIGNABLE_SPLITS:
+        if not sessions[split]:
+            return split
     total = sum(current[split] for split in ASSIGNABLE_SPLITS)
     deficits = {split: targets[split] - (current[split] / total if total else 0.0) for split in ASSIGNABLE_SPLITS}
     return max(ASSIGNABLE_SPLITS, key=lambda split: (deficits[split], -ASSIGNABLE_SPLITS.index(split)))
@@ -288,6 +292,7 @@ def run_split(data_root: Path, config_path: Path, *, plan: bool = False, reset: 
     assigned_slots: list[dict[str, Any]] = []
     session_of: dict[str, str] = {}
     filled = {game: {split: 0 for split in SPLITS} for game in GAMES}
+    filled_sessions = {game: {split: 0 for split in SPLITS} for game in GAMES}
 
     def has_known(item: dict[str, Any]) -> bool:
         return any(clip["clip_key"] in ledger for clip in item["clips"])
@@ -310,7 +315,8 @@ def run_split(data_root: Path, config_path: Path, *, plan: bool = False, reset: 
         elif known:
             chosen = max(known_splits, key=SPLIT_RANK.__getitem__)
         else:
-            chosen = _choose_split(filled[session["game"]], config["targets"])
+            chosen = _choose_split(filled[session["game"]], filled_sessions[session["game"]], config["targets"])
+        landed: set[str] = set()
         for clip in session_clips:
             clip_key = clip["clip_key"]
             old = ledger.get(clip_key)
@@ -332,6 +338,9 @@ def run_split(data_root: Path, config_path: Path, *, plan: bool = False, reset: 
             assigned_session = f"{session['session']}.{split}" if frozen and bridge else session["session"]
             session_of[clip_key] = assigned_session
             filled[session["game"]][split] += len(slot_by_clip[clip_key])
+            if split not in landed:
+                landed.add(split)
+                filled_sessions[session["game"]][split] += 1
             for slot in slot_by_clip[clip_key]:
                 row = dict(slot)
                 row.update({"session": assigned_session, "split": split})

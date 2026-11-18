@@ -316,7 +316,7 @@ Related open fork from proposal: **flatten vs global average pooling** — decid
 | **Status** | decided |
 | **Prompt** | Footage arrives over weeks; a reshuffle on every arrival would move clips between train and test |
 | **Options** | (A) Shuffle sessions with a seed and cut at 70/15/15 on every run (B) Hash each session to a split (C) **Per-clip ledger with greedy fill** |
-| **Decision** | **(C).** Splits `train` / `val` / `test_session` (target 70 / 15 / 15 of each game's slots) plus `test_source` for held-out sources. A new session goes to the split furthest below target for its game; every clip's split is stored in `splits/<split_id>/ledger.csv` and never moves to a less held-out split. A changed policy gets a new `split_id`. |
+| **Decision** | **(C).** Splits `train` / `val` / `test_session` (target 70 / 15 / 15 of each game's slots) plus `test_source` for held-out sources. A new session goes to the first of `train` / `val` / `test_session` with no session yet for its game, otherwise to the split furthest below target; every clip's split is stored in `splits/<split_id>/ledger.csv` and never moves to a less held-out split. A changed policy gets a new `split_id`. |
 | **Rationale** | (A) contaminates the held-out sets each time data is added. (B) is stable but badly unbalanced with few sessions per game. The ledger is stable and balanced. |
 | **Date** | 2026-11-17 |
 | **Links** | [tools/dataset-splitter.md](roadmap/tools/dataset-splitter.md) |
@@ -407,6 +407,7 @@ Related open fork from proposal: **flatten vs global average pooling** — decid
 |---|---|---|
 | 2026-11-17 | D23 | Hardware decided: **local RX 9070 XT (ROCm build of PyTorch) primary, local CPU fallback**, after measured setup, stability and timing on the GPU ([amd-gpu-setup.md](amd-gpu-setup.md)) |
 | 2026-11-17 | D32 | Opened as a **gate**: held-out test design must be agreed before the split is frozen or any test split is evaluated |
+| 2026-11-17 | D31 | Greedy fill seeds each split first: a game's first three sessions go to `train`, `val`, `test_session`, then fill by deficit |
 | 2026-11-17 | D29–D31, D38 | Decided: training reads only split manifests from frame sources; ledger-based split; shared evaluation and run layout |
 | 2026-11-17 | D13, D15, D16, D23, D30, D33–D37 | Provisional working defaults recorded with their alternatives (see [training-pipeline.md](training-pipeline.md) §4.2) |
 | 2026-11-17 | D14, D16b | Decided: generated data tables; flatten primary with GAP as a config switch |

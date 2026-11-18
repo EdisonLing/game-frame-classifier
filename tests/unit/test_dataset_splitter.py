@@ -255,3 +255,10 @@ def test_unknown_game_is_an_input_error(tmp_path) -> None:
     with pytest.raises(SplitterError, match="Tetris") as caught:
         run_split(data, write_split_config(tmp_path / "split.json"))
     assert caught.value.exit_code == 2
+
+
+def test_first_three_sessions_of_a_game_land_in_three_splits(tmp_path) -> None:
+    data = tmp_path / "data"
+    write_split_inputs(data, [{"source": "a", "recorded_start_utc": f"2026-01-0{day}T00:00:00Z"} for day in range(1, 4)])
+    run_split(data, write_split_config(tmp_path / "split.json"))
+    assert sorted(row["split"] for row in _read(data / "manifests/splits/v1/ledger.csv")) == ["test_session", "train", "val"]
