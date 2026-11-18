@@ -39,7 +39,14 @@ def test_level_pinned_only_above_level_52():
     assert "-level" not in gpu.encode_args(51, 3840, 2160, 60)
     assert gpu.encode_args(51, 3840, 2160, 120)[-2:] == ["-level", "5.2"]
     assert gpu.encode_args(51, 3440, 1440, 144)[-2:] == ["-level", "5.2"]
-    assert gpu.encode_args(51)[:6] == ["-c:v", gpu.GPU_ENCODER, "-rc_mode", "CQP", "-qp", "51"]
+    assert gpu.encode_args(51)[:8] == [
+        "-c:v", gpu.GPU_ENCODER, "-rc_mode", "CQP", "-qp", "51", "-bf", "0",
+    ]
+
+
+def test_encode_args_disables_b_frames():
+    args = gpu.encode_args(51, 1280, 720, 30)
+    assert args[args.index("-bf") + 1] == "0"
 
 
 def test_scrub_removes_probe_and_profile_paths(monkeypatch):

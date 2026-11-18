@@ -1,7 +1,7 @@
 # Frame Export Kit (clips → frames zip)
 
 **Stage:** 1 / volume (contributor data)  
-**Status:** v2.1.0 (mixed-folder mode); release checklist (§13) pending  
+**Status:** v2.1.1 (mixed-folder mode; GPU `-bf 0` for NVIDIA); release checklist (§13) pending  
 **Back to:** [ROADMAP.md](../ROADMAP.md)  
 **Decisions:** [D25](../../design-decisions.md) (pack), [D26](../../design-decisions.md) (frame sources + one extraction path), [D27](../../design-decisions.md) (derive to 256×144), D04 / D22 (tiers), D21 (JPEG)
 
@@ -35,7 +35,7 @@ The frames they send are a **source of truth** in my pipeline (the masters are g
 
 ## 2. Friend user flow
 
-1. **Get the pack.** I send `GFC-FrameExportKit-v2.1.0.zip` (about 130 MB, mostly ffmpeg). They right-click → *Extract All*. Running from inside the zip is detected and explained.
+1. **Get the pack.** I send `GFC-FrameExportKit-v2.1.1.zip` (about 130 MB, mostly ffmpeg). They right-click → *Extract All*. Running from inside the zip is detected and explained.
 2. **Start.** Either drag a folder of clips onto `START HERE.bat`, or double-click it and drag the folder into the window when asked.
 3. **First run only:** a short notice of what is collected, then four prompts, saved to `config/user.json`:
    - name / handle (becomes the source id)
@@ -51,7 +51,7 @@ The frames they send are a **source of truth** in my pipeline (the masters are g
 Example session (abridged):
 
 ```text
-GFC Frame Export Kit v2.1.0
+GFC Frame Export Kit v2.1.1
 Drag the folder with your clips into this window, then press Enter:
 > "D:\Videos\NVIDIA\VALORANT"
 
@@ -88,7 +88,7 @@ START HERE.bat <folder> [--game Valorant|Other|Mixed] [--other-name Apex_Legends
 ## 3. What I ship (package layout)
 
 ```text
-GFC-FrameExportKit-v2.1.0/
+GFC-FrameExportKit-v2.1.1/
   START HERE.bat                 # launcher (drag a folder onto it)
   README.txt                     # one page, plain language (template in §14)
   app/                           # pure-stdlib Python source (readable)
@@ -343,7 +343,7 @@ ffmpeg -hide_banner -nostdin -loglevel error -y -i <file> -map 0:<v> -an -sn -dn
        -fps_mode passthrough -progress pipe:1 <stage>/tmp_crf<N>.mp4
 ```
 
-- **GPU first, libx264 fallback (D28, revised 2026-11-17).** With recipe `encoder: "auto"` the kit self-tests `h264_d3d12va` (Direct3D 12, one API for NVIDIA / AMD / Intel, Windows 11) at startup and encodes each CRF tier at constant QP `gpu_qp[N]` (45 → 51, the H.264 maximum and the nearest match to x264 CRF 45). Frames reach the encoder as `format=nv12,hwupload` after the tone-map / even-crop filters. Each vendor's encoder leaves its own artifacts; that is accepted, and every image row records `encoder` and `encoder_rc` so ingest can see which tier came from where.
+- **GPU first, libx264 fallback (D28, revised 2026-11-17; `-bf 0` in 2.1.1).** With recipe `encoder: "auto"` the kit self-tests `h264_d3d12va` (Direct3D 12, one API for NVIDIA / AMD / Intel, Windows 11) at startup and encodes each CRF tier at constant QP `gpu_qp[N]` (45 → 51, the H.264 maximum and the nearest match to x264 CRF 45) with `-bf 0` so NVIDIA drivers do not turn on B-frames. Frames reach the encoder as `format=nv12,hwupload` after the tone-map / even-crop filters. Each vendor's encoder leaves its own artifacts; that is accepted, and every image row records `encoder` and `encoder_rc` so ingest can see which tier came from where.
 - **GPU decode is separate from the encoder.** For each codec and bit depth, the first clip that uses it is decoded twice, first 8 frames on the GPU (`-hwaccel d3d11va`) and on the CPU, compared with `framemd5`. Only identical pixels allow GPU decode for that codec, and then it is used for every read of the source (full tier and the encode input), whichever encoder runs. The intermediate H.264 file is always decoded on the CPU, which is faster for it (4K120 test: 18 s against 47 s, because copying frames back from the GPU dominates). A GPU decode that fails mid-clip is redone on the CPU. The full-tier stills, the training data, are therefore byte-identical whether a PC decodes on the GPU or not. The result per codec is in `pack_manifest.json` (`encoder.decode`).
 - **Fallback is per tier and always warns.** No working GPU encoder at startup → CPU for the run + warning with the reason. The startup self-test checks the frame count and the picture (PSNR of the 30-frame test encode against its source, at least 18 dB). A GPU encode that errors, yields no frames, whose timestamps differ from the full tier by more than half a frame, or whose first, middle or last still is below 18 dB PSNR against the full-tier still of the same slot → that tier is discarded and redone with libx264 + a warning (and `gpu_fallback` in `clips.csv`). QP 51 measures far above 18 dB; green, black or garbled frames far below. Any ffmpeg call whose progress stops for 300 s is killed: on the GPU that is a fallback like any other failure, on the CPU the clip fails and is reported. Three clips in a row falling back → the rest of the run uses the CPU. The summary repeats the warning. `--cpu` forces CPU decode and x264 encode silently; `encoder: "x264"` forces x264 encode (GPU decode still applies). Level is pinned to 5.2 above 4K60 macroblock rates because drivers refuse to open the encoder otherwise.
 - `-fps_mode passthrough` keeps frames 1:1, so the same sampler picks the same frames in every tier. The temp is `.mp4` (exact timestamps; `.mkv` rounds to 1 ms). Deleted after extraction.
@@ -416,7 +416,7 @@ CSV + JSON side by side (D20). All paths inside manifests are relative to the pa
   "schema": "gfc.pack/1",
   "pack_id": "6f1c0e5e-2b7d-4c55-8a1e-0d9b3c7a5f10",
   "created_utc": "2026-11-20T03:44:12Z",
-  "tool": { "name": "gfc-frame-export", "version": "2.1.0", "source_commit": "abc1234" },
+  "tool": { "name": "gfc-frame-export", "version": "2.1.1", "source_commit": "abc1234" },
   "recipe": { "...": "resolved recipe.json with crf_list as a list, plus sampler: bucket_v1" },
   "ffmpeg": { "ffmpeg_version": "n8.1.x-...", "ffprobe_version": "n8.1.x-...", "build": "bundled", "x264_core": "x264 - core 165 r3222 ..." },
   "host": { "os": "Windows-10.0.26100", "cpu_count": 16, "python": "3.13.x", "tz_name": "Eastern Standard Time", "utc_offset_min": -300 },
@@ -525,6 +525,10 @@ Zip ≈ unzipped (stored JPEGs).
 | Low disk space | Pre-checks; graceful stop; resumable |
 | Interrupted run | Per-clip `done.json`; same folder + game + recipe resumes |
 | Watermarks / overlays (Medal, FPS counters) | Kept (gameplay pixels); `encoder_tag` + notes allow shortcut analysis later |
+
+### 9b. Known issues
+
+- **NVIDIA GPU encode (fixed in 2.1.1, confirmation pending).** Before 2.1.1 the D3D12 self-test failed on NVIDIA cards when the driver defaulted to B-frames at QP 51 (`using intra, p- and b-frames… encode failed`), so every run fell back to the CPU encoder. 2.1.1 sets `-bf 0` on all GPU encodes (the low tier gains nothing from B-frames). On the RX 9070 XT the encode is byte-identical with and without the flag. An NVIDIA-card rerun of kit 2.1.1 is still needed to confirm the self-test passes there.
 
 **Label hints** (case-insensitive, on folder and file names): `valorant` → Valorant; `league of legends`, `league_of_legends`, `league-of-legends`, `leagueoflegends`, whole-word `lol` → League_of_Legends; `counter-strike`, `counter strike`, `counter_strike`, `cs2`, `csgo` → CS2; `minecraft` → Minecraft; `overwatch` → Overwatch_2; `marvel rivals`, `marvel_rivals`, `marvel-rivals`, `marvelrivals` → Marvel_Rivals. Steam clip folders `clip_<appid>_…`: 730 → CS2, 2357570 → Overwatch_2, 2767030 → Marvel_Rivals. The table lives in code next to the game list.
 

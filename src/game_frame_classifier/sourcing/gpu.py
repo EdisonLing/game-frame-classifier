@@ -198,8 +198,10 @@ def encode_args(qp: int, width: int = 0, height: int = 0, fps: float = 0.0, gop:
 
     gop sets the keyframe interval in frames; 0 keeps the driver default (120 frames on the
     RX 9070 XT, which at 120 fps puts every 5 s sample exactly on a keyframe).
+    -bf 0 turns B-frames off: NVIDIA's driver default enables them and the self-test then fails
+    at QP 51 (H.264 max); AMD already used only I/P and stays byte-identical with this flag.
     """
-    args = ["-c:v", GPU_ENCODER, "-rc_mode", "CQP", "-qp", str(qp)]
+    args = ["-c:v", GPU_ENCODER, "-rc_mode", "CQP", "-qp", str(qp), "-bf", "0"]
     if gop > 0:
         args += ["-g", str(gop)]
     macroblocks = -(-width // 16) * -(-height // 16)
