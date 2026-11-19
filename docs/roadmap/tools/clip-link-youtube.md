@@ -1,4 +1,4 @@
-# YouTube links, channel listing and content types (`gfc-fetch-clips` 1.2.1, `gfc-sort-clips` 1.2.1)
+# YouTube links, channel listing and content types (`gfc-fetch-clips` 1.2.1, `gfc-sort-clips` 1.2.2)
 
 **Stage:** 1 — Collection  
 **Status:** implemented  
@@ -23,7 +23,7 @@
 | `esports_vod` | Esports broadcast: tournament overlay and frames other than gameplay (casters, replays, desk) | `Q` |
 | `gameplay` | Pure gameplay, no overlay beyond the game's own HUD | `W` |
 | `streamer_overlay` | Gameplay with a streamer overlay (facecam, chat, alerts) | `E` |
-| `mixed` | Does not cleanly fit one type (several kinds in one clip); shelf for later scene splitting | `R` |
+| `mixed` | Flag: clip mixes kinds / needs scene splitting later (can combine with a kind, e.g. `gameplay,mixed`) | `R` |
 
 Empty means not marked. Values outside the table are refused (exit 2 in the CLI, 400 in the page). Content type is **in addition to** the game label (both can be set). Keys are `Q`/`W`/`E`/`R` on the row under `1`–`4` for speed; the page legend lists them; `U` undoes the last content-type or label row if the wrong key was hit.
 
@@ -38,11 +38,11 @@ Empty means not marked. Values outside the table are refused (exit 2 in the CLI,
 5. **Channel listing.** `gfc-fetch-clips --list-channel <channel URL> [--game <Game>] [--content-type <value>] [--note "<text>"] [--out <file>]` lists the channel's videos with flat extraction (no download), newest first, skipping videos that are live now; writes `data/clip_links/<YYYY-MM-DD>_yt_<handle>.txt` (or `--out`) with a `#` header (channel, channel id, date, note, count) and one `<url>,<Game>,<content_type>` line per video (empty fields where not given); adds the channel to the uploader file as in step 2 if it is not there, and with `--content-type` also tags the channel (appends a row with that `content_type`). Downloads nothing.
 6. **Sorter.**
    - `--unlabelled`: the page shows only clips with no game hint and no label, disabled or trash decision. Other flags work with it.
-   - Keys `Q` / `W` / `E` / `R` set the clip's content type (pressing the current one again clears it), origin `sorter`; the page shows the type and its origin; the hint's type and origin are pre-filled. Content type is in addition to the game label (both can be set); it does not count as deciding the clip, and `U` undoes the clip's most recent row of either kind. A clip labelled with a game and type `mixed` is still copied on apply (shelved in `data/raw` for a later scene splitter).
-   - `decisions.csv` gains a `content_type` column and a decision value `content`.
+   - Keys `Q` / `W` / `E` set one content kind (press again to clear); `R` toggles **mixed** additively (e.g. gameplay+mixed → stored `gameplay,mixed`). Origin `sorter`. Pressing the selected game again unselects it (keeps content type). `S` skip and `C` reset clear game and content types (fresh for later); skip advances, reset stays. Content type does not count as deciding the clip; `U` undoes the newest row. A labelled clip whose type includes `mixed` is still copied on apply (shelved in `data/raw`).
+   - `decisions.csv` gains a `content_type` column and decision values `content`, `unlabel`, `reset`.
    - `--accept-hints` also takes the hint's content type.
    - Apply writes `data/raw/<Game>/<source>/content_types.csv` (`file, content_type, content_type_origin`; Other: under `_other/<name>/<source>/`), adding or replacing that file's row, for every copied clip with a content type.
-7. **Into the pipeline.** `gfc-make-sources` reads `content_types.csv` beside the videos and writes `content_type` and `content_type_origin` into each `clip.json` (empty when absent). Files tagged `content_type=mixed` are skipped (`status_detail=mixed_content_type`) and never enter `frame_sources` until a scene splitter can produce accurately labelled segments. `gfc-derive-frames` adds both columns to `clips_index` (empty for clips without them). Other tools do not filter on content type yet; run reports can break results down by it.
+7. **Into the pipeline.** `gfc-make-sources` reads `content_types.csv` beside the videos and writes `content_type` and `content_type_origin` into each `clip.json` (empty when absent). Files whose type includes `mixed` (alone or with a kind) are skipped (`status_detail=mixed_content_type`) and never enter `frame_sources` until a scene splitter can produce accurately labelled segments. `gfc-derive-frames` adds both columns to `clips_index` (empty for clips without them). Other tools do not filter on content type yet; run reports can break results down by it.
 
 ## Usage
 

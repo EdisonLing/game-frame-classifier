@@ -12,7 +12,14 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-from game_frame_classifier.clip_fetch.links import CONTENT_TYPES
+from game_frame_classifier.clip_fetch.links import (
+    CONTENT_TYPES,
+    KIND_CONTENT_TYPES,
+    MIXED_CONTENT_TYPE,
+    parse_content_type,
+    toggle_content_kind,
+    toggle_mixed,
+)
 from game_frame_classifier.sourcing.labels import GAMES, OTHER, normalize_other_name
 
 from .scan import Clip
@@ -20,7 +27,9 @@ from .sheets import SheetWorker, sheet_path
 from .store import append, first_undecided, last_decision_quick_id, other_names, replay
 
 PAGE_PATH = Path(__file__).with_name("page.html")
-VALID_DECISIONS = frozenset({"label", "disabled", "trash", "skip", "content"})
+VALID_DECISIONS = frozenset(
+    {"label", "disabled", "trash", "skip", "content", "unlabel", "reset"}
+)
 
 
 class Session:
@@ -199,17 +208,40 @@ def make_handler(session: Session) -> type[BaseHTTPRequestHandler]:
                 else:
                     other_name = ""
                 content_type = ""
+            elif decision in ("unlabel", "reset", "skip", "disabled", "trash"):
+                game = ""
+                other_name = ""
+                content_type = ""
             else:
                 game = ""
                 other_name = ""
                 content_type = ""
             with session.lock:
+                state_now = replay(session.session_dir)
+                entry_now = state_now.get(clip.quick_id) or {}
+                if decision == "label":
+                    # Pressing the selected game again unselects it (keeps content type).
+                    if (
+                        entry_now.get("decision") == "label"
+                        and entry_now.get("game") == game
+                        and (game != OTHER or (entry_now.get("other_name") or "") == other_name)
+                    ):
+                        decision = "unlabel"
+                        game = ""
+                        other_name = ""
                 if decision == "content":
-                    # Toggle: pressing the current type again clears it.
-                    state_now = replay(session.session_dir)
-                    current_ct, _cto = _content_fields(clip, state_now.get(clip.quick_id) or {})
-                    if content_type and content_type == current_ct:
-                        content_type = ""
+                    # Token from the key: kind toggles among Q/W/E; R toggles mixed additively.
+                    current_ct, _cto = _content_fields(clip, entry_now)
+                    try:
+                        if content_type == MIXED_CONTENT_TYPE:
+                            content_type = toggle_mixed(current_ct)
+                        elif content_type in KIND_CONTENT_TYPES:
+                            content_type = toggle_content_kind(current_ct, content_type)
+                        else:
+                            content_type = parse_content_type(content_type) if content_type else ""
+                    except ValueError:
+                        self._json(400, {"error": "invalid content type"})
+                        return
                 append(
                     session.session_dir,
                     clip.quick_id,
@@ -219,8 +251,8 @@ def make_handler(session: Session) -> type[BaseHTTPRequestHandler]:
                     other_name=other_name,
                     content_type=content_type,
                 )
-                # Content type does not advance; labels do.
-                if decision == "content":
+                # Content type and unlabel stay on the clip; other decisions advance.
+                if decision in ("content", "unlabel", "reset"):
                     nxt = i
                 else:
                     nxt = i + 1

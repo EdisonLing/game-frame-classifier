@@ -966,6 +966,21 @@ def test_proposed_source_prefixes():
     assert proposed_source("Uploader A!", prefix="friend") == "friend_uploader_a"
     assert set(CONTENT_TYPES) == {"esports_vod", "gameplay", "streamer_overlay", "mixed"}
     assert parse_content_type("mixed") == "mixed"
+    assert parse_content_type("gameplay,mixed") == "gameplay,mixed"
+    from game_frame_classifier.clip_fetch.links import (
+        content_type_has_mixed,
+        join_content_types,
+        toggle_content_kind,
+        toggle_mixed,
+    )
+
+    assert join_content_types("gameplay", True) == "gameplay,mixed"
+    assert toggle_mixed("gameplay") == "gameplay,mixed"
+    assert toggle_mixed("gameplay,mixed") == "gameplay"
+    assert toggle_content_kind("gameplay,mixed", "gameplay") == "mixed"
+    assert toggle_content_kind("mixed", "streamer_overlay") == "streamer_overlay,mixed"
+    assert content_type_has_mixed("gameplay,mixed")
+    assert not content_type_has_mixed("gameplay")
 
 def test_cli_prints_next_sort_and_no_sort_skips_launch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys):
     from collections import Counter

@@ -348,6 +348,33 @@ def test_content_type_set_toggle_undo_does_not_count_as_decision(tmp_path):
     assert filter_unlabelled(clips, state) == [clips[0]]
 
 
+def test_mixed_combines_with_kind_and_skip_reset_unlabel(tmp_path):
+    session = tmp_path / "sess"
+    c1 = "qid_eeeeeeee"
+    append(session, c1, "u.mp4", "content", content_type="gameplay,mixed")
+    append(session, c1, "u.mp4", "label", game="Valorant")
+    state = replay(session)
+    assert state[c1]["content_type"] == "gameplay,mixed"
+    assert state[c1]["decision"] == "label"
+    append(session, c1, "u.mp4", "unlabel")
+    state = replay(session)
+    assert state[c1]["decision"] == ""
+    assert state[c1]["game"] == ""
+    assert state[c1]["content_type"] == "gameplay,mixed"
+    append(session, c1, "u.mp4", "label", game="CS2")
+    append(session, c1, "u.mp4", "skip")
+    state = replay(session)
+    assert state[c1]["decision"] == "skip"
+    assert state[c1]["content_type"] == ""
+    append(session, c1, "u.mp4", "content", content_type="streamer_overlay")
+    append(session, c1, "u.mp4", "label", game="Valorant")
+    append(session, c1, "u.mp4", "reset")
+    state = replay(session)
+    assert state[c1]["decision"] == ""
+    assert state[c1]["game"] == ""
+    assert state[c1]["content_type"] == ""
+
+
 @requires_ffmpeg
 def test_apply_mixed_content_type_still_copies(tmp_path):
     folder = tmp_path / "inbox"
@@ -358,16 +385,16 @@ def test_apply_mixed_content_type_still_copies(tmp_path):
     recipe = load_recipe(RECIPE)
     clips = scan(folder, recipe, tools, {}, source="tester")
     qid = clips[0].quick_id
-    append(session, qid, "clip.mp4", "content", content_type="mixed")
+    append(session, qid, "clip.mp4", "content", content_type="gameplay,mixed")
     append(session, qid, "clip.mp4", "label", game="Valorant")
     state = replay(session)
-    assert state[qid]["content_type"] == "mixed"
+    assert state[qid]["content_type"] == "gameplay,mixed"
     assert state[qid]["decision"] == "label"
     actions = plan(session, folder, clips, "tester", data_root)
     report = run(actions, dry_run=False)
     assert report["counts"]["copied"] == 1
     ct = (data_root / "raw" / "Valorant" / "tester" / "content_types.csv").read_text(encoding="utf-8")
-    assert "mixed" in ct and "clip.mp4" in ct
+    assert "gameplay,mixed" in ct and "clip.mp4" in ct
 
 
 @requires_ffmpeg

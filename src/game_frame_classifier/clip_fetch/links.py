@@ -22,10 +22,71 @@ SLUG_GAMES: dict[str, str] = {
     "marvel-rivals": "Marvel_Rivals",
 }
 
-CONTENT_TYPES = ("esports_vod", "gameplay", "streamer_overlay", "mixed")
+KIND_CONTENT_TYPES = ("esports_vod", "gameplay", "streamer_overlay")
+MIXED_CONTENT_TYPE = "mixed"
+CONTENT_TYPES = KIND_CONTENT_TYPES + (MIXED_CONTENT_TYPE,)
 
 OLD_MEDAL_ERROR = "old Medal link form; ask for the full medal.tv/games/... link"
 UNSUPPORTED_SITE_ERROR = "unsupported site: only Medal and YouTube links are supported"
+
+
+def split_content_types(raw: str) -> tuple[str, bool]:
+    """Parse stored content_type into (kind, mixed).
+
+    ``kind`` is one of ``KIND_CONTENT_TYPES`` or empty. ``mixed`` is independent
+    and may combine with a kind (e.g. ``gameplay,mixed``).
+    """
+    kind = ""
+    mixed = False
+    for part in (raw or "").split(","):
+        token = part.strip()
+        if not token:
+            continue
+        if token == MIXED_CONTENT_TYPE:
+            mixed = True
+        elif token in KIND_CONTENT_TYPES:
+            kind = token
+        else:
+            raise ValueError(f"invalid content type: {token!r}")
+    return kind, mixed
+
+
+def join_content_types(kind: str = "", mixed: bool = False) -> str:
+    """Canonical storage: ``gameplay``, ``mixed``, ``gameplay,mixed``, or empty."""
+    kind = (kind or "").strip()
+    if kind and kind not in KIND_CONTENT_TYPES:
+        raise ValueError(f"invalid content type: {kind!r}")
+    parts: list[str] = []
+    if kind:
+        parts.append(kind)
+    if mixed:
+        parts.append(MIXED_CONTENT_TYPE)
+    return ",".join(parts)
+
+
+def content_type_has_mixed(raw: str) -> bool:
+    """True when the stored value includes the mixed flag."""
+    try:
+        _kind, mixed = split_content_types(raw)
+    except ValueError:
+        return (raw or "").strip() == MIXED_CONTENT_TYPE
+    return mixed
+
+
+def toggle_content_kind(current: str, kind: str) -> str:
+    """Set or clear a kind (Q/W/E); mixed is preserved. Same kind again clears it."""
+    if kind not in KIND_CONTENT_TYPES:
+        raise ValueError(f"invalid content type: {kind!r}")
+    cur_kind, mixed = split_content_types(current)
+    if cur_kind == kind:
+        return join_content_types("", mixed)
+    return join_content_types(kind, mixed)
+
+
+def toggle_mixed(current: str) -> str:
+    """Add or remove mixed (R); kind is preserved."""
+    kind, mixed = split_content_types(current)
+    return join_content_types(kind, not mixed)
 
 
 @dataclass(frozen=True)
@@ -45,13 +106,18 @@ class LinkEntry:
 
 
 def parse_content_type(raw: str) -> str:
-    """Return a valid content type, or raise ValueError."""
+    """Return a canonical content type string, or raise ValueError.
+
+    Accepts one token (``gameplay``, ``mixed``, …) or a comma-separated
+    combination of one kind plus optional ``mixed`` (``gameplay,mixed``).
+    """
     value = (raw or "").strip()
     if not value:
         return ""
-    if value not in CONTENT_TYPES:
-        raise ValueError(f"invalid content type: {raw!r}")
-    return value
+    if "," not in value and value in CONTENT_TYPES:
+        return value
+    kind, mixed = split_content_types(value)
+    return join_content_types(kind, mixed)
 
 
 def parse_game_field(raw: str) -> tuple[str, str]:

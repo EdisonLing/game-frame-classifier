@@ -18,9 +18,12 @@ DECISION_COLUMNS = (
     "other_name",
     "content_type",
 )
-VALID_DECISIONS = frozenset({"label", "disabled", "trash", "skip", "undo", "content"})
+VALID_DECISIONS = frozenset(
+    {"label", "disabled", "trash", "skip", "undo", "content", "unlabel", "reset"}
+)
 LASTING_DECISIONS = frozenset({"label", "disabled", "trash"})
-LABEL_DECISIONS = frozenset({"label", "disabled", "trash", "skip"})
+# skip/reset clear game (+ content for skip/reset); unlabel clears game only.
+LABEL_DECISIONS = frozenset({"label", "disabled", "trash", "skip", "unlabel", "reset"})
 
 
 def _decisions_path(session_dir: Path) -> Path:
@@ -79,21 +82,43 @@ def _collapse(entries: list[dict[str, Any]]) -> dict[str, Any] | None:
             content_type = entry.get("content_type") or ""
             content_type_origin = "sorter"
             continue
+        if kind == "reset":
+            has_label = False
+            decision = ""
+            game = ""
+            other_name = ""
+            content_type = ""
+            content_type_origin = ""
+            rel_path = entry.get("rel_path") or rel_path
+            utc = entry.get("utc") or utc
+            continue
         if kind in LABEL_DECISIONS:
             has_label = True
-            decision = kind
-            game = entry.get("game") or ""
-            other_name = entry.get("other_name") or ""
+            if kind == "unlabel":
+                decision = ""
+                game = ""
+                other_name = ""
+            elif kind == "skip":
+                decision = "skip"
+                game = ""
+                other_name = ""
+                # Skip parks the clip as fresh for next time.
+                content_type = ""
+                content_type_origin = ""
+            else:
+                decision = kind
+                game = entry.get("game") or ""
+                other_name = entry.get("other_name") or ""
             rel_path = entry.get("rel_path") or ""
             utc = entry.get("utc") or ""
             # accept-hints may carry content type on the label row
             row_ct = entry.get("content_type") or ""
-            if row_ct and not content_type:
+            if row_ct and kind == "label" and not content_type:
                 content_type = row_ct
                 content_type_origin = entry.get("content_type_origin") or "video"
     if not has_label and not content_type and content_type_origin != "sorter":
         # content cleared (empty) still counts as sorter state when last content row cleared it
-        if not any(e.get("decision") == "content" for e in entries):
+        if not any(e.get("decision") in ("content", "reset", "skip") for e in entries):
             return None
     out: dict[str, Any] = {
         "decision": decision,

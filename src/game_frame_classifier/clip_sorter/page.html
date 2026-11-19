@@ -231,7 +231,7 @@ dialog button {
       </dl>
     </div>
     <p class="problem" id="problem"></p>
-    <p class="hint">Press a key to label. Content type is optional and separate from the game.</p>
+    <p class="hint">Game and content type are separate. Mixed (R) can combine with a kind. Press a selected game again to unselect. C resets the clip.</p>
   </aside>
 </div>
 <section class="legend" aria-label="Keyboard shortcuts">
@@ -246,7 +246,7 @@ dialog button {
         <li data-content="esports_vod"><kbd>Q</kbd> Esports VOD</li>
         <li data-content="gameplay"><kbd>W</kbd> Gameplay</li>
         <li data-content="streamer_overlay"><kbd>E</kbd> Streamer overlay</li>
-        <li data-content="mixed"><kbd>R</kbd> Mixed</li>
+        <li data-content="mixed"><kbd>R</kbd> Mixed (with kind)</li>
       </ul>
     </div>
     <div>
@@ -254,7 +254,8 @@ dialog button {
       <ul id="legendActions">
         <li data-action="disabled"><kbd>D</kbd> Disable</li>
         <li data-action="trash"><kbd>X</kbd> Trash</li>
-        <li data-action="skip"><kbd>S</kbd> Skip</li>
+        <li data-action="skip"><kbd>S</kbd> Skip (fresh)</li>
+        <li data-action="reset"><kbd>C</kbd> Reset all</li>
         <li><kbd>Enter</kbd> Accept suggestion</li>
         <li><kbd>U</kbd> Undo last</li>
         <li><kbd>←</kbd>/<kbd>→</kbd> Previous / next</li>
@@ -329,6 +330,16 @@ dialog button {
     return d === "label" || d === "disabled" || d === "trash";
   }
 
+  function contentParts(ct) {
+    return new Set(String(ct || "").split(",").map((s) => s.trim()).filter(Boolean));
+  }
+
+  function formatContentType(ct) {
+    const parts = [...contentParts(ct)];
+    if (!parts.length) return "";
+    return parts.map((p) => displayName(p)).join(" + ");
+  }
+
   function decidedCount() {
     if (!state) return 0;
     return state.clips.filter((c) => lasting(c.decision)).length;
@@ -354,8 +365,9 @@ dialog button {
       const on = c.decision === "label" && li.dataset.game === c.game;
       li.classList.toggle("active", on);
     });
+    const parts = contentParts(c.content_type);
     el("legendContent").querySelectorAll("li").forEach((li) => {
-      li.classList.toggle("active", !!c.content_type && li.dataset.content === c.content_type);
+      li.classList.toggle("active", parts.has(li.dataset.content));
     });
     el("legendActions").querySelectorAll("li[data-action]").forEach((li) => {
       li.classList.toggle("active", li.dataset.action === c.decision);
@@ -387,7 +399,7 @@ dialog button {
 
     if (c.content_type) {
       const ctor = c.content_type_origin ? " · " + c.content_type_origin : "";
-      setTag("tagContent", displayName(c.content_type) + ctor, false);
+      setTag("tagContent", formatContentType(c.content_type) + ctor, false);
     } else {
       setTag("tagContent", "(none)", true);
     }
@@ -561,6 +573,7 @@ dialog button {
     if (lower === "d") { ev.preventDefault(); await decide("disabled"); return; }
     if (lower === "x") { ev.preventDefault(); await decide("trash"); return; }
     if (lower === "s") { ev.preventDefault(); await decide("skip"); return; }
+    if (lower === "c") { ev.preventDefault(); await decide("reset"); return; }
     if (lower === "u") {
       ev.preventDefault();
       try {

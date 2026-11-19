@@ -241,6 +241,8 @@ def test_write_clip_json_includes_content_type(tmp_path):
 def test_is_mixed_content_type():
     assert is_mixed_content_type("mixed")
     assert is_mixed_content_type(" mixed ")
+    assert is_mixed_content_type("gameplay,mixed")
+    assert is_mixed_content_type("mixed,gameplay")
     assert not is_mixed_content_type("gameplay")
     assert not is_mixed_content_type("esports_vod")
     assert not is_mixed_content_type("streamer_overlay")

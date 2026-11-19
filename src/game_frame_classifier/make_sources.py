@@ -364,7 +364,7 @@ def place_clip(frames_root: Path, dest: Path) -> None:
 
 
 # Shelved until a scene splitter can emit accurately labelled segments.
-MIXED_CONTENT_TYPE = "mixed"
+# Stored value may be "mixed" or "gameplay,mixed" (mixed is additive with a kind).
 MIXED_SKIP_DETAIL = "mixed_content_type"
 
 
@@ -388,7 +388,9 @@ def read_content_types(source_dir: Path) -> dict[str, tuple[str, str]]:
 
 def is_mixed_content_type(content_type: str) -> bool:
     """True when the clip must stay out of frame_sources until scene splitting."""
-    return (content_type or "").strip() == MIXED_CONTENT_TYPE
+    from game_frame_classifier.clip_fetch.links import content_type_has_mixed
+
+    return content_type_has_mixed(content_type or "")
 
 
 def write_clip_json(

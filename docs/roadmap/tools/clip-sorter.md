@@ -54,19 +54,21 @@ Each clip gets one game decision; the latest one counts, and every decision can 
 
 | Key | Decision | On apply |
 |---|---|---|
-| `1`–`6` | One of the six games, in `sourcing.labels.GAMES` order (Valorant, League of Legends, CS2, Minecraft, Overwatch 2, Marvel Rivals) | Copied to `data/raw/<Game>/<source>/<relative path>` |
-| `7` | Other; the page asks for the content name the first time (list of names used before, or a new one, normalised with `normalize_other_name`) | Copied to `data/raw/_other/<name>/<source>/<relative path>` |
-| `Q` / `W` / `E` / `R` | Content type (in addition to the game): esports VOD / gameplay / streamer overlay / mixed (press current again to clear); origin `sorter`. Row under `1`–`4`; legend on the page; `U` undoes a wrong key | Written to `content_types.csv` beside copied clips (`mixed` still copies when a game is set; `gfc-make-sources` skips those until scene splitting) |
+| `1`–`6` | One of the six games (press the selected game again to unselect; content type kept) | Copied to `data/raw/<Game>/<source>/<relative path>` |
+| `7` | Other (same toggle-off); asks for the content name the first time (`normalize_other_name`) | Copied to `data/raw/_other/<name>/<source>/<relative path>` |
+| `Q` / `W` / `E` | Content kind: esports VOD / gameplay / streamer overlay (one kind; press again to clear); origin `sorter` | Written to `content_types.csv` |
+| `R` | **Mixed** flag (additive with a kind, e.g. gameplay+mixed); press again to clear mixed | Same CSV; `gfc-make-sources` skips any value that includes `mixed` until scene splitting |
 | `D` | **Disabled**: not confident this clip should be used; kept for a later look | Nothing; stays listed as disabled in the report |
 | `X` | **Trash**: confident it should not be used | Moved to `<folder>/_archive/<relative path>` |
-| `S` | Skip for now (undecided) | Nothing |
+| `S` | Skip for now — clears game and content types (fresh for next time) | Nothing |
+| `C` | **Reset** — clear game and content types; stay on the clip | Nothing |
 | `Enter` | Accept the suggested label | As the label |
 | `U` | Undo the clip's most recent row (label or content type) | — |
 | `←` / `→` | Previous / next clip without deciding | — |
 | `P` | Open the clip in the default video player (`os.startfile`) | — |
 | `F` | Jump to the first undecided clip | — |
 
-After a game decision the page moves to the next clip; content-type keys do not.
+After a game label the page moves to the next clip; unselect, content-type keys, and reset stay on the clip.
 
 ## Behaviour
 
