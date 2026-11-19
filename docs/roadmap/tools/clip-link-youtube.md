@@ -20,12 +20,12 @@
 
 | Value | Meaning | Sorter key |
 |---|---|---|
-| `esports_vod` | Esports broadcast: tournament overlay and frames other than gameplay (casters, replays, desk) | `V` |
-| `gameplay` | Pure gameplay, no overlay beyond the game's own HUD | `G` |
-| `streamer_overlay` | Gameplay with a streamer overlay (facecam, chat, alerts) | `O` |
-| `mixed` | Does not cleanly fit one type (several kinds in one clip); shelf for later scene splitting | `M` |
+| `esports_vod` | Esports broadcast: tournament overlay and frames other than gameplay (casters, replays, desk) | `Q` |
+| `gameplay` | Pure gameplay, no overlay beyond the game's own HUD | `W` |
+| `streamer_overlay` | Gameplay with a streamer overlay (facecam, chat, alerts) | `E` |
+| `mixed` | Does not cleanly fit one type (several kinds in one clip); shelf for later scene splitting | `R` |
 
-Empty means not marked. Values outside the table are refused (exit 2 in the CLI, 400 in the page). Keys are mnemonic letters (shown in the page legend); `U` undoes the last content-type or label row if the wrong key was hit.
+Empty means not marked. Values outside the table are refused (exit 2 in the CLI, 400 in the page). Content type is **in addition to** the game label (both can be set). Keys are `Q`/`W`/`E`/`R` on the row under `1`–`4` for speed; the page legend lists them; `U` undoes the last content-type or label row if the wrong key was hit.
 
 **Channel tag.** An uploader (YouTube channel or Medal uploader) can carry a content type meaning "most of this channel's videos are this kind". Its videos inherit it unless a video's own line or the sorter says otherwise. Every clip records where its type came from in `content_type_origin`: `video` (its own line), `channel` (inherited from the channel tag), `sorter` (set or changed in the page), or empty.
 
@@ -38,7 +38,7 @@ Empty means not marked. Values outside the table are refused (exit 2 in the CLI,
 5. **Channel listing.** `gfc-fetch-clips --list-channel <channel URL> [--game <Game>] [--content-type <value>] [--note "<text>"] [--out <file>]` lists the channel's videos with flat extraction (no download), newest first, skipping videos that are live now; writes `data/clip_links/<YYYY-MM-DD>_yt_<handle>.txt` (or `--out`) with a `#` header (channel, channel id, date, note, count) and one `<url>,<Game>,<content_type>` line per video (empty fields where not given); adds the channel to the uploader file as in step 2 if it is not there, and with `--content-type` also tags the channel (appends a row with that `content_type`). Downloads nothing.
 6. **Sorter.**
    - `--unlabelled`: the page shows only clips with no game hint and no label, disabled or trash decision. Other flags work with it.
-   - Keys `V` / `G` / `O` / `M` set the clip's content type (pressing the current one again clears it), origin `sorter`; the page shows the type and its origin; the hint's type and origin are pre-filled. Content type is separate from the label: it does not count as deciding the clip, and `U` undoes the clip's most recent row of either kind. A clip labelled with a game and type `mixed` is still copied on apply (shelved for a later scene splitter).
+   - Keys `Q` / `W` / `E` / `R` set the clip's content type (pressing the current one again clears it), origin `sorter`; the page shows the type and its origin; the hint's type and origin are pre-filled. Content type is in addition to the game label (both can be set); it does not count as deciding the clip, and `U` undoes the clip's most recent row of either kind. A clip labelled with a game and type `mixed` is still copied on apply (shelved for a later scene splitter).
    - `decisions.csv` gains a `content_type` column and a decision value `content`.
    - `--accept-hints` also takes the hint's content type.
    - Apply writes `data/raw/<Game>/<source>/content_types.csv` (`file, content_type, content_type_origin`; Other: under `_other/<name>/<source>/`), adding or replacing that file's row, for every copied clip with a content type.
@@ -56,7 +56,7 @@ gfc-sort-clips data/incoming_clips --unlabelled        # page with only the unla
 
 ## Testing
 
-Unit, with fake metadata, listing and download functions (no network): YouTube link forms; `,Game,content_type` parsing incl. empty game and `Other:<name>`; new channel auto-accepted into `yt_<handle>`; `allowed = no` blocks; `skipped_long`; 720p format string; `unlabelled` file name and summary count; hints with content type; channel listing file, uploader row and channel tag; `--tag-uploader` appends a row; videos inherit the channel tag with origin `channel` and a line's own type wins with origin `video`; invalid content type refused; sorter `--unlabelled` filter; `V`/`G`/`O`/`M` set, toggle and undo; content row does not count as a decision; `--accept-hints` carries content type; apply writes and updates `content_types.csv` (including `mixed`); make-sources and derive carry `content_type`; every existing Medal and sorter test still passes.
+Unit, with fake metadata, listing and download functions (no network): YouTube link forms; `,Game,content_type` parsing incl. empty game and `Other:<name>`; new channel auto-accepted into `yt_<handle>`; `allowed = no` blocks; `skipped_long`; 720p format string; `unlabelled` file name and summary count; hints with content type; channel listing file, uploader row and channel tag; `--tag-uploader` appends a row; videos inherit the channel tag with origin `channel` and a line's own type wins with origin `video`; invalid content type refused; sorter `--unlabelled` filter; `Q`/`W`/`E`/`R` set, toggle and undo; content row does not count as a decision; `--accept-hints` carries content type; apply writes and updates `content_types.csv` (including `mixed`); make-sources and derive carry `content_type`; every existing Medal and sorter test still passes.
 
 ## Acceptance checks
 
@@ -75,6 +75,6 @@ Written for an agent that builds exactly this and decides nothing; ask the user 
 3. `clip_fetch/download.py`: YouTube metadata fields, format string, `--max-minutes`, naming, unlabelled count, `hints.csv` with `content_type`; `run` takes `LinkEntry` items.
 4. `clip_fetch/channel.py` (new): `ytdlp_flat_list(url)` using `extract_flat="in_playlist"` on `<url>/videos` for a channel root (`@<handle>` or `/channel/<id>`); `list_channel(url, *, game, content_type, note, out, users_path, lister=ytdlp_flat_list, now)`.
 5. `clip_fetch/cli.py`: `--list-channel`, `--tag-uploader`, `--game`, `--content-type`, `--note`, `--out`, `--max-minutes`; `__version__ = "1.2.0"`.
-6. `clip_sorter/`: `scan` reads the hint's content type; `store` (`content_type` column, `content` decision, replay keeps label state and content type apart, undo removes the clip's newest row); `server` / `page.html` (`V`/`G`/`O`/`M`, display); `cli` (`--unlabelled`); `apply` (`content_types.csv`, `accept_hints` content type); `__version__ = "1.2.1"`.
+6. `clip_sorter/`: `scan` reads the hint's content type; `store` (`content_type` column, `content` decision, replay keeps label state and content type apart, undo removes the clip's newest row); `server` / `page.html` (`Q`/`W`/`E`/`R`, display); `cli` (`--unlabelled`); `apply` (`content_types.csv`, `accept_hints` content type); `__version__ = "1.2.1"`.
 7. `make_sources.py`: read `content_types.csv`; `content_type`, `content_type_origin` in `clip.json`. `derive_frames.py`: both in `CLIPS_INDEX_COLUMNS` (after `other_name`) and in `build_clip_row`.
 8. Docs as in the acceptance checks; tests as above.

@@ -141,7 +141,7 @@ dialog button {
     <p class="problem" id="problem"></p>
     <div class="legend">
       <div><kbd>1</kbd>–<kbd>6</kbd> games · <kbd>7</kbd> Other · <kbd>Enter</kbd> accept suggestion</div>
-      <div><kbd>V</kbd> esports VOD · <kbd>G</kbd> gameplay · <kbd>O</kbd> streamer overlay · <kbd>M</kbd> mixed</div>
+      <div><kbd>Q</kbd> esports VOD · <kbd>W</kbd> gameplay · <kbd>E</kbd> streamer overlay · <kbd>R</kbd> mixed</div>
       <div><kbd>D</kbd> disable · <kbd>X</kbd> trash · <kbd>S</kbd> skip · <kbd>U</kbd> undo last</div>
       <div><kbd>←</kbd>/<kbd>→</kbd> move · <kbd>F</kbd> first undecided · <kbd>P</kbd> open clip</div>
     </div>
@@ -377,10 +377,10 @@ dialog button {
       return;
     }
     const lower = k.length === 1 ? k.toLowerCase() : k;
-    if (lower === "v") { ev.preventDefault(); await setContentType("esports_vod"); return; }
-    if (lower === "g") { ev.preventDefault(); await setContentType("gameplay"); return; }
-    if (lower === "o") { ev.preventDefault(); await setContentType("streamer_overlay"); return; }
-    if (lower === "m") { ev.preventDefault(); await setContentType("mixed"); return; }
+    if (lower === "q") { ev.preventDefault(); await setContentType("esports_vod"); return; }
+    if (lower === "w") { ev.preventDefault(); await setContentType("gameplay"); return; }
+    if (lower === "e") { ev.preventDefault(); await setContentType("streamer_overlay"); return; }
+    if (lower === "r") { ev.preventDefault(); await setContentType("mixed"); return; }
     if (lower === "d") { ev.preventDefault(); await decide("disabled"); return; }
     if (lower === "x") { ev.preventDefault(); await decide("trash"); return; }
     if (lower === "s") { ev.preventDefault(); await decide("skip"); return; }
