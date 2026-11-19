@@ -1,58 +1,79 @@
-# YouTube links and channel listing (`gfc-fetch-clips` 1.2)
+# YouTube links, channel listing and content types (`gfc-fetch-clips` 1.2, `gfc-sort-clips` 1.2)
 
 **Stage:** 1 — Collection  
 **Status:** specified  
-**Back to:** [ROADMAP.md](../ROADMAP.md) · [clip link downloader](clip-link-downloader.md) · [automatic sources](clip-link-auto-source.md)
+**Back to:** [ROADMAP.md](../ROADMAP.md) · [clip link downloader](clip-link-downloader.md) · [automatic sources](clip-link-auto-source.md) · [clip sorter](clip-sorter.md)
 
 ## What it does
 
-Adds YouTube video links to `gfc-fetch-clips`, and a command that lists every video of a YouTube channel into a links file once the channel owner has given permission. Each channel becomes its own source, like a Medal uploader. A YouTube channel is never downloaded without a recorded permission.
+- `gfc-fetch-clips` accepts YouTube video links. Each channel becomes its own source, like a Medal uploader.
+- `--list-channel` writes every video link of a channel into a links file.
+- Videos with no game given are flagged **unlabelled**; the sorter can open just those.
+- Every clip can optionally carry a **content type** (esports VOD, pure gameplay, gameplay with streamer overlay), set in the links file, for a whole channel, or in the sorter. It travels with the clip into `clips_index` for analysis.
 
 ## Rules
 
-- **Permission first.** A YouTube channel's videos are downloaded only when its row in the uploader file has `allowed = yes`. New YouTube channels are never accepted automatically (unlike Medal uploaders): they are added as pending and their links are logged `pending_permission` (exit 4). Permission is recorded by `--list-channel ... --permission "<note>"` or by editing the file.
-- **No account access** (as for Medal): no cookies or logins; only public or unlisted videos.
-- Other sites stay refused.
+- **Permission is assumed.** A link or channel given to the tool means permission was obtained. New YouTube channels are accepted automatically, as Medal uploaders are (decided 2026-11-19).
+- **No account access**: no cookies or logins; public or unlisted videos only. Other sites stay refused.
+
+## Content types
+
+| Value | Meaning | Sorter key |
+|---|---|---|
+| `esports_vod` | Esports broadcast: tournament overlay and frames other than gameplay (casters, replays, desk) | `V` |
+| `gameplay` | Pure gameplay, no overlay beyond the game's own HUD | `G` |
+| `streamer_overlay` | Gameplay with a streamer overlay (facecam, chat, alerts) | `O` |
+
+Empty means not marked. Values outside the table are refused (exit 2 in the CLI, 400 in the page).
+
+**Channel tag.** An uploader (YouTube channel or Medal uploader) can carry a content type meaning "most of this channel's videos are this kind". Its videos inherit it unless a video's own line or the sorter says otherwise. Every clip records where its type came from in `content_type_origin`: `video` (its own line), `channel` (inherited from the channel tag), `sorter` (set or changed in the page), or empty.
 
 ## Behaviour
 
-1. **Links.** Accepted forms: `youtube.com/watch?v=<id>`, `youtu.be/<id>`, `youtube.com/shorts/<id>`, with or without `www.`/`m.`; `LinkInfo(site="youtube", clip_id=<11-char id>, slug="")`. A links-file line may carry a game after a comma: `<url>,<Game>` (one of `CLASSES`; `Other` as `Other:<name>`). Without it the video has no game hint and is labelled in the sorter page.
-2. **Uploader.** From metadata: `channel_id` (else `uploader_id`) and `channel` (else `uploader`). Stored in the same uploader file (`data/clip_links/medal_users.csv`) with `uploader_id = "yt:<channel_id>"`, so Medal and YouTube ids cannot clash. Proposed source `yt_<normalize_handle(channel)>`.
-3. **Download.** Video at most 720p (`bestvideo[height<=720]+bestaudio/best[height<=720]`), merged to MP4. Videos longer than `--max-minutes` (default 60) are logged `skipped_long` and not downloaded. File name `<game or "youtube">__<YYYY-MM-DD>__<HH-MM-SS>__<id>.mp4` from the upload date (time `00-00-00` when only a date is known). `hints.csv` gets the game only when the links-file line gave one.
-4. **Channel listing.** `gfc-fetch-clips --list-channel <channel URL> --permission "<who agreed, when, how>" [--game <Game>] [--out <file>]`:
-   - Lists the channel's videos with flat extraction (no download), newest first, skipping live streams that are still live.
-   - Writes `data/clip_links/<YYYY-MM-DD>_yt_<handle>.txt` (or `--out`): a header of `#` lines (channel name, channel id, listing date, permission note, video count), then one `<url>[,<Game>]` per line.
-   - Appends (or adds a new row for) the channel in the uploader file with `allowed = yes`, the proposed source and `note = permission: <note>`; an existing row is never changed (the new row wins, as before).
-   - Refuses without `--permission` (exit 2). Downloads nothing; the person then runs `gfc-fetch-clips <that file>`.
-5. **Log** as in 1.1, with `site = youtube`.
+1. **Links.** Accepted YouTube forms: `youtube.com/watch?v=<id>`, `youtu.be/<id>`, `youtube.com/shorts/<id>`, with or without `www.` / `m.`; `LinkInfo(site="youtube", clip_id=<id>, slug="")`. A links-file line is `<url>[,<Game>[,<content_type>]]`; `<Game>` is one of `CLASSES`, `Other:<name>` for Other, or empty (`<url>,,gameplay`). This applies to Medal lines too (a Medal game from the link is used when the line gives none).
+2. **Uploader.** From metadata `channel_id` (else `uploader_id`) and `channel` (else `uploader`); stored in the uploader file (`data/clip_links/medal_users.csv`) as `uploader_id = "yt:<channel_id>"`; new channels saved `allowed = yes`, source `yt_<normalize_handle(channel)>`, note `auto`. `allowed = no` still blocks a channel. `--ask` asks for YouTube as for Medal. The uploader file gains a `content_type` column (the channel tag; empty by default); as before, rows are only appended and an uploader's newest row counts, so re-tagging a channel adds a row. `--tag-uploader <uploader_id or source> --content-type <value>` appends such a row without downloading.
+3. **Download.** At most 720p (`bestvideo[height<=720]+bestaudio/best[height<=720]`), merged to MP4. Longer than `--max-minutes` (default 60): logged `skipped_long`, not downloaded. File name `<game slug or "unlabelled">__<YYYY-MM-DD>__<HH-MM-SS>__<id>.mp4` (time `00-00-00` when only a date is known).
+4. **Unlabelled.** A video with no game (no game in the line and none from a Medal link) is logged with `game` empty and counted as unlabelled in the summary. `hints.csv` gains `content_type` and `content_type_origin` columns and keeps one row per downloaded file, with `game` empty for unlabelled ones. The type is the line's own (`video`), else the channel tag (`channel`), else empty.
+5. **Channel listing.** `gfc-fetch-clips --list-channel <channel URL> [--game <Game>] [--content-type <value>] [--note "<text>"] [--out <file>]` lists the channel's videos with flat extraction (no download), newest first, skipping videos that are live now; writes `data/clip_links/<YYYY-MM-DD>_yt_<handle>.txt` (or `--out`) with a `#` header (channel, channel id, date, note, count) and one `<url>,<Game>,<content_type>` line per video (empty fields where not given); adds the channel to the uploader file as in step 2 if it is not there, and with `--content-type` also tags the channel (appends a row with that `content_type`). Downloads nothing.
+6. **Sorter.**
+   - `--unlabelled`: the page shows only clips with no game hint and no label, disabled or trash decision. Other flags work with it.
+   - Keys `V` / `G` / `O` set the clip's content type (pressing the current one again clears it), origin `sorter`; the page shows the type and its origin; the hint's type and origin are pre-filled. Content type is separate from the label: it does not count as deciding the clip, and `U` undoes the clip's most recent row of either kind.
+   - `decisions.csv` gains a `content_type` column and a decision value `content`.
+   - `--accept-hints` also takes the hint's content type.
+   - Apply writes `data/raw/<Game>/<source>/content_types.csv` (`file, content_type, content_type_origin`; Other: under `_other/<name>/<source>/`), adding or replacing that file's row, for every copied clip with a content type.
+7. **Into the pipeline.** `gfc-make-sources` reads `content_types.csv` beside the videos and writes `content_type` and `content_type_origin` into each `clip.json` (empty when absent); `gfc-derive-frames` adds both columns to `clips_index` (empty for clips without them). Nothing else uses it yet; run reports can break results down by it.
 
 ## Usage
 
 ```text
-gfc-fetch-clips --list-channel https://www.youtube.com/@<handle> --permission "<note>" --game Overwatch_2
-gfc-fetch-clips data/clip_links/2026-11-19_yt_<handle>.txt --max-minutes 30
-gfc-fetch-clips data/clip_links                        # Medal and YouTube lines together
+gfc-fetch-clips --list-channel https://www.youtube.com/@<handle> --game Overwatch_2 --content-type streamer_overlay
+gfc-fetch-clips --tag-uploader yt_<handle> --content-type esports_vod     # tag a channel already known
+gfc-fetch-clips data/clip_links --max-minutes 30
+gfc-sort-clips data/incoming_clips --accept-hints      # tagged clips straight into data/raw
+gfc-sort-clips data/incoming_clips --unlabelled        # page with only the unlabelled ones
 ```
 
 ## Testing
 
-Unit, with fake metadata, listing and download functions (no network): link forms and the `,Game` suffix; YouTube new channel stays pending and is not downloaded; allowed channel downloads into its source; `skipped_long`; 720p format string; file name from date only; channel listing writes the header and lines, records permission, refuses without `--permission`; other sites still refused; every Medal test still passes.
+Unit, with fake metadata, listing and download functions (no network): YouTube link forms; `,Game,content_type` parsing incl. empty game and `Other:<name>`; new channel auto-accepted into `yt_<handle>`; `allowed = no` blocks; `skipped_long`; 720p format string; `unlabelled` file name and summary count; hints with content type; channel listing file, uploader row and channel tag; `--tag-uploader` appends a row; videos inherit the channel tag with origin `channel` and a line's own type wins with origin `video`; invalid content type refused; sorter `--unlabelled` filter; `V`/`G`/`O` set, toggle and undo; content row does not count as a decision; `--accept-hints` carries content type; apply writes and updates `content_types.csv`; make-sources and derive carry `content_type`; every existing Medal and sorter test still passes.
 
 ## Acceptance checks
 
-- [ ] YouTube links download into one source per channel, only with recorded permission
-- [ ] `--list-channel` writes a links file and records the permission
-- [ ] Long videos are skipped; downloads are at most 720p
-- [ ] Spec status and [clip-link-downloader.md](clip-link-downloader.md) scope updated (Medal and YouTube supported; other sites refused)
+- [ ] YouTube links and channels download into one source per channel without asking
+- [ ] Unlabelled videos are flagged and the sorter can show only them
+- [ ] Content type can be set per video (links file or sorter) or as a channel tag that its videos inherit, and reaches `clips_index` with its origin
+- [ ] Long videos skipped; at most 720p
+- [ ] Docs updated: this spec, [clip-link-downloader.md](clip-link-downloader.md) scope (Medal and YouTube), [clip-sorter.md](clip-sorter.md) keys and flags, `docs/data-layout.md`
 
 ## Build instructions
 
 Written for an agent that builds exactly this and decides nothing; ask the user if anything is unclear.
 
-1. `clip_fetch/links.py`: YouTube parsing; `read_links` keeps the optional `,Game` part (return `(url, game, other_name)` from a new `read_link_entries`; `read_link_files` keeps its URL-only behaviour for callers that need it); update `UNSUPPORTED_SITE_ERROR` to "unsupported site: only Medal and YouTube links are supported".
-2. `clip_fetch/users.py`: `decide(..., site)` never auto-accepts `site == "youtube"`; `proposed_source` takes a prefix (`friend_` Medal, `yt_` YouTube).
-3. `clip_fetch/download.py`: YouTube metadata fields, format string, `--max-minutes`, naming, hints from the links-file game; site-aware uploader ids.
-4. `clip_fetch/channel.py` (new): `list_channel(url, *, permission, game, out, users_path, lister=ytdlp_flat_list, now)`.
-5. `clip_fetch/cli.py`: `--list-channel`, `--permission`, `--game` (listing only), `--out`, `--max-minutes`; `__version__ = "1.2.0"`.
-6. Docs: this spec's status; `clip-link-downloader.md` scope and "Later: other sites"; `docs/data-layout.md` (`yt_` sources, listing files in `data/clip_links/`).
-7. Tests as above.
+1. `clip_fetch/links.py`: YouTube parsing; `read_link_entries(paths) -> list[LinkEntry(url, game, other_name, content_type)]` (folders as in 1.1, de-duplicated by URL keeping the first); `CONTENT_TYPES = ("esports_vod", "gameplay", "streamer_overlay")`; `UNSUPPORTED_SITE_ERROR` = "unsupported site: only Medal and YouTube links are supported".
+2. `clip_fetch/users.py`: `content_type` in `USER_COLUMNS` (old files without it read as empty); `proposed_source(name, prefix)` (`friend_` Medal, `yt_` YouTube); site-aware ids; `tag_uploader(users_path, key, content_type)` (key matches `uploader_id` or `source`; exit 2 if neither matches).
+3. `clip_fetch/download.py`: YouTube metadata fields, format string, `--max-minutes`, naming, unlabelled count, `hints.csv` with `content_type`; `run` takes `LinkEntry` items.
+4. `clip_fetch/channel.py` (new): `ytdlp_flat_list(url)` using `extract_flat="in_playlist"` on `<url>/videos` for a channel root (`@<handle>` or `/channel/<id>`); `list_channel(url, *, game, content_type, note, out, users_path, lister=ytdlp_flat_list, now)`.
+5. `clip_fetch/cli.py`: `--list-channel`, `--tag-uploader`, `--game`, `--content-type`, `--note`, `--out`, `--max-minutes`; `__version__ = "1.2.0"`.
+6. `clip_sorter/`: `scan` reads the hint's content type; `store` (`content_type` column, `content` decision, replay keeps label state and content type apart, undo removes the clip's newest row); `server` / `page.html` (`V`/`G`/`O`, display); `cli` (`--unlabelled`); `apply` (`content_types.csv`, `accept_hints` content type); `__version__ = "1.2.0"`.
+7. `make_sources.py`: read `content_types.csv`; `content_type`, `content_type_origin` in `clip.json`. `derive_frames.py`: both in `CLIPS_INDEX_COLUMNS` (after `other_name`) and in `build_clip_row`.
+8. Docs as in the acceptance checks; tests as above.
