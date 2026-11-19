@@ -13,16 +13,17 @@ from game_frame_classifier.sourcing.hashing import sha256_file
 from game_frame_classifier.sourcing.labels import OTHER, GAMES
 
 from .scan import Clip
-from .store import append, replay
+from .store import LASTING_DECISIONS, append, replay
 
-LASTING_DECISIONS = frozenset({"label", "disabled", "trash"})
+CONTENT_TYPE_COLUMNS = ("file", "content_type", "content_type_origin")
 
 
 def accept_hints(session_dir: Path, clips: list[Clip]) -> int:
     """Label every undecided clip whose game came from a hints file (the Medal game tag).
 
     Clips with a problem, an Other suggestion without a content name, or a lasting
-    decision already are left alone. Returns the number of clips labelled.
+    decision already are left alone. Also records the hint's content type when present.
+    Returns the number of clips labelled.
     """
     state = replay(session_dir)
     labelled = 0
@@ -41,6 +42,7 @@ def accept_hints(session_dir: Path, clips: list[Clip]) -> int:
             "label",
             game=clip.suggestion,
             other_name=clip.other_name if clip.suggestion == OTHER else "",
+            content_type=clip.content_type,
         )
         labelled += 1
     return labelled
@@ -56,6 +58,9 @@ class Action:
     dest_path: Path | None = None
     game: str = ""
     other_name: str = ""
+    content_type: str = ""
+    content_type_origin: str = ""
+    source: str = ""
 
 
 def _load_index(data_root: Path) -> dict[str, Any]:
@@ -90,6 +95,22 @@ def _path_below_source(rel_path: str, source: str) -> Path:
     return Path(rel_path)
 
 
+def _clip_content_type(clip: Clip, entry: dict[str, Any] | None) -> tuple[str, str]:
+    if entry:
+        ct = (entry.get("content_type") or "").strip()
+        cto = (entry.get("content_type_origin") or "").strip()
+        if cto == "sorter" or ct:
+            # Sorter set/cleared, or label row carried a type from accept-hints.
+            if cto == "sorter":
+                return ct, cto
+            if ct:
+                # Prefer hint origin when present on the clip.
+                return ct, clip.content_type_origin or cto or "video"
+    if clip.content_type:
+        return clip.content_type, clip.content_type_origin
+    return "", ""
+
+
 def plan(
     session_dir: Path,
     folder: Path,
@@ -107,15 +128,36 @@ def plan(
     actions: list[Action] = []
     for clip in clips:
         entry = state.get(clip.quick_id)
+        ct, cto = _clip_content_type(clip, entry)
         if entry is None:
-            actions.append(Action(clip.rel_path, "undecided", "untouched", ""))
+            actions.append(
+                Action(
+                    clip.rel_path,
+                    "undecided",
+                    "untouched",
+                    "",
+                    content_type=ct,
+                    content_type_origin=cto,
+                    source=clip.source or source,
+                )
+            )
             continue
         decision = entry.get("decision") or ""
         game = entry.get("game") or ""
         other_name = entry.get("other_name") or ""
         if decision in ("disabled", "skip") or decision == "":
             actions.append(
-                Action(clip.rel_path, decision or "undecided", "untouched", "", game=game, other_name=other_name)
+                Action(
+                    clip.rel_path,
+                    decision or "undecided",
+                    "untouched",
+                    "",
+                    game=game,
+                    other_name=other_name,
+                    content_type=ct,
+                    content_type_origin=cto,
+                    source=clip.source or source,
+                )
             )
             continue
         if decision == "trash":
@@ -128,23 +170,55 @@ def plan(
                     dest.as_posix(),
                     path=clip.path,
                     dest_path=dest,
+                    content_type=ct,
+                    content_type_origin=cto,
+                    source=clip.source or source,
                 )
             )
             continue
         if decision != "label":
-            actions.append(Action(clip.rel_path, decision, "untouched", ""))
+            actions.append(
+                Action(
+                    clip.rel_path,
+                    decision,
+                    "untouched",
+                    "",
+                    content_type=ct,
+                    content_type_origin=cto,
+                    source=clip.source or source,
+                )
+            )
             continue
         src = clip.source or source
         if not src or (clip.problem.startswith("no_source") if clip.problem else False):
             actions.append(
-                Action(clip.rel_path, "label", "conflict", "", game=game, other_name=other_name)
+                Action(
+                    clip.rel_path,
+                    "label",
+                    "conflict",
+                    "",
+                    game=game,
+                    other_name=other_name,
+                    content_type=ct,
+                    content_type_origin=cto,
+                )
             )
             continue
         below = _path_below_source(clip.rel_path, src)
         if game == OTHER:
             if not other_name:
                 actions.append(
-                    Action(clip.rel_path, "label", "conflict", "", game=game, other_name=other_name)
+                    Action(
+                        clip.rel_path,
+                        "label",
+                        "conflict",
+                        "",
+                        game=game,
+                        other_name=other_name,
+                        content_type=ct,
+                        content_type_origin=cto,
+                        source=src,
+                    )
                 )
                 continue
             dest = data_root / "raw" / "_other" / other_name / src / below
@@ -152,7 +226,17 @@ def plan(
             dest = data_root / "raw" / game / src / below
         else:
             actions.append(
-                Action(clip.rel_path, "label", "conflict", "", game=game, other_name=other_name)
+                Action(
+                    clip.rel_path,
+                    "label",
+                    "conflict",
+                    "",
+                    game=game,
+                    other_name=other_name,
+                    content_type=ct,
+                    content_type_origin=cto,
+                    source=src,
+                )
             )
             continue
         digest = sha256_file(clip.path)
@@ -165,6 +249,9 @@ def plan(
                     "",
                     game=game,
                     other_name=other_name,
+                    content_type=ct,
+                    content_type_origin=cto,
+                    source=src,
                 )
             )
             continue
@@ -178,6 +265,9 @@ def plan(
                         dest.as_posix(),
                         game=game,
                         other_name=other_name,
+                        content_type=ct,
+                        content_type_origin=cto,
+                        source=src,
                     )
                 )
             else:
@@ -189,6 +279,9 @@ def plan(
                         dest.as_posix(),
                         game=game,
                         other_name=other_name,
+                        content_type=ct,
+                        content_type_origin=cto,
+                        source=src,
                     )
                 )
             continue
@@ -202,9 +295,38 @@ def plan(
                 dest_path=dest,
                 game=game,
                 other_name=other_name,
+                content_type=ct,
+                content_type_origin=cto,
+                source=src,
             )
         )
     return actions
+
+
+def _update_content_types(dest_dir: Path, file_name: str, content_type: str, origin: str) -> None:
+    path = dest_dir / "content_types.csv"
+    rows: dict[str, dict[str, str]] = {}
+    if path.is_file():
+        with open(path, newline="", encoding="utf-8") as f:
+            for row in csv.DictReader(f):
+                key = (row.get("file") or "").strip()
+                if key:
+                    rows[key] = {
+                        "file": key,
+                        "content_type": (row.get("content_type") or "").strip(),
+                        "content_type_origin": (row.get("content_type_origin") or "").strip(),
+                    }
+    rows[file_name] = {
+        "file": file_name,
+        "content_type": content_type,
+        "content_type_origin": origin,
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=CONTENT_TYPE_COLUMNS)
+        writer.writeheader()
+        for key in sorted(rows):
+            writer.writerow(rows[key])
 
 
 def run(actions: list[Action], dry_run: bool = False) -> dict[str, Any]:
@@ -237,6 +359,13 @@ def run(actions: list[Action], dry_run: bool = False) -> dict[str, Any]:
             if not dry_run:
                 action.dest_path.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(action.path, action.dest_path)
+                if action.content_type:
+                    _update_content_types(
+                        action.dest_path.parent,
+                        action.dest_path.name,
+                        action.content_type,
+                        action.content_type_origin or "video",
+                    )
             counts["copied"] += 1
             if action.game == OTHER:
                 per_other[action.other_name] = per_other.get(action.other_name, 0) + 1

@@ -83,7 +83,9 @@ def test_clip_json_has_every_column_and_no_absolute_paths(tmp_path, monkeypatch)
     clip_dirs = list((data_root / "frame_sources" / "Valorant" / "tester").glob("c*"))
     assert len(clip_dirs) == 1
     clip = json.loads((clip_dirs[0] / "clip.json").read_text(encoding="utf-8"))
-    assert set(clip) == set(CLIP_COLUMNS)
+    assert set(CLIP_COLUMNS) <= set(clip)
+    assert clip.get("content_type", "") == ""
+    assert clip.get("content_type_origin", "") == ""
     assert clip["status"] == "ok"
     assert clip["original_relpath"] == "clip.mp4"
     blob = json.dumps(clip)
@@ -210,3 +212,25 @@ def test_footage_budget_first_run_takes_shortest_but_top_up_never_overshoots():
     long_clip = [_pending("x", 900, 1)]
     assert apply_footage_budget(long_clip, 600, 0)[0] == long_clip
     assert apply_footage_budget(long_clip, 600, 300) == ([], long_clip)
+
+def test_write_clip_json_includes_content_type(tmp_path):
+    from game_frame_classifier.make_sources import read_content_types, write_clip_json
+    from game_frame_classifier.sourcing.manifests import blank_clip_row
+
+    source_dir = tmp_path / "raw" / "Valorant" / "yt_example"
+    source_dir.mkdir(parents=True)
+    (source_dir / "content_types.csv").write_text(
+        "file,content_type,content_type_origin\n"
+        "clip.mp4,gameplay,video\n",
+        encoding="utf-8",
+    )
+    assert read_content_types(source_dir)["clip.mp4"] == ("gameplay", "video")
+    dest = tmp_path / "fs" / "clip"
+    dest.mkdir(parents=True)
+    row = blank_clip_row()
+    write_clip_json(
+        dest, row, game="Valorant", content_type="gameplay", content_type_origin="video"
+    )
+    payload = json.loads((dest / "clip.json").read_text(encoding="utf-8"))
+    assert payload["content_type"] == "gameplay"
+    assert payload["content_type_origin"] == "video"

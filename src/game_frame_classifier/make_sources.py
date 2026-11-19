@@ -8,6 +8,7 @@ layout as `gfc-ingest-pack`. Spec: `docs/roadmap/tools/make-sources.md`.
 from __future__ import annotations
 
 import argparse
+import csv
 import dataclasses
 import json
 import os
@@ -362,7 +363,33 @@ def place_clip(frames_root: Path, dest: Path) -> None:
     (frames_root / dest.name).replace(dest)
 
 
-def write_clip_json(dest: Path, row: dict[str, Any], *, game: str, other_name: str = "") -> None:
+def read_content_types(source_dir: Path) -> dict[str, tuple[str, str]]:
+    """Load content_types.csv beside raw videos: file → (content_type, content_type_origin)."""
+    path = Path(source_dir) / "content_types.csv"
+    if not path.is_file():
+        return {}
+    out: dict[str, tuple[str, str]] = {}
+    with open(path, encoding="utf-8", newline="") as f:
+        for row in csv.DictReader(f):
+            name = (row.get("file") or "").strip()
+            if not name:
+                continue
+            out[name] = (
+                (row.get("content_type") or "").strip(),
+                (row.get("content_type_origin") or "").strip(),
+            )
+    return out
+
+
+def write_clip_json(
+    dest: Path,
+    row: dict[str, Any],
+    *,
+    game: str,
+    other_name: str = "",
+    content_type: str = "",
+    content_type_origin: str = "",
+) -> None:
     missing = [c for c in CLIP_COLUMNS if c not in row]
     if missing:
         raise MakeSourcesError(f"clip.json missing columns: {missing}")
@@ -370,6 +397,8 @@ def write_clip_json(dest: Path, row: dict[str, Any], *, game: str, other_name: s
     if game == OTHER:
         payload["game"] = game
         payload["other_name"] = other_name
+    payload["content_type"] = content_type
+    payload["content_type_origin"] = content_type_origin
     atomic_write_json(dest / "clip.json", payload)
 
 
@@ -532,6 +561,7 @@ def main(argv: list[str] | None = None) -> int:
             if game_filter and game != game_filter:
                 continue
             for source_dir in sorted(p for p in game_dir.iterdir() if p.is_dir()):
+                content_types = read_content_types(source_dir)
                 try:
                     source = check_source_name(source_dir.name)
                 except MakeSourcesError as exc:
@@ -670,7 +700,15 @@ def main(argv: list[str] | None = None) -> int:
                             sha=sha, clip_key=clip_key, status="ok", status_detail="",
                             result=result, wall_s=wall,
                         )
-                        write_clip_json(dest, row, game=game, other_name=other_name)
+                        ct, cto = content_types.get(path.name, ("", ""))
+                        write_clip_json(
+                            dest,
+                            row,
+                            game=game,
+                            other_name=other_name,
+                            content_type=ct,
+                            content_type_origin=cto,
+                        )
                         index[sha] = {
                             "clip_key": clip_key,
                             "pack_id": f"personal:{run_id}",

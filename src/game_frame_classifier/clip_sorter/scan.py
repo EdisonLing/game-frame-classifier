@@ -35,11 +35,17 @@ class Clip:
     other_name: str
     suggestion_origin: str
     source: str = ""
+    content_type: str = ""
+    content_type_origin: str = ""
 
 
-def read_hints(path: Path) -> dict[str, tuple[str, str]]:
-    """Load hints.csv: file,game,other_name → dict keyed by relative path."""
-    out: dict[str, tuple[str, str]] = {}
+def read_hints(path: Path) -> dict[str, tuple[str, str, str, str]]:
+    """Load hints.csv → dict keyed by relative path.
+
+    Values are (game, other_name, content_type, content_type_origin).
+    Older files without content-type columns read those as empty.
+    """
+    out: dict[str, tuple[str, str, str, str]] = {}
     with open(path, newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
@@ -48,18 +54,21 @@ def read_hints(path: Path) -> dict[str, tuple[str, str]]:
                 continue
             game = (row.get("game") or "").strip()
             other = (row.get("other_name") or "").strip()
-            out[rel] = (game, other)
+            ct = (row.get("content_type") or "").strip()
+            cto = (row.get("content_type_origin") or "").strip()
+            out[rel] = (game, other, ct, cto)
     return out
 
 
 def suggest(
     rel_path: str,
-    hints: dict[str, tuple[str, str]],
+    hints: dict[str, tuple[str, str]] | dict[str, tuple[str, str, str, str]],
 ) -> tuple[str, str, str]:
     """Return (game_or_Other, other_name, origin). Empty game means no suggestion."""
     key = rel_path.replace("\\", "/")
     if key in hints:
-        game, other = hints[key]
+        hint = hints[key]
+        game, other = hint[0], hint[1]
         if game:
             return game, other if game == OTHER else "", "hints"
     name = Path(rel_path).name
@@ -72,6 +81,19 @@ def suggest(
     if len(found) == 1:
         return next(iter(found)), "", "path_hint"
     return "", "", ""
+
+
+def hint_content_type(
+    rel_path: str,
+    hints: dict[str, tuple[str, str]] | dict[str, tuple[str, str, str, str]],
+) -> tuple[str, str]:
+    key = rel_path.replace("\\", "/")
+    if key not in hints:
+        return "", ""
+    hint = hints[key]
+    if len(hint) >= 4:
+        return hint[2], hint[3]
+    return "", ""
 
 
 def _source_from_rel(rel_path: str, source_override: str | None) -> tuple[str, str]:
@@ -91,7 +113,7 @@ def scan(
     folder: Path,
     recipe: Recipe,
     tools: FFTools,
-    hints: dict[str, tuple[str, str]],
+    hints: dict[str, tuple[str, str]] | dict[str, tuple[str, str, str, str]],
     source: str | None = None,
 ) -> list[Clip]:
     """Walk folder for videos; skip _archive/; return clips sorted by rel_path."""
@@ -134,6 +156,7 @@ def scan(
             # Keep probe problem; source still empty so apply can conflict on label.
             pass
         game, other_name, origin = suggest(rel, hints)
+        ct, cto = hint_content_type(rel, hints)
         clips.append(
             Clip(
                 rel_path=rel,
@@ -148,6 +171,8 @@ def scan(
                 other_name=other_name,
                 suggestion_origin=origin,
                 source=clip_source,
+                content_type=ct,
+                content_type_origin=cto,
             )
         )
     clips.sort(key=lambda c: c.rel_path)

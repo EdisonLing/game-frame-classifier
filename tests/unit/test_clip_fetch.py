@@ -11,11 +11,18 @@ import pytest
 from game_frame_classifier.clip_fetch import download as download_mod
 from game_frame_classifier.clip_fetch.cli import main as cli_main
 from game_frame_classifier.clip_fetch.download import RateLimited, run
+from game_frame_classifier.clip_fetch.channel import list_channel
 from game_frame_classifier.clip_fetch.links import (
+    CONTENT_TYPES,
     OLD_MEDAL_ERROR,
     UNSUPPORTED_SITE_ERROR,
+    LinkEntry,
     game_for_slug,
+    parse_content_type,
+    parse_game_field,
     parse_link,
+    parse_link_line,
+    read_link_entries,
     read_link_files,
     read_links,
 )
@@ -23,8 +30,10 @@ from game_frame_classifier.clip_fetch.users import (
     decide,
     load_users,
     proposed_source,
+    tag_uploader,
     validate_source,
 )
+from game_frame_classifier.clip_fetch.download import YOUTUBE_FORMAT
 from game_frame_classifier.clip_fetch.naming import clip_file_name
 from game_frame_classifier.sourcing.timeinfo import parse_filename_time
 
@@ -57,6 +66,24 @@ from game_frame_classifier.sourcing.timeinfo import parse_filename_time
             "https://example.com/watch?v=xyz",
             "other",
             "",
+            "",
+        ),
+        (
+            "https://www.youtube.com/watch?v=abcdefghijk",
+            "youtube",
+            "abcdefghijk",
+            "",
+        ),
+        (
+            "https://youtu.be/abcdefghijk",
+            "youtube",
+            "abcdefghijk",
+            "",
+        ),
+        (
+            "https://m.youtube.com/shorts/abcdefghijk",
+            "youtube",
+            "abcdefghijk",
             "",
         ),
     ],
@@ -179,7 +206,7 @@ def test_clip_file_name_neither_uses_now():
     name, used, source = clip_file_name(info, None, None, now)
     assert source == "download"
     assert used == now
-    assert name == "other__2025-03-04__05-06-07__Z9.mp4"
+    assert name == "unlabelled__2025-03-04__05-06-07__Z9.mp4"
 
 
 # --- run with fake downloader ----------------------------------------------
@@ -235,7 +262,15 @@ def test_run_logs_hints_skip_and_limit(tmp_path: Path):
 
     with open(incoming / "hints.csv", encoding="utf-8", newline="") as f:
         hints = list(csv.DictReader(f))
-    assert hints == [{"file": rows[0]["file"], "game": "Valorant", "other_name": ""}]
+    assert hints == [
+        {
+            "file": rows[0]["file"],
+            "game": "Valorant",
+            "other_name": "",
+            "content_type": "",
+            "content_type_origin": "",
+        }
+    ]
 
     # Rerun skips finished link
     summary2 = run(
@@ -330,7 +365,7 @@ def test_run_old_medal_form_failed(tmp_path: Path):
     assert row["error"] == OLD_MEDAL_ERROR
 
 
-def test_run_refuses_non_medal_links(tmp_path: Path):
+def test_run_refuses_unsupported_sites(tmp_path: Path):
     calls = []
 
     def downloader(*args, **kwargs):
@@ -339,7 +374,7 @@ def test_run_refuses_non_medal_links(tmp_path: Path):
 
     incoming = tmp_path / "incoming"
     summary = run(
-        ["https://www.youtube.com/watch?v=AbCdEf12345", "https://example.com/v/1"],
+        ["https://example.com/v/1", "https://twitch.tv/videos/1"],
         incoming,
         source_override="tester",
         downloader=downloader,
@@ -731,7 +766,7 @@ def test_pending_uploader_decided_on_next_run_and_answer_appended(tmp_path: Path
     done = run([link], incoming, ask=lambda q: asked.append(q) or "y", **common)
     assert done.exit_code == 0 and len(asked) == 1
     lines = users_path.read_text(encoding="utf-8").splitlines()
-    assert lines[1] == "id_333,uploader_c,friend_uploader_c,,2026-01-01,"  # original row untouched
+    assert lines[1].startswith("id_333,uploader_c,friend_uploader_c,,2026-01-01,")  # original row untouched
     assert load_users(users_path)["id_333"]["allowed"] == "yes"
     assert list((incoming / "friend_uploader_c").glob("*.mp4"))
 
@@ -742,3 +777,191 @@ def test_cli_ask_needs_terminal(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr("sys.stdin.isatty", lambda: False)
     code = cli_main([str(links), "--ask", "--data-root", str(tmp_path / "data"), "--dry-run"])
     assert code == 2
+
+# --- YouTube / content types (1.2) ------------------------------------------
+
+
+def test_parse_link_line_game_and_content_type():
+    e = parse_link_line("https://www.youtube.com/watch?v=abcdefghijk,Overwatch_2,gameplay")
+    assert e.game == "Overwatch_2" and e.content_type == "gameplay"
+    e2 = parse_link_line("https://www.youtube.com/watch?v=abcdefghijk,,streamer_overlay")
+    assert e2.game == "" and e2.content_type == "streamer_overlay"
+    e3 = parse_link_line("https://medal.tv/games/valorant/clips/Aaa,Other:apex_legends,esports_vod")
+    assert e3.game == "Other" and e3.other_name == "apex_legends"
+    with pytest.raises(ValueError):
+        parse_content_type("not_a_type")
+    with pytest.raises(ValueError):
+        parse_game_field("NotAGame")
+
+
+def test_youtube_auto_source_and_unlabelled_inherits_channel_tag(tmp_path: Path):
+    incoming = tmp_path / "incoming"
+    users_path = tmp_path / "medal_users.csv"
+    users_path.write_text(
+        "uploader_id,uploader,source,allowed,first_seen,note,content_type\n"
+        "yt:UCexamplechannel,Example Channel,yt_example_channel,yes,2026-01-01,,streamer_overlay\n",
+        encoding="utf-8",
+    )
+    medal = "https://medal.tv/games/valorant/clips/MedClip01"
+    yt_game = "https://www.youtube.com/watch?v=ytgameclip1"
+    yt_none = "https://www.youtube.com/watch?v=ytnoclip001"
+    entries = [
+        LinkEntry(url=medal),
+        LinkEntry(url=yt_game, game="Overwatch_2", content_type="gameplay"),
+        LinkEntry(url=yt_none),
+    ]
+    meta = {
+        medal: {"uploader_id": "id_m1", "uploader": "medal_user"},
+        yt_game: {
+            "channel_id": "UCexamplechannel",
+            "channel": "Example Channel",
+            "duration": 120,
+        },
+        yt_none: {
+            "channel_id": "UCexamplechannel",
+            "channel": "Example Channel",
+            "duration": 90,
+        },
+    }
+
+    def fake_meta(url: str) -> dict:
+        return dict(meta[url])
+
+    formats: list[str] = []
+
+    def fake_dl(url: str, out_dir: Path, temp_name: str, format_str: str | None = None) -> dict:
+        (out_dir / temp_name).write_bytes(b"clip")
+        if format_str:
+            formats.append(format_str)
+        return {"timestamp": 1_700_000_000, "id": "x", "title": "t", **meta[url]}
+
+    summary = run(
+        entries,
+        incoming,
+        users_path=users_path,
+        ask=None,
+        metadata=fake_meta,
+        downloader=fake_dl,
+        pause_s=0,
+        sleep=lambda _s: None,
+    )
+    assert summary.exit_code == 0
+    assert summary.by_status["ok"] == 3
+    assert summary.unlabelled == 1
+    assert (incoming / "friend_medal_user").is_dir()
+    assert (incoming / "yt_example_channel").is_dir()
+    unlab = list((incoming / "yt_example_channel").glob("unlabelled__*.mp4"))
+    assert len(unlab) == 1
+    with open(incoming / "hints.csv", encoding="utf-8", newline="") as f:
+        hints = {r["file"]: r for r in csv.DictReader(f)}
+    unlab_rel = f"yt_example_channel/{unlab[0].name}"
+    assert hints[unlab_rel]["game"] == ""
+    assert hints[unlab_rel]["content_type"] == "streamer_overlay"
+    assert hints[unlab_rel]["content_type_origin"] == "channel"
+    game_files = [r for r in hints.values() if r["game"] == "Overwatch_2"]
+    assert game_files and game_files[0]["content_type"] == "gameplay"
+    assert game_files[0]["content_type_origin"] == "video"
+    assert YOUTUBE_FORMAT in formats
+
+
+def test_skipped_long_and_allowed_no_blocks_youtube(tmp_path: Path):
+    incoming = tmp_path / "incoming"
+    users_path = tmp_path / "users.csv"
+    users_path.write_text(
+        "uploader_id,uploader,source,allowed,first_seen,note,content_type\n"
+        "yt:UCblocked,Blocked,yt_blocked,no,2026-01-01,,\n",
+        encoding="utf-8",
+    )
+    long_url = "https://www.youtube.com/watch?v=longvideo01"
+    blocked = "https://www.youtube.com/watch?v=blockedvid01"
+
+    def fake_meta(url: str) -> dict:
+        if "long" in url:
+            return {
+                "channel_id": "UCokchannel",
+                "channel": "Ok Channel",
+                "duration": 4000,
+            }
+        return {"channel_id": "UCblocked", "channel": "Blocked", "duration": 60}
+
+    def fake_dl(*_a, **_k):
+        raise AssertionError("should not download")
+
+    summary = run(
+        [long_url, blocked],
+        incoming,
+        users_path=users_path,
+        metadata=fake_meta,
+        downloader=fake_dl,
+        pause_s=0,
+        sleep=lambda _s: None,
+        max_minutes=60,
+    )
+    assert summary.by_status["skipped_long"] == 1
+    assert summary.by_status["not_allowed"] == 1
+    assert summary.by_status.get("ok", 0) == 0
+
+
+def test_tag_uploader_appends_row(tmp_path: Path):
+    users_path = tmp_path / "users.csv"
+    users_path.write_text(
+        "uploader_id,uploader,source,allowed,first_seen,note,content_type\n"
+        "yt:UCexamplechannel,Example,yt_example,yes,2026-01-01,,\n",
+        encoding="utf-8",
+    )
+    row = tag_uploader(users_path, "yt_example", "esports_vod")
+    assert row["content_type"] == "esports_vod"
+    users = load_users(users_path)
+    assert users["yt:UCexamplechannel"]["content_type"] == "esports_vod"
+    lines = users_path.read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 3  # header + original + tag
+
+
+def test_list_channel_writes_file_and_uploader(tmp_path: Path):
+    users_path = tmp_path / "users.csv"
+
+    def fake_list(url: str) -> list[dict]:
+        return [
+            {
+                "id": "vidnewer0001",
+                "channel_id": "UClistchannel1",
+                "channel": "List Channel",
+                "live_status": "not_live",
+            },
+            {
+                "id": "vidlive00002",
+                "channel_id": "UClistchannel1",
+                "channel": "List Channel",
+                "live_status": "is_live",
+            },
+            {
+                "id": "vidolder0001",
+                "channel_id": "UClistchannel1",
+                "channel": "List Channel",
+            },
+        ]
+
+    out = list_channel(
+        "https://www.youtube.com/@example_channel",
+        game="Valorant",
+        content_type="gameplay",
+        note="batch",
+        out=tmp_path / "out.txt",
+        users_path=users_path,
+        lister=fake_list,
+        now=lambda: datetime(2026, 11, 19),
+    )
+    text = out.read_text(encoding="utf-8")
+    assert "vidnewer0001" in text and "vidolder0001" in text
+    assert "vidlive00002" not in text
+    assert ",Valorant,gameplay" in text
+    users = load_users(users_path)
+    assert users["yt:UClistchannel1"]["content_type"] == "gameplay"
+    assert users["yt:UClistchannel1"]["source"].startswith("yt_")
+    assert proposed_source("List Channel", prefix="yt") == users["yt:UClistchannel1"]["source"]
+
+
+def test_proposed_source_prefixes():
+    assert proposed_source("Example Channel", prefix="yt") == "yt_example_channel"
+    assert proposed_source("Uploader A!", prefix="friend") == "friend_uploader_a"
+    assert set(CONTENT_TYPES) == {"esports_vod", "gameplay", "streamer_overlay"}

@@ -10,11 +10,18 @@ from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Sequence
 
 from game_frame_classifier.sourcing.hashing import sha256_file
 
-from .links import OLD_MEDAL_ERROR, UNSUPPORTED_SITE_ERROR, LinkInfo, game_for_slug, parse_link
+from .links import (
+    OLD_MEDAL_ERROR,
+    UNSUPPORTED_SITE_ERROR,
+    LinkEntry,
+    LinkInfo,
+    game_for_slug,
+    parse_link,
+)
 from .naming import clip_file_name
 from .users import AskFn, append_user, decide, load_users
 
@@ -42,8 +49,13 @@ LOG_COLUMNS = (
     "source",
     "uploader_id",
     "uploader",
+    "content_type",
+    "content_type_origin",
 )
-HINTS_COLUMNS = ("file", "game", "other_name")
+HINTS_COLUMNS = ("file", "game", "other_name", "content_type", "content_type_origin")
+
+YOUTUBE_FORMAT = "bestvideo[height<=720]+bestaudio/best[height<=720]"
+MEDAL_FORMAT = "bestvideo*+bestaudio/best"
 
 
 class RateLimited(Exception):
@@ -63,6 +75,7 @@ class Summary:
     by_source: Counter = field(default_factory=Counter)
     pending: list[str] = field(default_factory=list)
     rate_limited: bool = False
+    unlabelled: int = 0
 
     @property
     def exit_code(self) -> int:
@@ -75,7 +88,7 @@ class Summary:
         return 0
 
 
-def ytdlp_download(url: str, out_dir: Path, temp_name: str) -> dict:
+def ytdlp_download(url: str, out_dir: Path, temp_name: str, *, format_str: str | None = None) -> dict:
     """Download one URL with yt-dlp into out_dir/temp_name; return the info dict."""
     try:
         import yt_dlp
@@ -88,7 +101,7 @@ def ytdlp_download(url: str, out_dir: Path, temp_name: str) -> dict:
     # outtmpl without extension; merge_output_format supplies .mp4
     stem = dest.with_suffix("")
     opts = {
-        "format": "bestvideo*+bestaudio/best",
+        "format": format_str or MEDAL_FORMAT,
         "merge_output_format": "mp4",
         "noplaylist": True,
         "retries": 3,
@@ -142,7 +155,7 @@ def ytdlp_metadata(url: str) -> dict:
 
 
 def _skip_key(info: LinkInfo) -> str:
-    if info.site == "medal" and info.clip_id:
+    if info.site in ("medal", "youtube") and info.clip_id:
         return info.clip_id
     return info.url
 
@@ -160,7 +173,7 @@ def _load_ok_keys(log_path: Path) -> set[str]:
             clip_id = (row.get("clip_id") or "").strip()
             url = (row.get("url") or "").strip()
             site = (row.get("site") or "").strip()
-            if site == "medal" and clip_id:
+            if site in ("medal", "youtube") and clip_id:
                 ok.add(clip_id)
             elif url:
                 ok.add(url)
@@ -200,7 +213,7 @@ def _append_log(log_path: Path, row: dict[str, object]) -> None:
 
 
 def _write_hints(incoming_dir: Path, log_path: Path) -> None:
-    """Rewrite hints.csv from ok log rows that have a game or Other."""
+    """Rewrite hints.csv from ok log rows (including unlabelled, game empty)."""
     hints_path = incoming_dir / HINTS_NAME
     rows: list[dict[str, str]] = []
     seen: set[str] = set()
@@ -210,15 +223,20 @@ def _write_hints(incoming_dir: Path, log_path: Path) -> None:
                 if (row.get("status") or "") != "ok":
                     continue
                 rel = (row.get("file") or "").strip()
-                game = (row.get("game") or "").strip()
-                other = (row.get("other_name") or "").strip()
-                if not rel or not game:
+                if not rel:
                     continue
                 if rel in seen:
-                    # keep latest
                     rows = [r for r in rows if r["file"] != rel]
                 seen.add(rel)
-                rows.append({"file": rel, "game": game, "other_name": other})
+                rows.append(
+                    {
+                        "file": rel,
+                        "game": (row.get("game") or "").strip(),
+                        "other_name": (row.get("other_name") or "").strip(),
+                        "content_type": (row.get("content_type") or "").strip(),
+                        "content_type_origin": (row.get("content_type_origin") or "").strip(),
+                    }
+                )
     with open(hints_path, "w", encoding="utf-8", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=HINTS_COLUMNS)
         writer.writeheader()
@@ -242,14 +260,61 @@ def _upload_date_str(info: dict) -> str | None:
     return str(raw)
 
 
-def _uploader_fields(meta: dict) -> tuple[str, str]:
+def _uploader_fields(meta: dict, site: str) -> tuple[str, str]:
+    if site == "youtube":
+        uid = meta.get("channel_id") or meta.get("uploader_id")
+        name = meta.get("channel") or meta.get("uploader")
+        uid_s = str(uid) if uid is not None and str(uid) else ""
+        if uid_s and not uid_s.startswith("yt:"):
+            uid_s = f"yt:{uid_s}"
+        return (uid_s, str(name) if name else "")
     uid = meta.get("uploader_id")
     name = meta.get("uploader")
     return (str(uid) if uid is not None and str(uid) else "", str(name) if name else "")
 
 
+def _resolve_game(entry: LinkEntry, info: LinkInfo) -> tuple[str, str]:
+    if entry.game:
+        return entry.game, entry.other_name if entry.game == "Other" else ""
+    return game_for_slug(info.slug)
+
+
+def _resolve_content_type(
+    entry: LinkEntry,
+    users: dict[str, dict[str, str]],
+    uploader_id: str,
+) -> tuple[str, str]:
+    if entry.content_type:
+        return entry.content_type, "video"
+    row = users.get(uploader_id) or {}
+    channel_ct = (row.get("content_type") or "").strip()
+    if channel_ct:
+        return channel_ct, "channel"
+    return "", ""
+
+
+def _as_entries(links: Sequence[str | LinkEntry]) -> list[LinkEntry]:
+    out: list[LinkEntry] = []
+    for item in links:
+        if isinstance(item, LinkEntry):
+            out.append(item)
+        else:
+            out.append(LinkEntry(url=str(item)))
+    return out
+
+
+def _duration_s(meta: dict) -> float | None:
+    raw = meta.get("duration")
+    if raw is None:
+        return None
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return None
+
+
 def run(
-    links: list[str],
+    links: Sequence[str | LinkEntry],
     incoming_dir: Path,
     *,
     source_override: str | None = None,
@@ -263,6 +328,7 @@ def run(
     dry_run: bool = False,
     sleep: SleepFn = time.sleep,
     now: NowFn = datetime.now,
+    max_minutes: float = 60.0,
 ) -> Summary:
     """Download links into incoming_dir/<source>/; log and hints at incoming_dir."""
     incoming_dir = Path(incoming_dir)
@@ -273,22 +339,25 @@ def run(
     downloads_done = 0
     pending_pause = False
     auto = source_override is None
+    entries = _as_entries(links)
 
     # Parse and classify refusals / skips first.
-    work: list[tuple[LinkInfo, str, str]] = []  # info, game, other_name
-    for url in links:
-        info = parse_link(url)
-        game, other_name = game_for_slug(info.slug)
+    work: list[tuple[LinkEntry, LinkInfo, str, str]] = []  # entry, info, game, other_name
+    for entry in entries:
+        info = parse_link(entry.url)
+        game, other_name = _resolve_game(entry, info)
         key = _skip_key(info)
 
         refusal = ""
-        if info.site != "medal":
+        if info.site not in ("medal", "youtube"):
             refusal = UNSUPPORTED_SITE_ERROR
-        elif info.clip_id and not info.slug:
+        elif info.site == "medal" and info.clip_id and not info.slug:
             refusal = OLD_MEDAL_ERROR
+        elif info.site == "youtube" and not info.clip_id:
+            refusal = "could not parse YouTube video id"
         if refusal:
             if dry_run:
-                print(f"dry-run fail  {url}  ({refusal})")
+                print(f"dry-run fail  {entry.url}  ({refusal})")
             else:
                 _append_log(
                     log_path,
@@ -303,6 +372,7 @@ def run(
                         "status": "failed",
                         "error": refusal,
                         "source": source_override or "",
+                        "content_type": entry.content_type,
                     },
                 )
             summary.by_status["failed"] += 1
@@ -315,7 +385,7 @@ def run(
             if not refetch:
                 summary.by_status["skipped"] += 1
                 if dry_run:
-                    print(f"dry-run skip  {url}  already ok")
+                    print(f"dry-run skip  {entry.url}  already ok")
                 else:
                     _append_log(
                         log_path,
@@ -330,14 +400,15 @@ def run(
                             "status": "skipped",
                             "error": "already downloaded",
                             "source": source_override or "",
+                            "content_type": entry.content_type,
                         },
                     )
                 continue
 
-        work.append((info, game, other_name))
+        work.append((entry, info, game, other_name))
 
     if dry_run:
-        for info, game, other_name in work:
+        for entry, info, game, other_name in work:
             label = game or (f"Other/{other_name}" if other_name else "(no game)")
             src = source_override or "(auto)"
             print(
@@ -347,14 +418,16 @@ def run(
             summary.by_status["ok"] += 1
             if game:
                 summary.by_game[game] += 1
+            else:
+                summary.unlabelled += 1
             if source_override:
                 summary.by_source[source_override] += 1
         return summary
 
-    # Metadata pass (automatic mode only).
+    # Metadata pass (automatic mode always; override mode when max_minutes needs a check).
     meta_by_url: dict[str, dict] = {}
     if auto:
-        for info, game, other_name in work:
+        for entry, info, game, other_name in work:
             if pending_pause and pause_s > 0:
                 sleep(pause_s)
             pending_pause = True
@@ -373,6 +446,7 @@ def run(
                         "other_name": other_name,
                         "status": "rate_limited",
                         "error": _scrub_error(exc),
+                        "content_type": entry.content_type,
                     },
                 )
                 summary.by_status["rate_limited"] += 1
@@ -392,11 +466,12 @@ def run(
                         "other_name": other_name,
                         "status": "failed",
                         "error": _scrub_error(exc),
+                        "content_type": entry.content_type,
                     },
                 )
                 summary.by_status["failed"] += 1
                 continue
-            uid, uname = _uploader_fields(meta)
+            uid, uname = _uploader_fields(meta, info.site)
             if not uid:
                 _append_log(
                     log_path,
@@ -410,6 +485,7 @@ def run(
                         "other_name": other_name,
                         "status": "failed",
                         "error": "no uploader in metadata; use --source",
+                        "content_type": entry.content_type,
                     },
                 )
                 summary.by_status["failed"] += 1
@@ -417,7 +493,7 @@ def run(
             meta_by_url[info.url] = meta
 
         # Drop failed / rate-limited from work (already logged).
-        work = [(i, g, o) for i, g, o in work if i.url in meta_by_url]
+        work = [(e, i, g, o) for e, i, g, o in work if i.url in meta_by_url]
 
         # Uploader decisions.
         if users_path is None:
@@ -425,34 +501,36 @@ def run(
         users = load_users(users_path)
         # Count clips per new uploader in first-appearance order.
         counts: dict[str, int] = {}
-        order: list[tuple[str, str]] = []  # (id, name)
-        for info, _g, _o in work:
+        order: list[tuple[str, str, str]] = []  # (id, name, prefix)
+        for entry, info, _g, _o in work:
             meta = meta_by_url[info.url]
-            uid, uname = _uploader_fields(meta)
+            uid, uname = _uploader_fields(meta, info.site)
             known = users.get(uid)
             if known is not None and (known.get("allowed") or "").strip():
                 continue  # decided (yes or no)
             if uid not in counts:
                 counts[uid] = 0
-                order.append((uid, uname))
+                prefix = "yt" if info.site == "youtube" else "friend"
+                order.append((uid, uname, prefix))
             counts[uid] += 1
-        new_list = [(uid, name, counts[uid]) for uid, name in order]
+        new_list = [(uid, name, counts[uid], prefix) for uid, name, prefix in order]
         decided = decide(new_list, ask)
         for uid, row in decided.items():
             append_user(users_path, row)
             users[uid] = row
 
-        # Assign source or log not_allowed / pending.
-        assigned: list[tuple[LinkInfo, str, str, str, str, str]] = []
-        # info, game, other, source, uploader_id, uploader
-        for info, game, other_name in work:
+        # Assign source or log not_allowed / pending; resolve content type.
+        assigned: list[tuple[LinkEntry, LinkInfo, str, str, str, str, str, str, str]] = []
+        # entry, info, game, other, source, uploader_id, uploader, content_type, origin
+        for entry, info, game, other_name in work:
             meta = meta_by_url[info.url]
-            uid, uname = _uploader_fields(meta)
+            uid, uname = _uploader_fields(meta, info.site)
             row = users.get(uid) or {}
             allowed = (row.get("allowed") or "").strip().lower()
             source = (row.get("source") or "").strip()
+            ct, cto = _resolve_content_type(entry, users, uid)
             if allowed == "yes" and source:
-                assigned.append((info, game, other_name, source, uid, uname))
+                assigned.append((entry, info, game, other_name, source, uid, uname, ct, cto))
             elif allowed == "no":
                 _append_log(
                     log_path,
@@ -468,6 +546,8 @@ def run(
                         "source": source,
                         "uploader_id": uid,
                         "uploader": uname,
+                        "content_type": ct,
+                        "content_type_origin": cto,
                     },
                 )
                 summary.by_status["not_allowed"] += 1
@@ -486,21 +566,26 @@ def run(
                         "source": source,
                         "uploader_id": uid,
                         "uploader": uname,
+                        "content_type": ct,
+                        "content_type_origin": cto,
                     },
                 )
                 summary.by_status["pending_permission"] += 1
                 if uid not in summary.pending:
                     summary.pending.append(uid)
         download_items = assigned
+        users_for_ct = users
     else:
+        users_for_ct = load_users(users_path) if users_path else {}
         download_items = [
-            (info, game, other_name, source_override, "", "")
-            for info, game, other_name in work
+            (entry, info, game, other_name, source_override, "", "", entry.content_type, "video" if entry.content_type else "")
+            for entry, info, game, other_name in work
         ]
 
     # Downloads.
     pending_pause = False  # pause again between downloads (after metadata)
-    for info, game, other_name, source, uploader_id, uploader in download_items:
+    max_s = float(max_minutes) * 60.0 if max_minutes and max_minutes > 0 else None
+    for entry, info, game, other_name, source, uploader_id, uploader, content_type, content_type_origin in download_items:
         if limit is not None and downloads_done >= limit:
             break
 
@@ -508,11 +593,47 @@ def run(
             sleep(pause_s)
         pending_pause = True
 
+        # Duration check before download when metadata is already available (auto mode).
+        meta_pre = meta_by_url.get(info.url)
+        if max_s is not None and meta_pre is not None:
+            dur = _duration_s(meta_pre)
+            if dur is not None and dur > max_s:
+                _append_log(
+                    log_path,
+                    {
+                        "utc": _utc_now_iso(),
+                        "url": info.url,
+                        "site": info.site,
+                        "clip_id": info.clip_id,
+                        "slug": info.slug,
+                        "game": game,
+                        "other_name": other_name,
+                        "status": "skipped_long",
+                        "error": f"duration {dur:g}s > max {max_minutes:g} min",
+                        "source": source,
+                        "uploader_id": uploader_id,
+                        "uploader": uploader,
+                        "content_type": content_type,
+                        "content_type_origin": content_type_origin,
+                    },
+                )
+                summary.by_status["skipped_long"] += 1
+                continue
+
         source_dir = incoming_dir / source
         source_dir.mkdir(parents=True, exist_ok=True)
         temp_name = f"_tmp_{info.clip_id or 'clip'}.mp4"
+        fmt = YOUTUBE_FORMAT if info.site == "youtube" else MEDAL_FORMAT
+
+        def _call_downloader(u: str, d: Path, n: str) -> dict:
+            # Prefer keyword format_str when the fake/real downloader accepts it.
+            try:
+                return downloader(u, d, n, format_str=fmt)  # type: ignore[call-arg]
+            except TypeError:
+                return downloader(u, d, n)
+
         try:
-            meta = downloader(info.url, source_dir, temp_name)
+            meta = _call_downloader(info.url, source_dir, temp_name)
         except RateLimited as exc:
             _append_log(
                 log_path,
@@ -529,6 +650,8 @@ def run(
                     "source": source,
                     "uploader_id": uploader_id,
                     "uploader": uploader,
+                    "content_type": content_type,
+                    "content_type_origin": content_type_origin,
                 },
             )
             summary.by_status["rate_limited"] += 1
@@ -551,22 +674,60 @@ def run(
                     "source": source,
                     "uploader_id": uploader_id,
                     "uploader": uploader,
+                    "content_type": content_type,
+                    "content_type_origin": content_type_origin,
                 },
             )
             summary.by_status["failed"] += 1
             continue
 
         if not auto:
-            uid, uname = _uploader_fields(meta)
+            uid, uname = _uploader_fields(meta, info.site)
             uploader_id = uid
             uploader = uname
+            ct, cto = _resolve_content_type(entry, users_for_ct, uploader_id)
+            if ct and not entry.content_type:
+                content_type, content_type_origin = ct, cto
+            elif entry.content_type:
+                content_type, content_type_origin = entry.content_type, "video"
+
+        # Override mode: skip long after download using returned info (no metadata pass).
+        if max_s is not None and meta_pre is None:
+            dur = _duration_s(meta)
+            if dur is not None and dur > max_s:
+                temp_path = source_dir / temp_name
+                if temp_path.exists():
+                    temp_path.unlink()
+                _append_log(
+                    log_path,
+                    {
+                        "utc": _utc_now_iso(),
+                        "url": info.url,
+                        "site": info.site,
+                        "clip_id": info.clip_id,
+                        "slug": info.slug,
+                        "game": game,
+                        "other_name": other_name,
+                        "status": "skipped_long",
+                        "error": f"duration {dur:g}s > max {max_minutes:g} min",
+                        "source": source,
+                        "uploader_id": uploader_id,
+                        "uploader": uploader,
+                        "content_type": content_type,
+                        "content_type_origin": content_type_origin,
+                    },
+                )
+                summary.by_status["skipped_long"] += 1
+                continue
 
         if not info.clip_id and meta.get("id"):
             info = LinkInfo(url=info.url, site=info.site, clip_id=str(meta["id"]), slug=info.slug)
 
         upload = _info_timestamp(meta)
         upload_date = _upload_date_str(meta)
-        file_name, used, time_source = clip_file_name(info, upload, upload_date, now())
+        file_name, used, time_source = clip_file_name(
+            info, upload, upload_date, now(), game=game, other_name=other_name
+        )
         temp_path = source_dir / temp_name
         final_path = source_dir / file_name
         if temp_path.exists():
@@ -589,6 +750,8 @@ def run(
                     "source": source,
                     "uploader_id": uploader_id,
                     "uploader": uploader,
+                    "content_type": content_type,
+                    "content_type_origin": content_type_origin,
                 },
             )
             summary.by_status["failed"] += 1
@@ -629,11 +792,15 @@ def run(
                 "source": source,
                 "uploader_id": uploader_id,
                 "uploader": uploader,
+                "content_type": content_type,
+                "content_type_origin": content_type_origin,
             },
         )
         summary.by_status["ok"] += 1
         if game:
             summary.by_game[game] += 1
+        else:
+            summary.unlabelled += 1
         summary.by_source[source] += 1
         finished.add(_skip_key(info))
         downloads_done += 1
@@ -646,6 +813,8 @@ def print_summary(summary: Summary) -> None:
     print("status:", dict(summary.by_status))
     if summary.by_game:
         print("games:", dict(summary.by_game))
+    if summary.unlabelled:
+        print("unlabelled:", summary.unlabelled)
     if summary.by_source:
         print("sources:", dict(summary.by_source))
     if summary.pending:

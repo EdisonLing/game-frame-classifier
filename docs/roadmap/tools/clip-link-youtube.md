@@ -1,7 +1,7 @@
 # YouTube links, channel listing and content types (`gfc-fetch-clips` 1.2, `gfc-sort-clips` 1.2)
 
 **Stage:** 1 — Collection  
-**Status:** specified  
+**Status:** implemented  
 **Back to:** [ROADMAP.md](../ROADMAP.md) · [clip link downloader](clip-link-downloader.md) · [automatic sources](clip-link-auto-source.md) · [clip sorter](clip-sorter.md)
 
 ## What it does
@@ -59,11 +59,11 @@ Unit, with fake metadata, listing and download functions (no network): YouTube l
 
 ## Acceptance checks
 
-- [ ] YouTube links and channels download into one source per channel without asking
-- [ ] Unlabelled videos are flagged and the sorter can show only them
-- [ ] Content type can be set per video (links file or sorter) or as a channel tag that its videos inherit, and reaches `clips_index` with its origin
-- [ ] Long videos skipped; at most 720p
-- [ ] Docs updated: this spec, [clip-link-downloader.md](clip-link-downloader.md) scope (Medal and YouTube), [clip-sorter.md](clip-sorter.md) keys and flags, `docs/data-layout.md`
+- [x] YouTube links and channels download into one source per channel without asking
+- [x] Unlabelled videos are flagged and the sorter can show only them
+- [x] Content type can be set per video (links file or sorter) or as a channel tag that its videos inherit, and reaches `clips_index` with its origin
+- [x] Long videos skipped; at most 720p
+- [x] Docs updated: this spec, [clip-link-downloader.md](clip-link-downloader.md) scope (Medal and YouTube), [clip-sorter.md](clip-sorter.md) keys and flags, `docs/data-layout.md`
 
 ## Build instructions
 

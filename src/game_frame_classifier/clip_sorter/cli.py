@@ -14,7 +14,7 @@ from .apply import accept_hints, plan, print_summary, run, write_report
 from .scan import read_hints, scan
 from .server import Session, serve
 from .sheets import SheetWorker
-from .store import first_undecided, replay
+from .store import filter_unlabelled, first_undecided, replay
 
 
 def _validate_source(raw: str) -> str:
@@ -52,6 +52,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Label every undecided clip with its hints game (Medal tag), then apply; no page",
     )
+    p.add_argument(
+        "--unlabelled",
+        action="store_true",
+        help="Show only clips with no game suggestion and no lasting decision",
+    )
     return p
 
 
@@ -88,6 +93,8 @@ def main(argv: list[str] | None = None) -> int:
             hints_path = default_hints
     hints = read_hints(hints_path) if hints_path else {}
     clips = scan(folder, recipe, tools, hints, source=source_override)
+    if args.unlabelled:
+        clips = filter_unlabelled(clips, replay(session_dir))
     print(f"scanned {len(clips)} clips -> session {session_dir}", flush=True)
 
     plan_source = source_override or ""

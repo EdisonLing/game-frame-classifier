@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
+from game_frame_classifier.clip_fetch.links import CONTENT_TYPES
 from game_frame_classifier.sourcing.labels import GAMES, OTHER, normalize_other_name
 
 from .scan import Clip
@@ -19,7 +20,7 @@ from .sheets import SheetWorker, sheet_path
 from .store import append, first_undecided, last_decision_quick_id, other_names, replay
 
 PAGE_PATH = Path(__file__).with_name("page.html")
-VALID_DECISIONS = frozenset({"label", "disabled", "trash", "skip"})
+VALID_DECISIONS = frozenset({"label", "disabled", "trash", "skip", "content"})
 
 
 class Session:
@@ -36,6 +37,18 @@ class Session:
         self.current = first_undecided(clips, replay(session_dir))
 
 
+def _content_fields(clip: Clip, entry: dict[str, Any]) -> tuple[str, str]:
+    cto = (entry.get("content_type_origin") or "").strip()
+    ct = (entry.get("content_type") or "").strip()
+    if cto == "sorter":
+        return ct, cto
+    if ct:
+        return ct, clip.content_type_origin or cto or "video"
+    if clip.content_type:
+        return clip.content_type, clip.content_type_origin
+    return "", ""
+
+
 def _clip_payload(session: Session, i: int, state: dict[str, dict[str, Any]]) -> dict[str, Any]:
     clip = session.clips[i]
     entry = state.get(clip.quick_id) or {}
@@ -43,6 +56,7 @@ def _clip_payload(session: Session, i: int, state: dict[str, dict[str, Any]]) ->
     if decision == "skip":
         decision = ""  # skip is undecided for the UI
     ready = sheet_path(session.session_dir, clip.quick_id).is_file()
+    ct, cto = _content_fields(clip, entry)
     return {
         "i": i,
         "rel_path": clip.rel_path,
@@ -58,6 +72,8 @@ def _clip_payload(session: Session, i: int, state: dict[str, dict[str, Any]]) ->
         "sheet_ready": ready,
         "quick_id": clip.quick_id,
         "source": clip.source,
+        "content_type": ct,
+        "content_type_origin": cto,
     }
 
 
@@ -160,8 +176,15 @@ def make_handler(session: Session) -> type[BaseHTTPRequestHandler]:
                 return
             game = str(data.get("game") or "")
             other_name = str(data.get("other_name") or "")
+            content_type = str(data.get("content_type") or "")
             clip = session.clips[i]
-            if decision == "label":
+            if decision == "content":
+                if content_type and content_type not in CONTENT_TYPES:
+                    self._json(400, {"error": "invalid content type"})
+                    return
+                game = ""
+                other_name = ""
+            elif decision == "label":
                 if clip.problem:
                     self._json(400, {"error": "clip has a problem and cannot be labelled"})
                     return
@@ -175,10 +198,18 @@ def make_handler(session: Session) -> type[BaseHTTPRequestHandler]:
                     return
                 else:
                     other_name = ""
+                content_type = ""
             else:
                 game = ""
                 other_name = ""
+                content_type = ""
             with session.lock:
+                if decision == "content":
+                    # Toggle: pressing the current type again clears it.
+                    state_now = replay(session.session_dir)
+                    current_ct, _cto = _content_fields(clip, state_now.get(clip.quick_id) or {})
+                    if content_type and content_type == current_ct:
+                        content_type = ""
                 append(
                     session.session_dir,
                     clip.quick_id,
@@ -186,11 +217,15 @@ def make_handler(session: Session) -> type[BaseHTTPRequestHandler]:
                     decision,
                     game=game,
                     other_name=other_name,
+                    content_type=content_type,
                 )
-                # advance to next clip
-                nxt = i + 1
-                if nxt >= len(session.clips):
-                    nxt = first_undecided(session.clips, replay(session.session_dir))
+                # Content type does not advance; labels do.
+                if decision == "content":
+                    nxt = i
+                else:
+                    nxt = i + 1
+                    if nxt >= len(session.clips):
+                        nxt = first_undecided(session.clips, replay(session.session_dir))
                 session.current = nxt
                 session.worker.prioritise(session.current)
                 state = replay(session.session_dir)

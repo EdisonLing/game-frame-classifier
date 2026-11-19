@@ -39,32 +39,34 @@ Automatic sources from folders: [clip-link-auto-source.md](clip-link-auto-source
 | `<folder>` | Folder of videos, searched recursively (the `_archive` subfolder is ignored) |
 | `--source` | Override source for every clip (normalised). Without it, source is the first folder under `<folder>` |
 | `--session` | Session name (default: `<folder name>_<source>` or `<folder name>_auto`); the session folder is `data/sorting/<session>/` |
-| `--hints` | CSV `file,game,other_name` (file relative to `<folder>`); default `<folder>/hints.csv` when present |
+| `--hints` | CSV `file,game,other_name[,content_type,content_type_origin]` (file relative to `<folder>`); default `<folder>/hints.csv` when present |
 | `--data-root` | Data root (default `data`) |
 | `--port` | Local port (default 8765; the next free port if taken). The server listens on 127.0.0.1 only |
 | `--no-open` | Do not open the browser |
 | `--apply` | Apply the decisions instead of starting the page |
 | `--dry-run` | With `--apply`: print what would happen, change nothing |
-| `--accept-hints` | Record a label for every undecided clip whose suggestion came from the hints file (the Medal game tag; Other only with a content name), then apply. Clips with a problem, without a hint, or already labelled, disabled or trashed are left for the page. Not with `--dry-run`. Decided 2026-11-19: Medal clips go into `data/raw/` on their tag without a manual pass; wrong or unusable frames are caught later by the frame cleaner and label review |
+| `--accept-hints` | Record a label for every undecided clip whose suggestion came from the hints file (the Medal game tag; Other only with a content name), then apply. Also takes the hint's content type. Clips with a problem, without a hint, or already labelled, disabled or trashed are left for the page. Not with `--dry-run`. Decided 2026-11-19: Medal clips go into `data/raw/` on their tag without a manual pass; wrong or unusable frames are caught later by the frame cleaner and label review |
+| `--unlabelled` | Show only clips with no game suggestion and no lasting label, disabled or trash decision (YouTube videos downloaded without a game; see [YouTube spec](clip-link-youtube.md)) |
 
 ## Decisions
 
-Each clip gets one decision; the latest one counts, and every decision can be changed until apply.
+Each clip gets one game decision; the latest one counts, and every decision can be changed until apply. Content type is separate and does not count as labelling the clip.
 
 | Key | Decision | On apply |
 |---|---|---|
 | `1`–`6` | One of the six games, in `sourcing.labels.GAMES` order (Valorant, League of Legends, CS2, Minecraft, Overwatch 2, Marvel Rivals) | Copied to `data/raw/<Game>/<source>/<relative path>` |
 | `7` | Other; the page asks for the content name the first time (list of names used before, or a new one, normalised with `normalize_other_name`) | Copied to `data/raw/_other/<name>/<source>/<relative path>` |
+| `V` / `G` / `O` | Content type: esports VOD / gameplay / streamer overlay (press current again to clear); origin `sorter` | Written to `content_types.csv` beside copied clips |
 | `D` | **Disabled**: not confident this clip should be used; kept for a later look | Nothing; stays listed as disabled in the report |
 | `X` | **Trash**: confident it should not be used | Moved to `<folder>/_archive/<relative path>` |
 | `S` | Skip for now (undecided) | Nothing |
 | `Enter` | Accept the suggested label | As the label |
-| `U` | Undo the last decision | — |
+| `U` | Undo the clip's most recent row (label or content type) | — |
 | `←` / `→` | Previous / next clip without deciding | — |
 | `P` | Open the clip in the default video player (`os.startfile`) | — |
 | `F` | Jump to the first undecided clip | — |
 
-After a decision the page moves to the next clip.
+After a game decision the page moves to the next clip; content-type keys do not.
 
 ## Behaviour
 
@@ -76,9 +78,9 @@ After a decision the page moves to the next clip.
    Otherwise no suggestion. The page always shows where a suggestion came from.
 3. **Contact sheets.** For each probed clip: six frames at `duration × (i − 0.5) / 6` for i = 1..6, each by one input seek (`ffmpeg -ss <t> -i <file> -frames:v 1 -vf scale=320:-2`), tiled 3×2 into `data/sorting/<session>/sheets/<quick_id>.jpg` (`ffmpeg -i f%d.jpg -vf tile=3x2`). A background worker (2 threads) makes sheets in clip order, starting at the current clip and running ahead, so the page rarely waits. Existing sheets are reused. Measured on 3-minute 4K clips: 1.7–5.3 s per sheet.
 4. **Page.** One HTML page with inline CSS and JavaScript (no external files), served by the standard library (`http.server.ThreadingHTTPServer`) on 127.0.0.1. Shows the sheet large, the file name and relative path, duration and resolution, the suggested label and its origin, the current decision, progress (decided / total, clips per minute) and a key legend. A "sheet not ready" placeholder refreshes until the sheet exists.
-5. **Saving.** Every decision appends one line to `data/sorting/<session>/decisions.csv` (`utc, quick_id, rel_path, decision, game, other_name`; `decision` is `label`, `disabled`, `trash`, `skip` or `undo`). The current state is the replay of that file, so closing the page or the program loses nothing, and restarting resumes at the first undecided clip.
+5. **Saving.** Every decision appends one line to `data/sorting/<session>/decisions.csv` (`utc, quick_id, rel_path, decision, game, other_name, content_type`; `decision` is `label`, `disabled`, `trash`, `skip`, `content` or `undo`). The current state is the replay of that file, so closing the page or the program loses nothing, and restarting resumes at the first undecided clip. Content-type rows do not count as deciding the clip.
 6. **Apply** (`--apply`), per clip by its latest decision:
-   - Label: compute the SHA-256; if it is already in `frame_sources/_index/by_sha256.json`, report `already_in_pipeline` and skip. Otherwise copy (`shutil.copy2`, keeps the file time) to the destination; an existing identical file is reported `already_copied`; an existing different file stops that clip with `conflict`.
+   - Label: compute the SHA-256; if it is already in `frame_sources/_index/by_sha256.json`, report `already_in_pipeline` and skip. Otherwise copy (`shutil.copy2`, keeps the file time) to the destination; an existing identical file is reported `already_copied`; an existing different file stops that clip with `conflict`. For each copied clip with a content type, add or replace its row in `content_types.csv` beside the videos (`file, content_type, content_type_origin`).
    - Trash: move to `<folder>/_archive/<relative path>` (create folders; never overwrite: add `_1`, `_2` if needed).
    - Disabled, skip, undecided: untouched.
    - Write `data/sorting/<session>/apply_report.json` and `.csv` (`rel_path, decision, result, destination`) and print counts per game, Other name, disabled, trashed, skipped and conflicts.

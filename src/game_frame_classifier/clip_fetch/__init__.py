@@ -1,3 +1,3 @@
-"""Download Medal (and similar) clip links into data/incoming_clips/."""
+"""Download Medal and YouTube clip links into data/incoming_clips/."""
 
-__version__ = "1.1.0"
+__version__ = "1.2.0"

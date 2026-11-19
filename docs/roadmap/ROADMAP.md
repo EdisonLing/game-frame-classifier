@@ -221,9 +221,9 @@ Package what exists; keep text short and figure-heavy.
 | 4b | [Make sources](tools/make-sources.md) | 1 | **implemented** | Personal clips → `frame_sources` |
 | 4c | [Derive frames](tools/derive-frames.md) | 1 | **implemented** | 256×144 + `clips_index` / `slots` |
 | 4d | [Clip sorter](tools/clip-sorter.md) | 1 | **implemented** | Contact sheets in a local page; label, disable or trash; copies into `data/raw/` |
-| 4e | [Clip link downloader](tools/clip-link-downloader.md) | 1 | **implemented** (Medal only) | Medal clip links → files with game and time in the name; other sites refused (YouTube etc. later) |
+| 4e | [Clip link downloader](tools/clip-link-downloader.md) | 1 | **implemented** (Medal and YouTube) | Medal and YouTube links → files with game and time in the name; other sites refused |
 | 4e.1 | [Clip link auto sources](tools/clip-link-auto-source.md) | 1 | **implemented** | One source per Medal uploader (`friend_<username>` by default, remembered; block in the uploader file); sorter takes sources from folders |
-| 4e.2 | [YouTube links, channel listing and content types](tools/clip-link-youtube.md) | 1 | specified | YouTube links (one source per channel); channel listing; unlabelled flag and sorter filter; content type per video or channel tag |
+| 4e.2 | [YouTube links, channel listing and content types](tools/clip-link-youtube.md) | 1 | **implemented** | YouTube links (one source per channel); channel listing; unlabelled flag and sorter filter; content type per video or channel tag |
 | 4f | [Label review](tools/label-review.md) | 2 | specified | Flag frames a model disagrees with; quarantine, confirm or relabel; out-of-fold for train |
 | 4h | [Ingest stills](tools/ingest-stills.md) | 1 | **implemented** | Labelled still images to frame_sources clips; dataset groups kept whole, made-up groups marked; licence gate for public sources |
 | 4g | [Public dataset licences](tools/public-licenses.md) | 1 | **implemented** | Save each public dataset's licence before its media; generated attribution document for active sources; per-split licence list |

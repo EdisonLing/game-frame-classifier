@@ -79,7 +79,14 @@ def test_suggest_ambiguous_none():
 def test_read_hints(tmp_path):
     path = tmp_path / "hints.csv"
     path.write_text("file,game,other_name\nsub/a.mp4,CS2,\n", encoding="utf-8")
-    assert read_hints(path) == {"sub/a.mp4": ("CS2", "")}
+    assert read_hints(path) == {"sub/a.mp4": ("CS2", "", "", "")}
+    path2 = tmp_path / "hints2.csv"
+    path2.write_text(
+        "file,game,other_name,content_type,content_type_origin\n"
+        "b.mp4,, ,streamer_overlay,channel\n",
+        encoding="utf-8",
+    )
+    assert read_hints(path2)["b.mp4"] == ("", "", "streamer_overlay", "channel")
 
 
 # --- scan ---
@@ -312,3 +319,63 @@ def test_cli_session_name_auto(tmp_path, monkeypatch):
     args = p.parse_args([str(tmp_path), "--apply", "--dry-run"])
     assert args.source is None
     assert args.session == ""
+
+# --- content type / unlabelled (1.2) ----------------------------------------
+
+
+def test_content_type_set_toggle_undo_does_not_count_as_decision(tmp_path):
+    from game_frame_classifier.clip_sorter.store import LASTING_DECISIONS, filter_unlabelled
+
+    session = tmp_path / "sess"
+    c1 = "qid_cccccccc"
+    append(session, c1, "u.mp4", "content", content_type="gameplay")
+    state = replay(session)
+    assert state[c1]["content_type"] == "gameplay"
+    assert state[c1]["content_type_origin"] == "sorter"
+    assert state[c1]["decision"] == ""
+    assert state[c1]["decision"] not in LASTING_DECISIONS
+    append(session, c1, "u.mp4", "content", content_type="")  # clear
+    state = replay(session)
+    assert state[c1]["content_type"] == ""
+    append(session, c1, "u.mp4", "content", content_type="esports_vod")
+    append(session, c1, "u.mp4", "undo")
+    state = replay(session)
+    assert state[c1]["content_type"] == ""
+    clips = [
+        Clip("u.mp4", tmp_path / "u.mp4", 1, c1, 1.0, 1, 1, "", "", "", ""),
+        Clip("labelled.mp4", tmp_path / "l.mp4", 1, "qid_dddddddd", 1.0, 1, 1, "", "Valorant", "", "hints"),
+    ]
+    assert filter_unlabelled(clips, state) == [clips[0]]
+
+
+@requires_ffmpeg
+def test_accept_hints_and_apply_writes_content_types(tmp_path):
+    from game_frame_classifier.clip_sorter.apply import accept_hints
+
+    folder = tmp_path / "inbox"
+    data_root = tmp_path / "data"
+    session = data_root / "sorting" / "t"
+    src = folder / "yt_example"
+    make_testsrc_video(src / "clip.mp4", duration_s=2.0)
+    hints_path = folder / "hints.csv"
+    hints_path.write_text(
+        "file,game,other_name,content_type,content_type_origin\n"
+        "yt_example/clip.mp4,Valorant,,streamer_overlay,channel\n",
+        encoding="utf-8",
+    )
+    tools = find_tools()
+    recipe = load_recipe(RECIPE)
+    clips = scan(folder, recipe, tools, read_hints(hints_path))
+    n = accept_hints(session, clips)
+    assert n == 1
+    state = replay(session)
+    qid = clips[0].quick_id
+    assert state[qid]["decision"] == "label"
+    assert state[qid]["content_type"] == "streamer_overlay"
+    actions = plan(session, folder, clips, "", data_root)
+    report = run(actions, dry_run=False)
+    assert report["counts"]["copied"] == 1
+    ct_path = data_root / "raw" / "Valorant" / "yt_example" / "content_types.csv"
+    assert ct_path.is_file()
+    text = ct_path.read_text(encoding="utf-8")
+    assert "clip.mp4" in text and "streamer_overlay" in text and "channel" in text

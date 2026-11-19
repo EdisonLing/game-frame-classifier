@@ -251,6 +251,10 @@ def test_other_tree_is_indexed_with_name_and_special_paths(tmp_path):
     slots = build_slot_rows(plan, RECIPE)
     assert clip["game"] == "Other"
     assert clip["other_name"] == "Apex_Legends"
+    assert clip["content_type"] == ""
+    assert clip["content_type_origin"] == ""
+    assert "content_type" in CLIPS_INDEX_COLUMNS
+    assert list(CLIPS_INDEX_COLUMNS).index("content_type") == list(CLIPS_INDEX_COLUMNS).index("other_name") + 1
     assert slots[0]["other_name"] == "Apex_Legends"
     assert slots[0]["path_full"].startswith(
         "frames/_other/Apex_Legends/contributor_x/"

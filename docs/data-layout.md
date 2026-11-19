@@ -39,20 +39,20 @@ What people shared as links, kept so downloads can be rebuilt (`gfc-fetch-clips 
 
 ```text
 data/clip_links/
-  <YYYY-MM-DD>_<label>.txt   # one link per line, one file per batch as received
-  medal_users.csv            # Medal uploader -> source and permission (gfc-fetch-clips)
+  <YYYY-MM-DD>_<label>.txt   # one link per line (url[,game[,content_type]]), one file per batch
+  medal_users.csv            # uploader -> source, permission, optional content_type tag (Medal and YouTube)
 ```
 
 ## Incoming clips (`data/incoming_clips/`)
 
-Downloads from contributor Medal links (`gfc-fetch-clips`), before labelling with the clip sorter.
+Downloads from contributor Medal and YouTube links (`gfc-fetch-clips`), before labelling with the clip sorter.
 
 ```text
 data/incoming_clips/
   fetch_log.csv        # one row per attempt (all sources); file is <source>/<name>
-  hints.csv            # file,game,other_name for gfc-sort-clips (file relative to incoming_clips/)
+  hints.csv            # file,game,other_name,content_type,content_type_origin (relative paths)
   <source>/
-    <slug>__<YYYY-MM-DD>__<HH-MM-SS>__<clip_id>.mp4
+    <slug|unlabelled>__<YYYY-MM-DD>__<HH-MM-SS>__<clip_id>.mp4
 ```
 
 ## Frame sources (`data/frame_sources/`)
@@ -84,10 +84,12 @@ data/raw/
     <source>/
       anything.mp4
       another_clip.mkv
+      content_types.csv   # optional; file,content_type,content_type_origin (from gfc-sort-clips)
   _other/
     <other_name>/
       <source>/
         anything.mp4
+        content_types.csv
 ```
 
 ### Exact game folder names (top level under `raw/`)

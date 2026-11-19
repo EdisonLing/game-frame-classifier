@@ -1,12 +1,12 @@
 # Clip link downloader (`gfc-fetch-clips`)
 
 **Stage:** 1 — Data intake  
-**Status:** implemented (Medal only)  
+**Status:** implemented (Medal and YouTube)  
 **Back to:** [ROADMAP.md](../ROADMAP.md) · [clip sorter](clip-sorter.md) · [make-sources](make-sources.md)
 
 ## What it does (high level)
 
-Downloads the clips a contributor shared as links (Medal clip links), one by one, into a local folder, names each file with its game and upload time, and writes a hints file so the [clip sorter](clip-sorter.md) shows the game as the suggested label. It uses only the links the contributor gave, with no account login.
+Downloads the clips a contributor shared as links (Medal clip links and YouTube videos), one by one, into a local folder, names each file with its game and upload time, and writes a hints file so the [clip sorter](clip-sorter.md) shows the game as the suggested label. It uses only the links given, with no account login. YouTube channels, unlabelled videos, and content types: [clip-link-youtube.md](clip-link-youtube.md).
 
 ## Why we need it
 
@@ -14,14 +14,14 @@ Some contributors keep clips only in Medal's cloud. They have given permission t
 
 ## Scope and limits
 
-- **Medal clip links only, and only Medal has been tested.** Links to any other site are refused without a download attempt (status `failed`, error "unsupported site: only Medal clip links are supported for now"); those clips are downloaded by hand or exported by the contributor, then sorted with the [clip sorter](clip-sorter.md).
-- **No account access.** No logins, cookies or auth tokens; only clips that can be viewed through their link. Profile-wide downloads are out of scope.
-- **Permission is per contributor.** The link list is what the contributor shared; the tool does not discover other clips.
+- **Medal and YouTube.** Other sites are refused without a download attempt (status `failed`, error "unsupported site: only Medal and YouTube links are supported"); those clips are downloaded by hand or exported by the contributor, then sorted with the [clip sorter](clip-sorter.md).
+- **No account access.** No logins, cookies or auth tokens; only clips that can be viewed through their link.
+- **Permission is assumed** for every link or channel given to the tool (decided 2026-11-19).
 - **Polite.** One download at a time, a pause between downloads, and a stop on rate limiting (HTTP 429).
 
 ## Later: other sites
 
-YouTube, Insights.gg, Twitch clips and other video sites may be added later. Each needs its own link parsing, a way to get the game (from the link, the title or the page's category, or none and rely on the sorter), its own tests with a fake downloader, a check of that site's terms, and a real-link test with permission before it is enabled. Not built; until then the tool refuses those links.
+Insights.gg, Twitch clips and other video sites may be added later. Each needs its own link parsing, a way to get the game, its own tests with a fake downloader, a check of that site's terms, and a real-link test with permission before it is enabled. Not built; until then the tool refuses those links.
 
 ## Spike results (2026-11-18, yt-dlp 2026.10.26, three permitted Medal links)
 

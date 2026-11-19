@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 from game_frame_classifier.sourcing.labels import CLASSES, OTHER, label_hints, normalize_other_name
 
@@ -22,10 +22,10 @@ SLUG_GAMES: dict[str, str] = {
     "marvel-rivals": "Marvel_Rivals",
 }
 
+CONTENT_TYPES = ("esports_vod", "gameplay", "streamer_overlay")
+
 OLD_MEDAL_ERROR = "old Medal link form; ask for the full medal.tv/games/... link"
-# Only Medal clip links are supported and tested. Other sites (YouTube, Insights.gg, Twitch, ...)
-# may be added later, each with its own link parsing, game mapping and tests.
-UNSUPPORTED_SITE_ERROR = "unsupported site: only Medal clip links are supported for now"
+UNSUPPORTED_SITE_ERROR = "unsupported site: only Medal and YouTube links are supported"
 
 
 @dataclass(frozen=True)
@@ -36,24 +36,60 @@ class LinkInfo:
     slug: str
 
 
+@dataclass(frozen=True)
+class LinkEntry:
+    url: str
+    game: str = ""
+    other_name: str = ""
+    content_type: str = ""
+
+
+def parse_content_type(raw: str) -> str:
+    """Return a valid content type, or raise ValueError."""
+    value = (raw or "").strip()
+    if not value:
+        return ""
+    if value not in CONTENT_TYPES:
+        raise ValueError(f"invalid content type: {raw!r}")
+    return value
+
+
+def parse_game_field(raw: str) -> tuple[str, str]:
+    """Parse a links-file game field into (game, other_name).
+
+    Empty → ("", ""). ``Other:<name>`` → (Other, normalised name).
+    A CLASSES value → (game, ""). Anything else raises ValueError.
+    """
+    text = (raw or "").strip()
+    if not text:
+        return ("", "")
+    if text.startswith("Other:"):
+        other = normalize_other_name(text[len("Other:") :])
+        if not other:
+            raise ValueError(f"invalid Other name: {raw!r}")
+        return (OTHER, other)
+    if text == OTHER:
+        raise ValueError("Other requires Other:<name>")
+    if text in CLASSES:
+        return (text, "")
+    raise ValueError(f"invalid game: {raw!r}")
+
+
 def read_links(path: Path | str) -> list[str]:
-    """One link per line; blank and # lines dropped; duplicates removed, order kept."""
-    seen: set[str] = set()
-    out: list[str] = []
-    text = Path(path).read_text(encoding="utf-8-sig")
-    for raw in text.splitlines():
-        line = raw.strip()
-        if not line or line.startswith("#"):
-            continue
-        if line in seen:
-            continue
-        seen.add(line)
-        out.append(line)
-    return out
+    """One link per line; blank and # lines dropped; duplicates removed, order kept.
+
+    Lines may be ``url[,game[,content_type]]``; only the URL is returned.
+    """
+    return [entry.url for entry in read_link_entries([path])]
 
 
 def read_link_files(paths: list[Path | str]) -> list[str]:
     """Read links from files and folders (folders → sorted *.txt); de-dupe across files."""
+    return [entry.url for entry in read_link_entries(paths)]
+
+
+def read_link_entries(paths: list[Path | str]) -> list[LinkEntry]:
+    """Read ``url[,game[,content_type]]`` entries; folders → sorted *.txt; de-dupe by URL."""
     files: list[Path] = []
     for raw in paths:
         path = Path(raw)
@@ -62,14 +98,34 @@ def read_link_files(paths: list[Path | str]) -> list[str]:
         else:
             files.append(path)
     seen: set[str] = set()
-    out: list[str] = []
+    out: list[LinkEntry] = []
     for file_path in files:
-        for url in read_links(file_path):
-            if url in seen:
+        text = Path(file_path).read_text(encoding="utf-8-sig")
+        for raw in text.splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#"):
                 continue
-            seen.add(url)
-            out.append(url)
+            entry = parse_link_line(line)
+            if entry.url in seen:
+                continue
+            seen.add(entry.url)
+            out.append(entry)
     return out
+
+
+def parse_link_line(line: str) -> LinkEntry:
+    """Parse ``<url>[,<Game>[,<content_type>]]``."""
+    parts = [p.strip() for p in line.strip().split(",", 2)]
+    url = parts[0]
+    if not url:
+        raise ValueError("empty link line")
+    game, other_name = ("", "")
+    content_type = ""
+    if len(parts) >= 2:
+        game, other_name = parse_game_field(parts[1])
+    if len(parts) >= 3:
+        content_type = parse_content_type(parts[2])
+    return LinkEntry(url=url, game=game, other_name=other_name, content_type=content_type)
 
 
 def parse_link(url: str) -> LinkInfo:
@@ -83,6 +139,21 @@ def parse_link(url: str) -> LinkInfo:
         if len(parts) >= 2 and parts[0] == "clips":
             return LinkInfo(url=cleaned, site="medal", clip_id=parts[1], slug="")
         return LinkInfo(url=cleaned, site="medal", clip_id="", slug="")
+    if host in ("youtube.com", "www.youtube.com", "m.youtube.com"):
+        parts = [p for p in parsed.path.split("/") if p]
+        qs = parse_qs(parsed.query)
+        if parts and parts[0] == "watch":
+            vid = (qs.get("v") or [""])[0]
+            if vid:
+                return LinkInfo(url=cleaned, site="youtube", clip_id=vid, slug="")
+        if len(parts) >= 2 and parts[0] == "shorts" and parts[1]:
+            return LinkInfo(url=cleaned, site="youtube", clip_id=parts[1], slug="")
+        return LinkInfo(url=cleaned, site="youtube", clip_id="", slug="")
+    if host == "youtu.be":
+        parts = [p for p in parsed.path.split("/") if p]
+        if parts and parts[0]:
+            return LinkInfo(url=cleaned, site="youtube", clip_id=parts[0], slug="")
+        return LinkInfo(url=cleaned, site="youtube", clip_id="", slug="")
     return LinkInfo(url=cleaned, site="other", clip_id="", slug="")
 
 
@@ -102,3 +173,14 @@ def game_for_slug(slug: str) -> tuple[str, str]:
     if other:
         return (OTHER, other)
     return ("", "")
+
+
+def name_prefix(game: str, other_name: str, slug: str) -> str:
+    """File-name prefix: Medal slug when present, else game / other / unlabelled."""
+    if slug:
+        return slug
+    if game == OTHER and other_name:
+        return other_name
+    if game:
+        return game
+    return "unlabelled"

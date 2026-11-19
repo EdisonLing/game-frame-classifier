@@ -136,10 +136,12 @@ dialog button {
     <p id="path"></p>
     <p id="tech"></p>
     <p id="suggest"></p>
+    <p id="contentType"></p>
     <p class="decision" id="decision"></p>
     <p class="problem" id="problem"></p>
     <div class="legend">
       <div><kbd>1</kbd>–<kbd>6</kbd> games · <kbd>7</kbd> Other · <kbd>Enter</kbd> accept suggestion</div>
+      <div><kbd>V</kbd> esports VOD · <kbd>G</kbd> gameplay · <kbd>O</kbd> streamer overlay</div>
       <div><kbd>D</kbd> disable · <kbd>X</kbd> trash · <kbd>S</kbd> skip · <kbd>U</kbd> undo</div>
       <div><kbd>←</kbd>/<kbd>→</kbd> move · <kbd>F</kbd> first undecided · <kbd>P</kbd> open clip</div>
     </div>
@@ -210,6 +212,12 @@ dialog button {
     } else {
       el("suggest").textContent = "Suggested: (none)";
     }
+    if (c.content_type) {
+      const ctor = c.content_type_origin ? " (" + c.content_type_origin + ")" : "";
+      el("contentType").textContent = "Content type: " + c.content_type + ctor;
+    } else {
+      el("contentType").textContent = "Content type: (none)";
+    }
     if (c.decision === "label") {
       el("decision").textContent = "Decision: " + c.game +
         (c.game === "Other" && c.other_name ? " / " + c.other_name : "");
@@ -270,11 +278,17 @@ dialog button {
     render();
   }
 
-  async function decide(decision, game, other_name) {
+  async function decide(decision, game, other_name, content_type) {
     if (busy || !state) return;
     busy = true;
     try {
-      const payload = { i: current, decision, game: game || "", other_name: other_name || "" };
+      const payload = {
+        i: current,
+        decision,
+        game: game || "",
+        other_name: other_name || "",
+        content_type: content_type || "",
+      };
       const res = await api("/api/decide", payload);
       state = await api("/api/state");
       current = res.current != null ? res.current : state.current;
@@ -284,6 +298,10 @@ dialog button {
     } finally {
       busy = false;
     }
+  }
+
+  async function setContentType(value) {
+    await decide("content", "", "", value);
   }
 
   function askOther() {
@@ -359,6 +377,9 @@ dialog button {
       return;
     }
     const lower = k.length === 1 ? k.toLowerCase() : k;
+    if (lower === "v") { ev.preventDefault(); await setContentType("esports_vod"); return; }
+    if (lower === "g") { ev.preventDefault(); await setContentType("gameplay"); return; }
+    if (lower === "o") { ev.preventDefault(); await setContentType("streamer_overlay"); return; }
     if (lower === "d") { ev.preventDefault(); await decide("disabled"); return; }
     if (lower === "x") { ev.preventDefault(); await decide("trash"); return; }
     if (lower === "s") { ev.preventDefault(); await decide("skip"); return; }
