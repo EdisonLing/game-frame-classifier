@@ -76,6 +76,27 @@ For **ops = full + CRF 45** only, expect roughly **~2/3** of those three-tier sy
 
 4K AV1 personal clips: quality path tracks near **extract rate** plus re-encode cost (much slower than 1080p contributors).
 
+## `gfc-make-sources` (measured 2026-11-19)
+
+Same extractor as above (seek per sample, GPU encode for the low tier). Rates come from the
+run reports (`frame_sources/_personal/<run>/clips.csv`) with
+`python scripts/summarize_make_sources_timing.py`; 340 clips, 313 min of footage, about 1.1 h of wall time in total.
+
+| Codec | Size | Method | Clips | Wall s / clip | Wall s / footage-min |
+|---|---|---|---:|---:|---:|
+| av1 | 3840x2160 | seek | 35 | 75.6 | 28.8 |
+| av1 | 1920x1080 | seek | 8 | 53.2 | 17.7 |
+| h264 | 1920x1080 | seek | 33 | 5.1 | 7.3 |
+| h264 | 1280x720 | seek | 185 | 2.3 | 5.6 |
+| h264 | 1280x720 | pass | 47 | 0.7 | 8.5 |
+| h264 | 640x360 | seek | 31 | 10.6 | 3.5 |
+
+Planning: `wall_s ~ rate x footage_minutes`, with the row for the source's codec and size.
+Downloaded 720p H.264 videos cost about 6 s per footage-minute; 4K AV1 replays about 29.
+Rerun the script after each batch to refresh the table.
+
+---
+
 ## Not measured yet (fill in later)
 
 | Stage | Planned metric | Notes |
@@ -83,7 +104,7 @@ For **ops = full + CRF 45** only, expect roughly **~2/3** of those three-tier sy
 | Catalog (`gfc-catalog-clips`) | wall-s / clip (ffprobe) | Usually seconds for dozens of files |
 | Clean | wall-s / frame or / 1k frames | Pillow; should be ≪ extract for 4K AV1 sources |
 | Batch extract end-to-end | sum of above | `--clean` adds catalog rebuild + deletes |
-| `gfc-make-sources` (D26, not built) | wall-s / footage-min | Should align with handoff-sizes once shipped |
+| `gfc-make-sources` | wall-s / footage-min | Measured, see the section above |
 
 ---
 
