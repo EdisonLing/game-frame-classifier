@@ -9,6 +9,7 @@ Raw media stays **local** (`data/raw/`, `data/frames/`, `data/manifests/` are gi
 data/
   README.md          # short pointer (tracked)
   raw/               # source videos/clips (local only) — collect here
+  clip_links/        # link lists as received and the Medal uploader file (local only, permanent)
   incoming_clips/    # gfc-fetch-clips downloads (local only), then gfc-sort-clips
   sorting/           # clip sorter sessions (sheets cache, decisions, apply reports)
   frame_sources/     # native-res stills per clip (local only) — D26; from gfc-ingest-pack / gfc-make-sources
@@ -18,6 +19,16 @@ data/
 ```
 
 How the folders feed each other: [training-pipeline.md](training-pipeline.md).
+
+## Clip links (`data/clip_links/`)
+
+What people shared as links, kept so downloads can be rebuilt (`gfc-fetch-clips data/clip_links` skips clips already fetched). Tools never change the link lists. Never committed.
+
+```text
+data/clip_links/
+  <YYYY-MM-DD>_<label>.txt   # one link per line, one file per batch as received
+  medal_users.csv            # Medal uploader -> source and permission (planned: clip-link-auto-source)
+```
 
 ## Incoming clips (`data/incoming_clips/`)
 

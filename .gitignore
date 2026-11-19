@@ -228,6 +228,7 @@ data/sorting/
 data/manifests/
 data/runs/
 data/incoming_clips/
+data/clip_links/
 data/bench_extract/
 data/bench_handoff/
 data/contributor_packs/
