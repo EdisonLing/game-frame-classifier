@@ -129,7 +129,7 @@ While any public row is active, the ethics / data section can say:
 
 ## Open for your approval
 
-1. Keep `public_gamed` + `public_gameplay_images` active for experiments, or retire them after the smoke?
+1. `public_gamed` and `public_gameplay_images` are `planned` after the prototype (2026-11-19): not in `data/`; re-download with `scripts/prototype_public_stills.py` when public data is used.
 2. Next video prototype: `public_vpt_contractor` / `public_bedd_basalt` / `public_minerl`?
 3. For D12 (OW2 / Rivals): personal/friends only, or also `public_game_intention_ow` / `public_marvelrivals_yolo`?
 
