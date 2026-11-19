@@ -43,8 +43,8 @@ Dropped by the labelled-media filter: MineDojo YT metadata, LoL-V2T annotations-
 
 **Suggested prototype order**
 
-1. **Gamed** stills — `python scripts/prototype_public_stills.py --dataset gamed`
-2. **Gameplay Images** Minecraft stills — same script `--dataset gameplay_images`
+1. **Gamed** stills — download with `python scripts/prototype_public_stills.py --dataset gamed`, or ingest a labelled stills folder with `gfc-ingest-stills`
+2. **Gameplay Images** Minecraft stills — same prototype script `--dataset gameplay_images`, or `gfc-ingest-stills` with a manifest
 3. Later: VPT / BEDD / MineRL videos via `data/raw/.../public_*/` + `gfc-make-sources`
 4. OW2 / Rivals: personal/friends first; optional Game-Intention / MARVELRIVALSYOLO for D12
 
@@ -57,7 +57,7 @@ Common steps for every public source:
 1. Add a ledger row (`status: planned` → `active` when files land).
 2. Create **one** folder under `frame_sources/<Game>/public_…/` (stills) or `data/raw/<Game>/public_…/` then make-sources (videos). Never mix datasets in one source folder.
 3. Record URL, license SPDX, attribution blurb, date accessed, and “commercial OK?” on the ledger.
-4. Ingest → clean → split with **clip/session** units (D01/D02); enforce source caps (D33).
+4. Ingest → clean → split with **clip/session** units (D01/D02); enforce source caps (D33). Stills use `gfc-ingest-stills` (manifest + images folder); videos use `gfc-make-sources` after landing under `data/raw/`.
 5. **Toggle for a run** without deleting files: pick a split preset under `config/splits/` or set `include_source_kinds` / `exclude_sources` in a new `split_id` (see [dataset-splitter.md](../roadmap/tools/dataset-splitter.md)).
 6. Cite active ledger rows that actually appear in that run’s `sources.csv`.
 7. To remove a dataset for good: ledger `retired` + delete its `public_*` tree + rebuild.

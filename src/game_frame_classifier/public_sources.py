@@ -217,7 +217,7 @@ def record_download(source_id: str, file_path: Path, *, repo_root: Path) -> None
 
 
 def _clip_dirs(data_root: Path, source_id: str) -> list[Path]:
-    """Clip folders under ``frame_sources/<Game>/<source_id>/``."""
+    """Clip folders under ``frame_sources/<Game>/<source_id>/`` and ``_other/<name>/<source_id>/``."""
     fs = Path(data_root) / "frame_sources"
     if not fs.is_dir():
         return []
@@ -229,15 +229,34 @@ def _clip_dirs(data_root: Path, source_id: str) -> list[Path]:
         for clip in sorted(source_dir.iterdir()):
             if clip.is_dir() and not clip.name.startswith("_"):
                 found.append(clip)
+    other_root = fs / "_other"
+    if other_root.is_dir():
+        for name_dir in sorted(
+            p for p in other_root.iterdir() if p.is_dir() and not p.name.startswith("_")
+        ):
+            source_dir = name_dir / source_id
+            if not source_dir.is_dir():
+                continue
+            for clip in sorted(source_dir.iterdir()):
+                if clip.is_dir() and not clip.name.startswith("_"):
+                    found.append(clip)
     return found
 
 
 def clips_on_disk(data_root: Path, source_id: str) -> dict[str, int]:
-    """Map game → number of clip folders for a source."""
+    """Map game → number of clip folders for a source (Other clips count as ``Other``)."""
     counts: dict[str, int] = defaultdict(int)
+    fs = Path(data_root) / "frame_sources"
     for clip in _clip_dirs(data_root, source_id):
-        # frame_sources/<Game>/<source_id>/<clip>
-        counts[clip.parent.parent.name] += 1
+        try:
+            rel = clip.relative_to(fs)
+        except ValueError:
+            continue
+        if rel.parts and rel.parts[0] == "_other":
+            counts["Other"] += 1
+        else:
+            # frame_sources/<Game>/<source_id>/<clip>
+            counts[clip.parent.parent.name] += 1
     return dict(sorted(counts.items()))
 
 

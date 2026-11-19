@@ -16,9 +16,6 @@ from __future__ import annotations
 
 import argparse
 import csv
-import hashlib
-import io
-import json
 import shutil
 import sys
 import urllib.request
@@ -31,14 +28,12 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT / "src") not in sys.path:
     sys.path.insert(0, str(ROOT / "src"))
 
-from game_frame_classifier.derive_frames import frame_name  # noqa: E402
+from game_frame_classifier.ingest_stills import StillClip, StillRow, write_still_clip  # noqa: E402
 from game_frame_classifier.public_sources import (  # noqa: E402
     PublicSourcesError,
     fetch_license,
     record_download,
 )
-from game_frame_classifier.sourcing.hashing import jpeg_size  # noqa: E402
-from game_frame_classifier.sourcing.manifests import CLIP_COLUMNS, blank_clip_row  # noqa: E402
 
 SOURCE_IDS = {
     "gamed": "public_gamed",
@@ -56,11 +51,6 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def clip_key_for(seed: str) -> str:
-    digest = hashlib.sha256(seed.encode("utf-8")).hexdigest()
-    return "c" + digest[:12]
-
-
 def download(url: str, dest: Path) -> None:
     dest.parent.mkdir(parents=True, exist_ok=True)
     if dest.is_file() and dest.stat().st_size > 0:
@@ -70,67 +60,6 @@ def download(url: str, dest: Path) -> None:
     with urllib.request.urlopen(url, timeout=120) as resp, open(dest, "wb") as out:
         shutil.copyfileobj(resp, out)
     print(f"saved {dest} ({dest.stat().st_size} bytes)")
-
-
-def write_clip(
-    fs_root: Path,
-    game: str,
-    source: str,
-    seed: str,
-    image_paths: list[Path],
-    *,
-    original_name: str,
-    recorded_start_utc: str,
-) -> Path:
-    key = clip_key_for(seed)
-    dest = fs_root / game / source / key
-    if dest.exists():
-        shutil.rmtree(dest)
-    full = dest / "full"
-    full.mkdir(parents=True)
-
-    # Hash identity from the ordered still bytes so re-runs stay stable.
-    h = hashlib.sha256()
-    widths: list[int] = []
-    heights: list[int] = []
-    for i, src in enumerate(image_paths):
-        data = src.read_bytes()
-        h.update(data)
-        out = full / frame_name(key, "full", i)
-        out.write_bytes(data)
-        w, ht = jpeg_size(out)
-        widths.append(w)
-        heights.append(ht)
-
-    row = blank_clip_row()
-    row.update(
-        {
-            "clip_key": key,
-            "clip_sha256": h.hexdigest(),
-            "quick_id": h.hexdigest()[:16],
-            "status": "ok",
-            "status_detail": "prototype_public_stills",
-            "original_filename": original_name,
-            "original_relpath": original_name,
-            "file_bytes": sum(p.stat().st_size for p in image_paths),
-            "recorded_start_utc": recorded_start_utc,
-            "recorded_start_source": "prototype",
-            "duration_s": float(max(len(image_paths), 1) * 5.0),
-            "width": widths[0] if widths else 0,
-            "height": heights[0] if heights else 0,
-            "expected_slots": len(image_paths),
-            "slots": len(image_paths),
-            "label_hint": game,
-        }
-    )
-    missing = [c for c in CLIP_COLUMNS if c not in row]
-    if missing:
-        raise SystemExit(f"clip.json missing columns: {missing}")
-    payload = {c: row.get(c, "") for c in CLIP_COLUMNS}
-    payload["game"] = game
-    payload["prototype_dataset"] = source
-    (dest / "clip.json").write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-    return dest
 
 
 def prototype_gamed(args: argparse.Namespace) -> None:
@@ -181,12 +110,12 @@ def prototype_gamed(args: argparse.Namespace) -> None:
             by_video[(game, video_id)].append((t_sec, matches[0]))
 
     # Cap videos per game for a small prototype.
-    selected: list[tuple[str, str, list[Path]]] = []
+    selected: list[tuple[str, str, list[tuple[float, Path]]]] = []
     per_game: dict[str, int] = defaultdict(int)
     for (game, video_id), frames in sorted(by_video.items()):
         if per_game[game] >= args.max_videos:
             continue
-        frames_sorted = [p for _, p in sorted(frames, key=lambda x: x[0])]
+        frames_sorted = sorted(frames, key=lambda x: x[0])
         if not frames_sorted:
             continue
         selected.append((game, video_id, frames_sorted))
@@ -194,39 +123,38 @@ def prototype_gamed(args: argparse.Namespace) -> None:
 
     fs_root = Path(args.data_root) / "frame_sources"
     written = []
-    base_time = datetime(2024, 1, 1, tzinfo=timezone.utc)
-    for i, (game, video_id, paths) in enumerate(selected):
-        # Convert non-JPEG if needed: Gamed eval is JPEG already.
-        start = (base_time.timestamp() + i * 3600)
-        recorded = datetime.fromtimestamp(start, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-        dest = write_clip(
-            fs_root,
-            game,
-            source,
-            seed=f"gamed:{game}:{video_id}",
-            image_paths=paths,
-            original_name=f"gamed_{video_id}.jpgseq",
-            recorded_start_utc=recorded,
+    for i, (game, video_id, frames) in enumerate(selected):
+        rows = [
+            StillRow(
+                file=str(path.relative_to(extract_root)).replace("\\", "/"),
+                game=game,
+                other_name="",
+                group=video_id,
+                order=float(t_sec),
+            )
+            for t_sec, path in frames
+        ]
+        clip = StillClip(
+            game=game,
+            other_name="",
+            group=video_id,
+            group_origin="dataset",
+            rows=rows,
         )
-        written.append(dest)
-        print(f"wrote {dest.relative_to(Path(args.data_root))} ({len(paths)} frames)")
+        status, n, _failed = write_still_clip(
+            fs_root,
+            source,
+            clip,
+            extract_root,
+            clip_index=i,
+            force=True,
+        )
+        if status == "written":
+            dest = fs_root / game / source
+            written.append(dest)
+            print(f"wrote {game}/{source} group={video_id} ({n} frames)")
 
     print(f"gamed prototype: {len(written)} clips under {source}")
-
-
-def _png_to_jpeg_bytes(png_path: Path) -> bytes:
-    # stdlib-only path: prefer Pillow if present, else require preconverted JPEG.
-    try:
-        from PIL import Image
-    except ImportError as exc:
-        raise SystemExit(
-            "gameplay_images prototype needs Pillow to convert PNG→JPEG, or pass pre-made JPEGs"
-        ) from exc
-    with Image.open(png_path) as im:
-        rgb = im.convert("RGB")
-        buf = io.BytesIO()
-        rgb.save(buf, format="JPEG", quality=95)
-        return buf.getvalue()
 
 
 def prototype_gameplay_images(args: argparse.Namespace) -> None:
@@ -257,39 +185,52 @@ def prototype_gameplay_images(args: argparse.Namespace) -> None:
         # Some mirrors use lowercase / underscored names.
         minecraft_id = next(i for i, n in enumerate(label_names) if "minecraft" in n.lower())
 
-    rows = [ex for ex in ds if int(ex["label"]) == minecraft_id][: args.max_images]
-    if not rows:
+    rows_ds = [ex for ex in ds if int(ex["label"]) == minecraft_id][: args.max_images]
+    if not rows_ds:
         raise SystemExit("no Minecraft rows found in Gameplay Images")
 
     # Group into synthetic clips of N stills for session-ish splits.
     group = max(args.images_per_clip, 1)
     fs_root = Path(args.data_root) / "frame_sources"
     written = []
-    base_time = datetime(2022, 1, 1, tzinfo=timezone.utc)
-    for gi in range(0, len(rows), group):
-        chunk = rows[gi : gi + group]
-        tmp_paths: list[Path] = []
+    clip_index = 0
+    for gi in range(0, len(rows_ds), group):
+        chunk = rows_ds[gi : gi + group]
+        still_rows: list[StillRow] = []
         for j, ex in enumerate(chunk):
             jpeg_path = cache / f"mc_{gi:04d}_{j:02d}.jpg"
             if not jpeg_path.is_file():
                 img = ex["image"]
                 # datasets returns PIL Image
                 img.convert("RGB").save(jpeg_path, format="JPEG", quality=95)
-            tmp_paths.append(jpeg_path)
-        recorded = datetime.fromtimestamp(
-            base_time.timestamp() + (gi // group) * 3600, tz=timezone.utc
-        ).strftime("%Y-%m-%dT%H:%M:%SZ")
-        dest = write_clip(
-            fs_root,
-            "Minecraft",
-            source,
-            seed=f"gameplay_images:Minecraft:group{gi // group}",
-            image_paths=tmp_paths,
-            original_name=f"gameplay_images_mc_group{gi // group}.jpgseq",
-            recorded_start_utc=recorded,
+            still_rows.append(
+                StillRow(
+                    file=jpeg_path.name,
+                    game="Minecraft",
+                    other_name="",
+                    group=f"auto{gi // group:04d}",
+                    order=float(j),
+                )
+            )
+        clip = StillClip(
+            game="Minecraft",
+            other_name="",
+            group=f"auto{gi // group:04d}",
+            group_origin="made_up",
+            rows=still_rows,
         )
-        written.append(dest)
-        print(f"wrote {dest.relative_to(Path(args.data_root))} ({len(tmp_paths)} frames)")
+        status, n, _failed = write_still_clip(
+            fs_root,
+            source,
+            clip,
+            cache,
+            clip_index=clip_index,
+            force=True,
+        )
+        clip_index += 1
+        if status == "written":
+            written.append(clip.group)
+            print(f"wrote Minecraft/{source} group={clip.group} ({n} frames)")
 
     print(f"gameplay_images prototype: {len(written)} clips under {source}")
 

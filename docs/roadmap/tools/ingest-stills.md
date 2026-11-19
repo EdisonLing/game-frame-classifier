@@ -1,7 +1,7 @@
 # Ingest stills (`gfc-ingest-stills`)
 
 **Stage:** 1 — Collection  
-**Status:** specified  
+**Status:** implemented  
 **Back to:** [ROADMAP.md](../ROADMAP.md) · [public dataset licences](public-licenses.md) · [ingest pack](ingest-pack.md) · [derive frames](derive-frames.md)
 
 ## What it does (high level)
@@ -100,10 +100,10 @@ Exit codes: `0` done; `1` some stills failed (unreadable image) and the rest wer
 
 ## Acceptance checks
 
-- [ ] A stills folder with a manifest becomes frame_sources clips that derive, clean and split like video clips
-- [ ] Dataset groups stay whole; made-up groups are marked and warned about
-- [ ] Public stills are refused without an approved source and a saved licence
-- [ ] CLI entry `gfc-ingest-stills` in `pyproject.toml`
+- [x] A stills folder with a manifest becomes frame_sources clips that derive, clean and split like video clips
+- [x] Dataset groups stay whole; made-up groups are marked and warned about
+- [x] Public stills are refused without an approved source and a saved licence
+- [x] CLI entry `gfc-ingest-stills` in `pyproject.toml`
 
 ## Build instructions
 

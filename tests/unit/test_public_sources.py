@@ -12,6 +12,7 @@ from game_frame_classifier.public_sources import (
     PublicSourcesError,
     build_ledger_table,
     build_third_party,
+    clips_on_disk,
     fetch_license,
     load_sources,
     main,
@@ -202,6 +203,21 @@ def test_status_planned_downloaded_active(tmp_path: Path) -> None:
     clip = data / "frame_sources" / "Minecraft" / "public_vpt_contractor" / "c000000000001"
     clip.mkdir(parents=True)
     assert source_status("public_vpt_contractor", data, repo) == "active"
+
+
+def test_clip_dirs_finds_other_source_clips(tmp_path: Path) -> None:
+    data = tmp_path / "data"
+    other_clip = (
+        data / "frame_sources" / "_other" / "desktop_misc" / "public_test_stills" / "cother0000001"
+    )
+    other_clip.mkdir(parents=True)
+    skipped = data / "frame_sources" / "_other" / "_hidden" / "public_test_stills" / "cskip"
+    skipped.mkdir(parents=True)
+    game_clip = data / "frame_sources" / "Minecraft" / "public_test_stills" / "cgame00000001"
+    game_clip.mkdir(parents=True)
+    counts = clips_on_disk(data, "public_test_stills")
+    assert counts == {"Minecraft": 1, "Other": 1}
+    assert source_status("public_test_stills", data, tmp_path) == "active"
 
 
 def test_third_party_zero_one_two_active(tmp_path: Path) -> None:

@@ -65,11 +65,14 @@ data/frame_sources/
   <Game>/<source>/<clip_key>/<tier>/*.jpg               # my clips, from gfc-make-sources
   _other/<other_name>/<source>/<clip_key>/<tier>/*.jpg  # personal Other footage
   _personal/<run_id>/                                   # make-sources run records
+  _stills/<source>/ingest_<UTC>.json                    # gfc-ingest-stills run records
   _other/<other_name>/contributor_<handle>/<clip_key>/...
   _packs/<pack_id>/          # verbatim contributor pack manifests
   _index/by_sha256.json      # dedupe index
   _stats/handoff_sizes.jsonl # local size tracking (D25)
 ```
+
+Stills ingested with `gfc-ingest-stills` use `recorded_start_source = "synthetic"` (times are `2000-01-01T00:00:00Z` plus one hour per clip in stable order) because stills have no real recording time.
 
 ## Raw clips — collection layout (`data/raw/`)
 
