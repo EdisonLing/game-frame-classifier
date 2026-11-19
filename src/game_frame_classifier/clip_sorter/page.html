@@ -198,7 +198,8 @@ dialog button {
     }
     current = Math.max(0, Math.min(current, state.clips.length - 1));
     const c = state.clips[current];
-    el("name").textContent = c.rel_path.split("/").pop();
+    const baseName = c.rel_path.split("/").pop();
+    el("name").textContent = c.source ? baseName + " · " + c.source : baseName;
     el("path").textContent = c.rel_path;
     const dur = c.duration_s == null ? "?" : Number(c.duration_s).toFixed(1) + "s";
     el("tech").textContent = dur + " · " + (c.width || "?") + "×" + (c.height || "?");

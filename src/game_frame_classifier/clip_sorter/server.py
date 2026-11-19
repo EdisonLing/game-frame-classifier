@@ -57,6 +57,7 @@ def _clip_payload(session: Session, i: int, state: dict[str, dict[str, Any]]) ->
         "game": entry.get("game") or "",
         "sheet_ready": ready,
         "quick_id": clip.quick_id,
+        "source": clip.source,
     }
 
 

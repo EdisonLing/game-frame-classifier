@@ -52,6 +52,26 @@ def read_links(path: Path | str) -> list[str]:
     return out
 
 
+def read_link_files(paths: list[Path | str]) -> list[str]:
+    """Read links from files and folders (folders → sorted *.txt); de-dupe across files."""
+    files: list[Path] = []
+    for raw in paths:
+        path = Path(raw)
+        if path.is_dir():
+            files.extend(sorted(path.glob("*.txt")))
+        else:
+            files.append(path)
+    seen: set[str] = set()
+    out: list[str] = []
+    for file_path in files:
+        for url in read_links(file_path):
+            if url in seen:
+                continue
+            seen.add(url)
+            out.append(url)
+    return out
+
+
 def parse_link(url: str) -> LinkInfo:
     cleaned = url.strip()
     parsed = urlparse(cleaned)

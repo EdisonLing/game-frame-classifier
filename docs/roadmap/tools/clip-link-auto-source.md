@@ -1,7 +1,7 @@
 # Automatic sources for clip links (`gfc-fetch-clips` 1.1, `gfc-sort-clips` 1.1)
 
 **Stage:** 1 — Collection  
-**Status:** specified  
+**Status:** implemented  
 **Back to:** [ROADMAP.md](../ROADMAP.md) · [clip link downloader](clip-link-downloader.md) · [clip sorter](clip-sorter.md) · [data layout](../../data-layout.md)
 
 ## What it does (high level)
@@ -103,11 +103,11 @@ Exit codes: `0`, `1`, `2`, `3` as in 1.0; `4` some links wait for an uploader de
 
 ## Acceptance checks
 
-- [ ] A mixed links file lands in one folder per uploader, with no `--source`
-- [ ] New uploaders are asked once and remembered in `data/clip_links/medal_users.csv`
-- [ ] Denied and pending uploaders are never downloaded
-- [ ] Sorted or trashed clips are not downloaded again
-- [ ] `gfc-sort-clips data/incoming_clips` copies each clip under its own source
+- [x] A mixed links file lands in one folder per uploader, with no `--source`
+- [x] New uploaders are asked once and remembered in `data/clip_links/medal_users.csv`
+- [x] Denied and pending uploaders are never downloaded
+- [x] Sorted or trashed clips are not downloaded again
+- [x] `gfc-sort-clips data/incoming_clips` copies each clip under its own source
 
 ## Build instructions
 

@@ -35,28 +35,31 @@ YouTube, Insights.gg, Twitch clips and other video sites may be added later. Eac
 | | |
 |---|---|
 | **Reads** | A text file of links from one contributor |
-| **Writes** | `data/incoming_clips/<source>/` (videos, `fetch_log.csv`, `hints.csv`) |
-| **Then** | `gfc-sort-clips data/incoming_clips/<source> --source <source> --hints data/incoming_clips/<source>/hints.csv` |
+| **Writes** | `data/incoming_clips/<source>/` (videos); `data/incoming_clips/fetch_log.csv`, `hints.csv` |
+| **Then** | `gfc-sort-clips data/incoming_clips` (sources from folders; see [auto sources](clip-link-auto-source.md)) |
 | **Needs** | yt-dlp (optional dependency group `fetch`) and ffmpeg (already used by the project) |
 
 ## Usage
 
 ```text
-gfc-fetch-clips <links.txt> --source friend_alex
+gfc-fetch-clips data/clip_links/2026-11-18_medal.txt           # automatic sources (default)
+gfc-fetch-clips <links.txt> --source friend_alex               # override: all links to one source
 gfc-fetch-clips <links.txt> --source friend_alex --dry-run     # parse and label the links only
 python -m game_frame_classifier.clip_fetch ...
 ```
 
+Automatic sources (default), uploader file, and skip rules: [clip-link-auto-source.md](clip-link-auto-source.md) (1.1).
+
 | Flag | Meaning |
 |---|---|
-| `<links.txt>` | One link per line; blank lines and lines starting with `#` are ignored; duplicates are removed |
-| `--source` | Source name (normalised with `normalize_handle`); output folder `data/incoming_clips/<source>/`. Must not start with `contributor_` |
+| `<links>` | One or more links files or folders (`*.txt` in name order); blank lines and `#` lines ignored; duplicates removed |
+| `--source` | Override: every link under this source (normalised); no uploader prompts. Must not start with `contributor_` |
 | `--data-root` | Data root (default `data`) |
 | `--pause-s` | Seconds between downloads (default 3) |
 | `--limit N` | Stop after N new downloads |
 | `--dry-run` | Parse links, show the game for each and what would be downloaded; no network |
 
-Exit codes: `0` all done (including nothing new), `1` at least one link failed, `2` usage error or yt-dlp missing, `3` stopped by rate limiting (rerun later; finished links are skipped).
+Exit codes: `0` all done (including nothing new), `1` at least one link failed, `2` usage error or yt-dlp missing, `3` stopped by rate limiting, `4` waiting for an uploader decision (see auto-source spec).
 
 ## Behaviour
 

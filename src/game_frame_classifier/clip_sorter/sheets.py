@@ -16,9 +16,16 @@ def sheet_path(session_dir: Path, quick_id: str) -> Path:
     return session_dir / "sheets" / f"{quick_id}.jpg"
 
 
+def _blocks_sheet(problem: str) -> bool:
+    """no_source is shown on the page but the clip is still viewable."""
+    if not problem:
+        return False
+    return not problem.startswith("no_source")
+
+
 def make_sheet(tools: FFTools, clip: Clip, out_path: Path) -> None:
     """Six frames at mid-bucket times, tiled 3×2 into out_path."""
-    if clip.problem or clip.duration_s is None or clip.duration_s <= 0:
+    if _blocks_sheet(clip.problem) or clip.duration_s is None or clip.duration_s <= 0:
         raise ValueError(f"cannot make sheet for {clip.rel_path}: {clip.problem or 'no duration'}")
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -134,7 +141,7 @@ class SheetWorker:
                     if 0 <= idx < len(self._order):
                         clip = self._order[idx]
                         out = sheet_path(self.session_dir, clip.quick_id)
-                        if not clip.problem and not out.is_file():
+                        if not _blocks_sheet(clip.problem) and not out.is_file():
                             return clip
                 # Walk from _next wrapping once through the list
                 n = len(self._order)
@@ -145,7 +152,7 @@ class SheetWorker:
                     idx = (start + offset) % n
                     clip = self._order[idx]
                     out = sheet_path(self.session_dir, clip.quick_id)
-                    if clip.problem or out.is_file():
+                    if _blocks_sheet(clip.problem) or out.is_file():
                         continue
                     self._next = (idx + 1) % n
                     return clip

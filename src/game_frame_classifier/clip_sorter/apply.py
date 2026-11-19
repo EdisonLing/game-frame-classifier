@@ -51,6 +51,15 @@ def _unique_dest(dest: Path) -> Path:
         n += 1
 
 
+def _path_below_source(rel_path: str, source: str) -> Path:
+    """Path under the source folder; full rel_path when it has no source prefix (override mode)."""
+    parts = Path(rel_path.replace("\\", "/")).parts
+    if parts and parts[0] == source:
+        rest = parts[1:]
+        return Path(*rest) if rest else Path(".")
+    return Path(rel_path)
+
+
 def plan(
     session_dir: Path,
     folder: Path,
@@ -58,7 +67,11 @@ def plan(
     source: str,
     data_root: Path,
 ) -> list[Action]:
-    """Build the apply plan from the latest decision per clip."""
+    """Build the apply plan from the latest decision per clip.
+
+    Prefers ``clip.source`` when set; otherwise ``source``. Destination uses the path
+    below the source folder so auto-mode does not double the source segment.
+    """
     state = replay(session_dir)
     index = _load_index(data_root)
     actions: list[Action] = []
@@ -91,15 +104,22 @@ def plan(
         if decision != "label":
             actions.append(Action(clip.rel_path, decision, "untouched", ""))
             continue
+        src = clip.source or source
+        if not src or (clip.problem.startswith("no_source") if clip.problem else False):
+            actions.append(
+                Action(clip.rel_path, "label", "conflict", "", game=game, other_name=other_name)
+            )
+            continue
+        below = _path_below_source(clip.rel_path, src)
         if game == OTHER:
             if not other_name:
                 actions.append(
                     Action(clip.rel_path, "label", "conflict", "", game=game, other_name=other_name)
                 )
                 continue
-            dest = data_root / "raw" / "_other" / other_name / source / Path(clip.rel_path)
+            dest = data_root / "raw" / "_other" / other_name / src / below
         elif game in GAMES:
-            dest = data_root / "raw" / game / source / Path(clip.rel_path)
+            dest = data_root / "raw" / game / src / below
         else:
             actions.append(
                 Action(clip.rel_path, "label", "conflict", "", game=game, other_name=other_name)

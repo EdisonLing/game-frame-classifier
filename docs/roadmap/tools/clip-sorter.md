@@ -23,19 +23,22 @@ Clips arrive without a reliable game label: downloads from clip links, exports f
 ## Usage
 
 ```text
-gfc-sort-clips <folder> --source <name>                 # start or resume a session, opens the page
-gfc-sort-clips <folder> --source <name> --hints <csv>   # with suggested labels from the downloader
-gfc-sort-clips <folder> --source <name> --apply         # copy labelled clips, archive trashed ones
-gfc-sort-clips <folder> --source <name> --apply --dry-run
+gfc-sort-clips data/incoming_clips                      # sources from folders (default, 1.1)
+gfc-sort-clips <folder> --source <name>                 # override: one source for every clip
+gfc-sort-clips <folder> --hints <csv>                   # suggested labels (default: <folder>/hints.csv)
+gfc-sort-clips <folder> --apply                         # copy labelled clips, archive trashed ones
+gfc-sort-clips <folder> --apply --dry-run
 python -m game_frame_classifier.clip_sorter ...
 ```
+
+Automatic sources from folders: [clip-link-auto-source.md](clip-link-auto-source.md) (1.1).
 
 | Flag | Meaning |
 |---|---|
 | `<folder>` | Folder of videos, searched recursively (the `_archive` subfolder is ignored) |
-| `--source` | Source name for the copies, normalised with `normalize_handle` (for example `tester`, `friend_alex`). Must not start with `contributor_` (reserved for packs) |
-| `--session` | Session name (default: `<folder name>_<source>`); the session folder is `data/sorting/<session>/` |
-| `--hints` | CSV `file,game,other_name` (file relative to `<folder>`): suggested labels |
+| `--source` | Override source for every clip (normalised). Without it, source is the first folder under `<folder>` |
+| `--session` | Session name (default: `<folder name>_<source>` or `<folder name>_auto`); the session folder is `data/sorting/<session>/` |
+| `--hints` | CSV `file,game,other_name` (file relative to `<folder>`); default `<folder>/hints.csv` when present |
 | `--data-root` | Data root (default `data`) |
 | `--port` | Local port (default 8765; the next free port if taken). The server listens on 127.0.0.1 only |
 | `--no-open` | Do not open the browser |

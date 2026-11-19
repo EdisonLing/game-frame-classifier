@@ -157,7 +157,7 @@ def test_apply_label_trash_disabled_dry_run(tmp_path):
     v_dis = make_testsrc_video(folder / "maybe.mp4", duration_s=2.0)
     tools = find_tools()
     recipe = load_recipe(RECIPE)
-    clips = scan(folder, recipe, tools, {})
+    clips = scan(folder, recipe, tools, {}, source="tester")
     by_rel = {c.rel_path: c for c in clips}
 
     append(session, by_rel["val.mp4"].quick_id, "val.mp4", "label", game="Valorant")
@@ -192,7 +192,7 @@ def test_apply_label_trash_disabled_dry_run(tmp_path):
     assert (session / "apply_report.csv").is_file()
 
     # already_copied (re-scan so trashed file is gone from the clip list)
-    clips2 = [c for c in scan(folder, recipe, tools, {}) if c.rel_path != "junk.mp4"]
+    clips2 = [c for c in scan(folder, recipe, tools, {}, source="tester") if c.rel_path != "junk.mp4"]
     actions2 = plan(session, folder, clips2, "tester", data_root)
     assert any(a.result == "already_copied" for a in actions2)
     r2 = run(actions2, dry_run=False)
@@ -208,7 +208,7 @@ def test_apply_already_in_pipeline_and_conflict(tmp_path):
     make_testsrc_video(folder / "b.mp4", duration_s=2.0)
     tools = find_tools()
     recipe = load_recipe(RECIPE)
-    clips = scan(folder, recipe, tools, {})
+    clips = scan(folder, recipe, tools, {}, source="tester")
     by_rel = {c.rel_path: c for c in clips}
 
     idx = data_root / "frame_sources" / "_index" / "by_sha256.json"
@@ -244,7 +244,7 @@ def test_apply_trash_no_overwrite(tmp_path):
     arch.write_bytes(b"existing")
     tools = find_tools()
     recipe = load_recipe(RECIPE)
-    clips = scan(folder, recipe, tools, {})
+    clips = scan(folder, recipe, tools, {}, source="tester")
     c = clips[0]
     append(session, c.quick_id, c.rel_path, "trash")
     actions = plan(session, folder, clips, "tester", data_root)
@@ -257,3 +257,58 @@ def test_friend_source_kind():
     assert source_kind("friend_alex") == "contributor"
     assert _source_kind("friend_alex") == "contributor"
     assert source_kind("tester") == "personal"
+
+
+# --- 1.1 automatic sources -------------------------------------------------
+
+
+@requires_ffmpeg
+def test_scan_source_from_folder_and_no_source(tmp_path):
+    folder = tmp_path / "incoming"
+    make_testsrc_video(folder / "friend_a" / "a.mp4", duration_s=2.0)
+    make_testsrc_video(folder / "root.mp4", duration_s=2.0)
+    make_testsrc_video(folder / "contributor_x" / "bad.mp4", duration_s=2.0)
+    tools = find_tools()
+    recipe = load_recipe(RECIPE)
+    clips = scan(folder, recipe, tools, {})
+    by_rel = {c.rel_path: c for c in clips}
+    assert by_rel["friend_a/a.mp4"].source == "friend_a"
+    assert by_rel["friend_a/a.mp4"].problem == ""
+    assert by_rel["root.mp4"].source == ""
+    assert by_rel["root.mp4"].problem.startswith("no_source")
+    assert by_rel["contributor_x/bad.mp4"].source == ""
+    assert by_rel["contributor_x/bad.mp4"].problem == "no_source"
+
+
+@requires_ffmpeg
+def test_apply_strips_source_folder_and_default_hints(tmp_path):
+    folder = tmp_path / "incoming"
+    data_root = tmp_path / "data"
+    session = data_root / "sorting" / "auto"
+    make_testsrc_video(folder / "friend_a" / "clip.mp4", duration_s=2.0)
+    (folder / "hints.csv").write_text(
+        "file,game,other_name\nfriend_a/clip.mp4,Valorant,\n",
+        encoding="utf-8",
+    )
+    tools = find_tools()
+    recipe = load_recipe(RECIPE)
+    hints = read_hints(folder / "hints.csv")
+    clips = scan(folder, recipe, tools, hints)
+    assert clips[0].suggestion == "Valorant"
+    assert clips[0].source == "friend_a"
+    append(session, clips[0].quick_id, clips[0].rel_path, "label", game="Valorant")
+    actions = plan(session, folder, clips, "", data_root)
+    assert actions[0].result == "copy"
+    assert actions[0].destination.endswith("raw/Valorant/friend_a/clip.mp4")
+    assert "/friend_a/friend_a/" not in actions[0].destination.replace("\\", "/")
+    run(actions, dry_run=False)
+    assert (data_root / "raw" / "Valorant" / "friend_a" / "clip.mp4").is_file()
+
+
+def test_cli_session_name_auto(tmp_path, monkeypatch):
+    from game_frame_classifier.clip_sorter.cli import build_parser
+
+    p = build_parser()
+    args = p.parse_args([str(tmp_path), "--apply", "--dry-run"])
+    assert args.source is None
+    assert args.session == ""

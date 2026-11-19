@@ -34,8 +34,12 @@ def build_parser() -> argparse.ArgumentParser:
         description="Label a folder of clips via contact sheets, then copy into data/raw/.",
     )
     p.add_argument("folder", type=Path, help="Folder of videos (recursive; _archive ignored)")
-    p.add_argument("--source", required=True, help="Source name for copies (e.g. tester, friend_alex)")
-    p.add_argument("--session", default="", help="Session name (default: <folder>_<source>)")
+    p.add_argument(
+        "--source",
+        default=None,
+        help="Source name for copies (override). Default: take source from each clip's folder",
+    )
+    p.add_argument("--session", default="", help="Session name (default: <folder>_<source> or <folder>_auto)")
     p.add_argument("--hints", type=Path, default=None, help="CSV file,game,other_name")
     p.add_argument("--data-root", type=Path, default=Path("data"), help="Data root (default data)")
     p.add_argument("--recipe", type=Path, default=Path("config/recipe.json"), help="Recipe JSON")
@@ -56,21 +60,34 @@ def main(argv: list[str] | None = None) -> int:
     if not folder.is_dir():
         print(f"error: folder not found: {folder}", file=sys.stderr)
         return 2
-    source = _validate_source(args.source)
+    source_override: str | None = None
+    if args.source is not None:
+        source_override = _validate_source(args.source)
     data_root = args.data_root.resolve()
-    session_name = args.session or f"{folder.name}_{source}"
+    if args.session:
+        session_name = args.session
+    elif source_override:
+        session_name = f"{folder.name}_{source_override}"
+    else:
+        session_name = f"{folder.name}_auto"
     session_dir = data_root / "sorting" / session_name
     session_dir.mkdir(parents=True, exist_ok=True)
     (session_dir / "sheets").mkdir(parents=True, exist_ok=True)
 
     recipe = load_recipe(args.recipe)
     tools = find_tools()
-    hints = read_hints(args.hints) if args.hints else {}
-    clips = scan(folder, recipe, tools, hints)
+    hints_path = args.hints
+    if hints_path is None:
+        default_hints = folder / "hints.csv"
+        if default_hints.is_file():
+            hints_path = default_hints
+    hints = read_hints(hints_path) if hints_path else {}
+    clips = scan(folder, recipe, tools, hints, source=source_override)
     print(f"scanned {len(clips)} clips -> session {session_dir}", flush=True)
 
+    plan_source = source_override or ""
     if args.apply:
-        actions = plan(session_dir, folder, clips, source, data_root)
+        actions = plan(session_dir, folder, clips, plan_source, data_root)
         report = run(actions, dry_run=args.dry_run)
         if not args.dry_run:
             write_report(session_dir, report)

@@ -222,7 +222,7 @@ Package what exists; keep text short and figure-heavy.
 | 4c | [Derive frames](tools/derive-frames.md) | 1 | **implemented** | 256×144 + `clips_index` / `slots` |
 | 4d | [Clip sorter](tools/clip-sorter.md) | 1 | **implemented** | Contact sheets in a local page; label, disable or trash; copies into `data/raw/` |
 | 4e | [Clip link downloader](tools/clip-link-downloader.md) | 1 | **implemented** (Medal only) | Medal clip links → files with game and time in the name; other sites refused (YouTube etc. later) |
-| 4e.1 | [Clip link auto sources](tools/clip-link-auto-source.md) | 1 | specified | One source per Medal uploader (asked once, remembered); sorter takes sources from folders |
+| 4e.1 | [Clip link auto sources](tools/clip-link-auto-source.md) | 1 | **implemented** | One source per Medal uploader (asked once, remembered); sorter takes sources from folders |
 | 4f | [Label review](tools/label-review.md) | 2 | specified | Flag frames a model disagrees with; quarantine, confirm or relabel; out-of-fold for train |
 | 5 | [Dataset splitter](tools/dataset-splitter.md) | 2 | **implemented** | Sessions, ledger splits, tiers, data tables, train cap, source groups |
 | 6 | [Dataset loader and augmentation](tools/dataset-loader.md) | 2 | **implemented** | Shared reader + train transforms |

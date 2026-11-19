@@ -12,9 +12,13 @@ from game_frame_classifier.sourcing.labels import (
     OTHER,
     classify_mixed_filename,
     label_hints,
+    normalize_handle,
 )
 from game_frame_classifier.sourcing.probe import ProbeError, probe_file
 from game_frame_classifier.sourcing.recipe import Recipe
+
+NO_SOURCE_ROOT = "no_source: put clips in a <source>/ folder or give --source"
+NO_SOURCE = "no_source"
 
 
 @dataclass
@@ -30,6 +34,7 @@ class Clip:
     suggestion: str
     other_name: str
     suggestion_origin: str
+    source: str = ""
 
 
 def read_hints(path: Path) -> dict[str, tuple[str, str]]:
@@ -69,11 +74,25 @@ def suggest(
     return "", "", ""
 
 
+def _source_from_rel(rel_path: str, source_override: str | None) -> tuple[str, str]:
+    """Return (source, problem). problem is set when automatic source is missing/invalid."""
+    if source_override is not None:
+        return source_override, ""
+    parts = Path(rel_path.replace("\\", "/")).parts
+    if len(parts) < 2:
+        return "", NO_SOURCE_ROOT
+    folder = parts[0]
+    if folder != normalize_handle(folder) or folder.startswith("contributor_") or folder.startswith("_"):
+        return "", NO_SOURCE
+    return folder, ""
+
+
 def scan(
     folder: Path,
     recipe: Recipe,
     tools: FFTools,
     hints: dict[str, tuple[str, str]],
+    source: str | None = None,
 ) -> list[Clip]:
     """Walk folder for videos; skip _archive/; return clips sorted by rel_path."""
     folder = folder.resolve()
@@ -108,6 +127,12 @@ def scan(
             problem = exc.detail or "unreadable"
         except Exception as exc:  # noqa: BLE001 — surface any probe failure as a problem
             problem = f"unreadable:{exc}"
+        clip_source, source_problem = _source_from_rel(rel, source)
+        if source_problem and not problem:
+            problem = source_problem
+        elif source_problem and problem:
+            # Keep probe problem; source still empty so apply can conflict on label.
+            pass
         game, other_name, origin = suggest(rel, hints)
         clips.append(
             Clip(
@@ -122,6 +147,7 @@ def scan(
                 suggestion=game,
                 other_name=other_name,
                 suggestion_origin=origin,
+                source=clip_source,
             )
         )
     clips.sort(key=lambda c: c.rel_path)

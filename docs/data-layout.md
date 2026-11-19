@@ -27,7 +27,7 @@ What people shared as links, kept so downloads can be rebuilt (`gfc-fetch-clips 
 ```text
 data/clip_links/
   <YYYY-MM-DD>_<label>.txt   # one link per line, one file per batch as received
-  medal_users.csv            # Medal uploader -> source and permission (planned: clip-link-auto-source)
+  medal_users.csv            # Medal uploader -> source and permission (gfc-fetch-clips)
 ```
 
 ## Incoming clips (`data/incoming_clips/`)
@@ -36,10 +36,10 @@ Downloads from contributor Medal links (`gfc-fetch-clips`), before labelling wit
 
 ```text
 data/incoming_clips/
+  fetch_log.csv        # one row per attempt (all sources); file is <source>/<name>
+  hints.csv            # file,game,other_name for gfc-sort-clips (file relative to incoming_clips/)
   <source>/
     <slug>__<YYYY-MM-DD>__<HH-MM-SS>__<clip_id>.mp4
-    fetch_log.csv      # one row per attempt
-    hints.csv          # file,game,other_name for gfc-sort-clips --hints
 ```
 
 ## Frame sources (`data/frame_sources/`)

@@ -63,7 +63,7 @@ def test_server_decide_undo_and_apply(tmp_path):
     make_testsrc_video(folder / "c_other.mp4", duration_s=2.5)
     tools = find_tools()
     recipe = load_recipe(RECIPE)
-    clips = scan(folder, recipe, tools, {})
+    clips = scan(folder, recipe, tools, {}, source="tester")
     assert [c.rel_path for c in clips] == ["a_label.mp4", "b_trash.mp4", "c_other.mp4"]
 
     worker = SheetWorker(tools, session_dir, threads=2)
