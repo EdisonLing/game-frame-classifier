@@ -242,7 +242,17 @@ def test_is_mixed_content_type():
     assert is_mixed_content_type("mixed")
     assert is_mixed_content_type(" mixed ")
     assert not is_mixed_content_type("gameplay")
+    assert not is_mixed_content_type("esports_vod")
+    assert not is_mixed_content_type("streamer_overlay")
+    assert not is_mixed_content_type("Mixed")
     assert not is_mixed_content_type("")
+
+
+def _clips_by_relpath(data_root: Path) -> dict[str, dict]:
+    personal = list((data_root / "frame_sources" / "_personal").glob("*/clips.json"))
+    assert len(personal) == 1
+    rows = json.loads(personal[0].read_text(encoding="utf-8"))
+    return {r["original_relpath"]: r for r in rows}
 
 
 @requires_ffmpeg
@@ -257,14 +267,90 @@ def test_skip_mixed_content_type_does_not_extract(tmp_path):
         encoding="utf-8",
     )
     assert main(["--data-root", str(data_root), "--recipe", str(RECIPE), "--cpu"]) == 0
+    assert (source_dir / "mixed.mp4").is_file()
     clip_dirs = list((data_root / "frame_sources" / "Valorant" / "tester").glob("c*"))
     assert len(clip_dirs) == 1
     ok_clip = json.loads((clip_dirs[0] / "clip.json").read_text(encoding="utf-8"))
     assert ok_clip["content_type"] == "gameplay"
-    personal = list((data_root / "frame_sources" / "_personal").glob("*/clips.json"))
-    assert len(personal) == 1
-    rows = json.loads(personal[0].read_text(encoding="utf-8"))
-    by_name = {r["original_relpath"]: r for r in rows}
+    by_name = _clips_by_relpath(data_root)
     assert by_name["mixed.mp4"]["status"] == "skipped"
     assert by_name["mixed.mp4"]["status_detail"] == MIXED_SKIP_DETAIL
     assert by_name["ok.mp4"]["status"] == "ok"
+    index = json.loads(
+        (data_root / "frame_sources" / "_index" / "by_sha256.json").read_text(encoding="utf-8")
+    )
+    assert len(index) == 1
+    manifest = json.loads(
+        next((data_root / "frame_sources" / "_personal").glob("*/run_manifest.json")).read_text(
+            encoding="utf-8"
+        )
+    )
+    assert manifest["input"]["clips_ok"] == 1
+
+
+@requires_ffmpeg
+def test_mixed_only_source_extracts_nothing(tmp_path):
+    data_root, source_dir = data_tree(tmp_path)
+    make_raw_clip(source_dir, "mixed.mp4", duration_s=6.0)
+    (source_dir / "content_types.csv").write_text(
+        "file,content_type,content_type_origin\n"
+        "mixed.mp4,mixed,channel\n",
+        encoding="utf-8",
+    )
+    assert main(["--data-root", str(data_root), "--recipe", str(RECIPE), "--cpu"]) == 0
+    assert not (data_root / "frame_sources" / "Valorant" / "tester").exists()
+    by_name = _clips_by_relpath(data_root)
+    assert by_name["mixed.mp4"]["status_detail"] == MIXED_SKIP_DETAIL
+    manifest = json.loads(
+        next((data_root / "frame_sources" / "_personal").glob("*/run_manifest.json")).read_text(
+            encoding="utf-8"
+        )
+    )
+    assert manifest["input"]["clips_ok"] == 0
+    index_path = data_root / "frame_sources" / "_index" / "by_sha256.json"
+    if index_path.is_file():
+        assert json.loads(index_path.read_text(encoding="utf-8")) == {}
+
+
+@requires_ffmpeg
+def test_mixed_skip_is_not_over_budget(tmp_path):
+    """Mixed must be skipped before budget selection, never counted as over_budget."""
+    data_root, source_dir = data_tree(tmp_path)
+    make_raw_clip(source_dir, "ok.mp4", duration_s=20.0)
+    make_raw_clip(source_dir, "mixed.mp4", duration_s=20.0)
+    (source_dir / "content_types.csv").write_text(
+        "file,content_type,content_type_origin\n"
+        "mixed.mp4,mixed,sorter\n",
+        encoding="utf-8",
+    )
+    # Enough for one ~20 s clip only.
+    assert main([
+        "--data-root", str(data_root),
+        "--recipe", str(RECIPE),
+        "--cpu",
+        "--budget-hours", str(25 / 3600),
+    ]) == 0
+    by_name = _clips_by_relpath(data_root)
+    assert by_name["mixed.mp4"]["status_detail"] == MIXED_SKIP_DETAIL
+    assert by_name["ok.mp4"]["status"] == "ok"
+    clip_dirs = list((data_root / "frame_sources" / "Valorant" / "tester").glob("c*"))
+    assert len(clip_dirs) == 1
+
+
+@pytest.mark.parametrize("content_type", ["", "gameplay", "esports_vod", "streamer_overlay"])
+@requires_ffmpeg
+def test_non_mixed_content_types_still_extract(tmp_path, content_type):
+    data_root, source_dir = data_tree(tmp_path)
+    make_raw_clip(source_dir, "clip.mp4", duration_s=6.0)
+    if content_type:
+        (source_dir / "content_types.csv").write_text(
+            "file,content_type,content_type_origin\n"
+            f"clip.mp4,{content_type},video\n",
+            encoding="utf-8",
+        )
+    assert main(["--data-root", str(data_root), "--recipe", str(RECIPE), "--cpu"]) == 0
+    clip_dirs = list((data_root / "frame_sources" / "Valorant" / "tester").glob("c*"))
+    assert len(clip_dirs) == 1
+    clip = json.loads((clip_dirs[0] / "clip.json").read_text(encoding="utf-8"))
+    assert clip["status"] == "ok"
+    assert clip.get("content_type", "") == content_type

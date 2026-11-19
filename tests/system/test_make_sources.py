@@ -6,11 +6,17 @@ import json
 import shutil
 from pathlib import Path
 
+from game_frame_classifier.clip_sorter.apply import plan, run
+from game_frame_classifier.clip_sorter.scan import scan
+from game_frame_classifier.clip_sorter.store import append
 from game_frame_classifier.frame_export import cli as frame_export_cli
 from game_frame_classifier.frame_export import paths as frame_export_paths
 from game_frame_classifier.ingest_pack import main as ingest_main
-from game_frame_classifier.make_sources import main
+from game_frame_classifier.make_sources import MIXED_SKIP_DETAIL, main
+from game_frame_classifier.sourcing.ffbin import find_tools
 from game_frame_classifier.sourcing.hashing import sha256_file
+from game_frame_classifier.sourcing.recipe import load_recipe
+from tests.helpers.ffmpeg_fixtures import make_testsrc_video
 from tests.helpers.make_sources_fixtures import RECIPE, ROOT, data_tree, make_raw_clip, requires_ffmpeg
 
 USER = {
@@ -210,3 +216,38 @@ def test_budget_hours_spreads_days_and_tops_up(tmp_path):
     assert main(base + ["--budget-hours", str(40 / 3600)]) == 0
     assert len(list(clips.glob("c*"))) == 3
     assert main(base + ["--budget-hours", "0"]) == 2
+
+
+@requires_ffmpeg
+def test_sorter_mixed_apply_then_make_sources_skips(tmp_path):
+    """Label+mixed apply shelves into raw; make-sources must not extract it."""
+    inbox = tmp_path / "inbox"
+    data_root = tmp_path / "data"
+    session = data_root / "sorting" / "mixed_gate"
+    make_testsrc_video(inbox / "clip.mp4", duration_s=6.0)
+    tools = find_tools()
+    recipe = load_recipe(RECIPE)
+    clips = scan(inbox, recipe, tools, {}, source="tester")
+    qid = clips[0].quick_id
+    append(session, qid, "clip.mp4", "content", content_type="mixed")
+    append(session, qid, "clip.mp4", "label", game="Valorant")
+    report = run(plan(session, inbox, clips, "tester", data_root), dry_run=False)
+    assert report["counts"]["copied"] == 1
+    raw = data_root / "raw" / "Valorant" / "tester" / "clip.mp4"
+    assert raw.is_file()
+    assert "mixed" in (raw.parent / "content_types.csv").read_text(encoding="utf-8")
+
+    assert main(["--data-root", str(data_root), "--recipe", str(RECIPE), "--cpu"]) == 0
+    assert not (data_root / "frame_sources" / "Valorant" / "tester").exists()
+    rows = json.loads(
+        next((data_root / "frame_sources" / "_personal").glob("*/clips.json")).read_text(encoding="utf-8")
+    )
+    by_name = {r["original_relpath"]: r for r in rows}
+    assert by_name["clip.mp4"]["status"] == "skipped"
+    assert by_name["clip.mp4"]["status_detail"] == MIXED_SKIP_DETAIL
+    manifest = json.loads(
+        next((data_root / "frame_sources" / "_personal").glob("*/run_manifest.json")).read_text(
+            encoding="utf-8"
+        )
+    )
+    assert manifest["input"]["clips_ok"] == 0
