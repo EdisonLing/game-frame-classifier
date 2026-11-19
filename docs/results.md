@@ -444,3 +444,100 @@ Unseen people by person (CNN): P2-a CS2 0.908 (282), P2-a Valorant 0.990 (498), 
 **Limits and next.** Overwatch 2, Marvel Rivals and Minecraft need footage from more people before they can be learned or measured; Other needs more people and content names. The 1/15 cap now removes more than half of the large sources' train frames; a cap per person group (`source_groups`) or a higher limit is worth comparing on val. The report's held-out design (G1) can now hold out whole people in CS2 and Valorant. P5's Medal-style file names should be parsed for recording times.
 
 **Archive.** `data/archive/2026-11-19_new_people_and_unseen_people/` (local): the four runs, both splits with the data figures, the development-split config, manifests, access log, README.
+
+## 2026-11-19 — CNN with public datasets added; check of the public data on its game's own players
+
+**Question.** (1) Does adding three licensed public datasets fill the two classes that had almost no data (Minecraft, Marvel Rivals)? (2) Does a model trained on the public data recognise those games when the people who recorded them are not in the public sets, or has it learned the datasets' capture setups?
+
+**Data.** Three public datasets, each approved for local, non-commercial use, with the licence saved before download (`docs/THIRD_PARTY_DATA.md`, `docs/licenses/`):
+
+| Alias | Dataset | Licence | Taken | Frames kept |
+|---|---|---|---|---:|
+| D1 | OpenAI VPT contractor demos (Minecraft) | MIT; Minecraft not licensed by OpenAI | 15 videos, 3 from each of the five contractor indexes, evenly spaced | 471 |
+| D2 | BEDD / BASALT demos (Minecraft) | MIT | 16 videos, 4 per task (find cave, waterfall, animal pen, house) | 332 |
+| D3 | MARVELRIVALSYOLO (Marvel Rivals) | Apache-2.0 packaging; no publisher grant | 300 full-screen 1920×1080 screenshots, grouped by 10-minute capture windows (14 groups) | 289 |
+
+- D1 and D2 are 640×360 at 20 fps: lower resolution and frame rate than every other source, and the same capture setup as each other, so they count as one setup for any generalisation claim. D3 is an object-detection dataset; its character crops (odd sizes, not game frames) were excluded and only full-screen captures used; whether they are live play or replays is not verified.
+- Public data is off in the default split (`v1` is unchanged). This run uses the preset `config/splits/public_permissive.json`, with its own split id and ledger: train 3,464 / val 1,581 / test_session 1,515 slots.
+
+| Game | train slots | val slots | test_session slots | Videos | Footage (min) |
+|---|---:|---:|---:|---:|---:|
+| CS2 | 546 | 286 | 301 | 96 | 231 |
+| League_of_Legends | 484 | 292 | 250 | 79 | 209 |
+| Marvel_Rivals | 226 | 63 | 55 | 15 | 30 |
+| Minecraft | 479 | 118 | 149 | 33 | 95 |
+| Other | 931 | 204 | 200 | 74 | 183 |
+| Overwatch_2 | 40 | 65 | 0 | 8 | 11 |
+| Valorant | 758 | 553 | 560 | 149 | 338 |
+
+- Recording properties: Minecraft videos are 1920x1080 3 (P5) and 640x360 30 (D1, D2); Marvel Rivals stills are 1920x1080. Cleaning kept 9,992 of 13,660 frames (rejected: 3,564 near-duplicates, 104 blurred).
+- **Train cap in this preset.** The 1/15 cap applies once a game has three or more source groups (D33, option A). Here P2-b's one League of Legends video sits in train, which makes three groups, so P4's League of Legends is capped (691 slots left out); in `v1` the same video sits in test_session, League has two groups in train, and no cap applies. Train League of Legends is 484 slots here against 1,173 in `v1`.
+
+**By person and source, split `public_permissive`** (slots / videos / sessions):
+
+| Person / source | Kind | Game | train | val | test_session | Left out (cap) |
+|---|---|---|---:|---:|---:|---:|
+| D1 | public | Minecraft | 225 / 8 / 8 | 107 / 3 / 2 | 53 / 3 / 3 | 86 |
+| D2 | public | Minecraft | 225 / 10 / 10 | 11 / 2 / 2 | 96 / 4 / 4 | 0 |
+| D3 | public | Marvel_Rivals | 171 / 9 / 9 | 63 / 2 / 2 | 55 / 3 / 3 | 0 |
+| P1-a | personal | CS2 | 134 / 5 / 3 | 31 / 1 / 1 | – | 0 |
+| P1-a | personal | League_of_Legends | 236 / 9 / 9 | 3 / 1 / 1 | 33 / 2 / 2 | 0 |
+| P1-a | personal | Valorant | 105 / 4 / 4 | 35 / 1 / 1 | – | 38 |
+| P2-a | contributor | CS2 | 206 / 20 / 17 | 65 / 6 / 6 | 11 / 1 / 1 | 0 |
+| P2-a | contributor | Valorant | 105 / 30 / 28 | 25 / 2 / 1 | 40 / 4 / 4 | 328 |
+| P2-b | personal | League_of_Legends | 12 / 1 / 1 | – | – | 0 |
+| P3 | contributor | Valorant | 105 / 22 / 19 | 174 / 6 / 4 | 144 / 5 / 4 | 516 |
+| P4 | contributor | CS2 | 206 / 36 / 36 | 190 / 7 / 7 | 220 / 8 / 8 | 849 |
+| P4 | contributor | League_of_Legends | 236 / 41 / 41 | 289 / 16 / 16 | 217 / 9 / 9 | 691 |
+| P4 | contributor | Marvel_Rivals | 55 / 1 / 1 | – | – | 0 |
+| P4 | contributor | Other | 898 / 46 / 46 | 195 / 14 / 14 | 200 / 8 / 8 | 0 |
+| P4 | contributor | Overwatch_2 | 40 / 1 / 1 | – | – | 0 |
+| P4 | contributor | Valorant | 105 / 23 / 18 | 269 / 6 / 4 | 352 / 7 / 4 | 900 |
+| P5 | contributor | CS2 | – | – | 70 / 12 / 1 | 0 |
+| P5 | contributor | Minecraft | 29 / 3 / 1 | – | – | 0 |
+| P5 | contributor | Other | 33 / 5 / 1 | – | – | 0 |
+| P5 | contributor | Overwatch_2 | – | 65 / 7 / 1 | – | 0 |
+| P6 | contributor | Valorant | 105 / 10 / 10 | – | 6 / 2 / 1 | 24 |
+| P7 | contributor | Valorant | 55 / 7 / 7 | 9 / 1 / 1 | 13 / 1 / 1 | 0 |
+| P8 | contributor | Valorant | 81 / 5 / 3 | 28 / 3 / 2 | – | 0 |
+| P9 | contributor | Other | – | 9 / 1 / 1 | – | 0 |
+| P9 | contributor | Valorant | 32 / 3 / 3 | 13 / 1 / 1 | – | 0 |
+| P10 | contributor | Valorant | 5 / 1 / 1 | – | – | 0 |
+| P11 | contributor | Valorant | 60 / 4 / 4 | – | 5 / 1 / 1 | 0 |
+| **All** | | | **3464 / 304 / 281** | **1581 / 80 / 67** | **1515 / 70 / 54** | **3432** |
+
+- D1–D3: public datasets as in the table above; P1–P11 as in the previous entry.
+
+**Method.** `config/train_cnn.json` unchanged (7-way, seed 360), RX 9070 XT, about 12 s per epoch. Commands: `scripts/fetch_public_samples.py vpt --per-index 3`, `bedd --per-task 4`, `marvelrivals --images 300`; `gfc-make-sources --game Minecraft --source <each> --budget-hours 1`; `gfc-ingest-stills` for the screenshots; derive, clean; `gfc-split --config config/splits/public_permissive.json`; `.venv-rocm` `-m game_frame_classifier.train --split-dir data/manifests/splits/public_permissive --tag public-permissive`. Commit `3bd8560`.
+
+**Results on val** (val chose the best epoch, 14 of 20). The val set differs from `v1`'s, so the comparison shows direction only.
+
+| | `v1` CNN (previous entry) | `public_permissive` CNN |
+|---|---:|---:|
+| Accuracy / macro-F1 | 0.866 / 0.781 (n = 1,377) | **0.926 / 0.852** (n = 1,581) |
+| Minecraft F1 | not measurable (no val frames) | 0.96 (118, all D1/D2) |
+| Marvel Rivals F1 | not measurable | 0.82 (63, all D3) |
+| Valorant / League of Legends / CS2 F1 | 0.96 / 0.91 / 0.89 | 0.98 / 0.98 / 0.92 |
+| Overwatch 2 F1 | 0.46 | 0.49 |
+| Other F1 / flagged at 5 % false alarms | 0.68 / 0.680 | 0.81 / 0.907 |
+
+Main confusions: Overwatch 2 called CS2 (18) or Marvel Rivals (17); Other called CS2 (17), Valorant (14) or Marvel Rivals (10).
+
+**Development check `dev-pubout-1`: the public data scored on its game's own players.** Same preset with Minecraft and Marvel Rivals trained only on public data: P5's Minecraft (29 frames, 3 videos) and P4's Marvel Rivals (55 frames, 1 video) held out as `test_source` (own ledger, frozen only to score it; not the report's test design, G1 open). CNN best epoch 10 of 16; val 0.923; scored once on `test_source` (access logged).
+
+| Game | Trained on | Val (same datasets) | Held-out player |
+|---|---|---:|---:|
+| Minecraft | D1 + D2 only | 0.991 (107) | **0.103** (29; 16 called Other, 7 Marvel Rivals) |
+| Marvel Rivals | D3 only | 0.970 (33) | **0.745** (55; 11 called Other) |
+
+- **The Minecraft datasets teach their capture setup, not Minecraft in general.** Trained on 640×360, 20 fps contractor footage, the model calls a player's own 1080p Minecraft "Other". The 0.96 Minecraft F1 above measures recognition of D1/D2-style footage only; it says little about Minecraft clips in general. More Minecraft footage from people, at ordinary resolutions, is needed before a Minecraft number means much.
+- **The Marvel Rivals screenshots transfer partly** (0.745 on a player's video), so they carry real game appearance, but one held-out video is a small test.
+- The run supports keeping public data opt-in and reporting public-only classes separately.
+
+**Integrity.** `public_permissive`: no clips, sessions or slots shared between splits; no val or test_session frame within aHash 6 of a train frame of the same source (smallest distance 7; 1,116 of 1,507 val frames above 10); split files match the hashes stored at training time; held-out access none. `dev-pubout-1`: test_source shares no source with train; one logged access with the reason "development check: Minecraft and Marvel Rivals trained only on public data, scored on the people who recorded them (dev-pubout-1); not the report's test".
+
+**Challenges.** Some files in the VPT index no longer exist on the host (HTTP 404); the fetch script skips to the next file in the same index. The Marvel Rivals dataset mixes character crops with full screenshots; the crops failed frame derivation and were dropped. The Overwatch dataset (Game-Intention) is gated and needs a manual access request.
+
+**Limits and next.** Val Minecraft and Marvel Rivals come only from the public sets, so their val F1 is optimistic (shown by the held-out check). Overwatch 2 is still one person in training. Next: Minecraft, Overwatch 2 and Marvel Rivals clips from more people; the Game-Intention access request; decide whether public data enters the report's main model or stays a separate comparison.
+
+**Archive.** `data/archive/2026-11-19_public_data/` (local): both runs, both splits with the data figures, the configs, access log, README.
