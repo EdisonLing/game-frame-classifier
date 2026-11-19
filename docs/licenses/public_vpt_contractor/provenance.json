@@ -1,0 +1,86 @@
+{
+  "source_id": "public_vpt_contractor",
+  "dataset_url": "https://github.com/openai/Video-Pre-Training/",
+  "dataset_revision": "",
+  "license_spdx": "MIT",
+  "license_url": "https://raw.githubusercontent.com/spdx/license-list-data/main/text/MIT.txt",
+  "license_sha256": "b05785f9f18e6716bab63424b11454513b9943a222595b70411009202fc592b5",
+  "retrieved_utc": "2026-11-19T15:59:19Z",
+  "files": [
+    {
+      "name": "Player249-60b420bb3851-20210504-224830.mp4",
+      "bytes": 38031848,
+      "sha256": "4ace658f233e659d0dffe87af6093e68647f223a6dbc92ebdea5685b980e7ae6"
+    },
+    {
+      "name": "Player358-2a0f51fed25a-20210921-150913.mp4",
+      "bytes": 9793250,
+      "sha256": "ed1b93d453129810c6516f385403925d26f0543256a3e0a1febb7634d5bde63f"
+    },
+    {
+      "name": "Player710-f153ac423f61-20210905-151248.mp4",
+      "bytes": 4094495,
+      "sha256": "05008f88a06809b623079d0ec8e755f763729249fbea4f3cb746d7cde0f4a8d4"
+    },
+    {
+      "name": "Player154-f153ac423f61-20211118-110727.mp4",
+      "bytes": 33408806,
+      "sha256": "d159f025a6576da8fea81cebc2452abfce758d9d2892e984c9b255a30c28ad71"
+    },
+    {
+      "name": "jumpy-denim-lion-f153ac423f61-20220115-150603.mp4",
+      "bytes": 63564781,
+      "sha256": "eb69d31baba924771ffb275b68cc7aaade14daf44bbbf58a6da10185c8b4af0e"
+    },
+    {
+      "name": "snippy-chartreuse-mastiff-c636490d741c-20220227-150130.mp4",
+      "bytes": 161989820,
+      "sha256": "d7b2b4292ec805e9817354267988a49ba1683dd6fef82b0569a66dd9436bccad"
+    },
+    {
+      "name": "cheeky-cornflower-setter-74ae6c2eae2e-20220315-122354.mp4",
+      "bytes": 3276130,
+      "sha256": "9cab761d94a82eede5b076b70899d991fcb9516b1140e6fc7dc1e0572b52bfe7"
+    },
+    {
+      "name": "woozy-ruby-ostrich-f153ac423f61-20220313-123142.mp4",
+      "bytes": 162352789,
+      "sha256": "97e762d6f46b6c127699309fe483ff85082da9dec0fc52d662c6b2818bf76006"
+    },
+    {
+      "name": "cheeky-cornflower-setter-5636da6a6e58-20220327-184948.mp4",
+      "bytes": 118445189,
+      "sha256": "9346851ed3771973f90f0b58297339b2844105ca1a01b77e2fac05dc12cff2f8"
+    },
+    {
+      "name": "Luka-f153ac423f61-20220401-195512.mp4",
+      "bytes": 172781221,
+      "sha256": "2f6c89e9b45654b7cdb0482d1b3e6890403aca1804ab0c4e4800be97d4d6c804"
+    },
+    {
+      "name": "gimpy-jade-panda-ec911d8354f9-20220402-022356.mp4",
+      "bytes": 172509929,
+      "sha256": "1fd173be1757e6eb3bca9c1a9b5180c69ee192e00291ba5fedb96f5575404993"
+    },
+    {
+      "name": "tasty-brass-devil-ca572184dd27-20220402-231746.mp4",
+      "bytes": 172833049,
+      "sha256": "f1a2cec67d6090802004764000ba9402658848e16866ba8927049b6ecc669c76"
+    },
+    {
+      "name": "cheeky-cornflower-setter-02e496ce4abb-20220421-092639.mp4",
+      "bytes": 172629917,
+      "sha256": "c3dfede32353f7c19a297284ba671382bfbe32ac654077f1d37fe5bd26a41cfe"
+    },
+    {
+      "name": "lovely-persimmon-angora-9e9259261254-20220417-001537.mp4",
+      "bytes": 172526730,
+      "sha256": "ae5c4ad3f0705e5fc36d49bfc14e87c747fc8728724a305596ce60d79ca3adc5"
+    },
+    {
+      "name": "sleepy-sangria-bat-145efaa52ab8-20220421-085159.mp4",
+      "bytes": 99390322,
+      "sha256": "323c8718d2687f76a1f50325444af8a3b1015d84056b8d146d9ffd87f71ffe77"
+    }
+  ]
+}

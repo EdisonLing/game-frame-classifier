@@ -13,12 +13,12 @@ Source folder names must start with `public_` so `gfc-derive-frames` / `gfc-spli
 |---|---|---|---|---|---|---|---|---|---|
 | `public_gamed` | planned | Valorant, CS2 | Gamed game-classification | https://huggingface.co/datasets/ybashir/gamed-game-classification-dataset | CC-BY-4.0 | review | Frames from the Gamed dataset (ybashir), CC BY 4.0; underlying footage remains with uploaders and publishers. | false |  |
 | `public_gameplay_images` | planned | Minecraft | Gameplay Images | https://www.kaggle.com/datasets/aditmagotra/gameplay-images | CC-BY-4.0 | review | Minecraft stills from Gameplay Images (Adit Magotra), CC BY 4.0. | false |  |
-| `public_vpt_contractor` | planned | Minecraft | OpenAI VPT contractor demos | https://github.com/openai/Video-Pre-Training/ | MIT | review | OpenAI Video Pre-Training contractor demonstrations (MIT); Minecraft © Microsoft/Mojang. | false |  |
-| `public_bedd_basalt` | planned | Minecraft | BEDD / BASALT demos | https://arxiv.org/html/2312.02405 | MIT | review | BEDD/BASALT demonstration videos (MIT as stated on datasheet/Zenodo). | false |  |
+| `public_vpt_contractor` | active | Minecraft | OpenAI VPT contractor demos | https://github.com/openai/Video-Pre-Training/ | MIT | review | OpenAI Video Pre-Training contractor demonstrations (MIT); Minecraft © Microsoft/Mojang. | true | 2026-11-19 |
+| `public_bedd_basalt` | active | Minecraft | BEDD / BASALT demos | https://arxiv.org/html/2312.02405 | MIT | review | BEDD/BASALT demonstration videos (MIT as stated on datasheet/Zenodo). | true | 2026-11-19 |
 | `public_minerl` | planned | Minecraft | MineRL human demos | https://github.com/minerllabs/minerl/ | CC-BY-NC-SA-4.0 | no | MineRL human gameplay demos (CC BY-NC-SA 4.0; Zenodo backup also labeled MIT — treat as NC until resolved). | false |  |
 | `public_pawa` | planned | Minecraft | PAWA | https://huggingface.co/datasets/YOUSIKI/pawa-dataset | CC-BY-NC-4.0 | no | PAWA Minecraft dataset (CC BY-NC 4.0), subject to Minecraft Usage Guidelines. | false |  |
-| `public_game_intention_ow` | planned | Overwatch_2 | Game-Intention (OW subset) | https://huggingface.co/datasets/GameIntention/Game-Intention | CC-BY-NC-4.0 | no | Overwatch videos from Game-Intention (CC BY-NC 4.0). | false |  |
-| `public_marvelrivals_yolo` | planned | Marvel_Rivals | MARVELRIVALSYOLO | https://huggingface.co/datasets/Chappieut/MARVELRIVALSYOLO | Apache-2.0 | review | Marvel Rivals replay screenshots from MARVELRIVALSYOLO (Apache-2.0 packaging). | false |  |
+| `public_game_intention_ow` | planned | Overwatch_2 | Game-Intention (OW subset) | https://huggingface.co/datasets/GameIntention/Game-Intention | CC-BY-NC-4.0 | no | Overwatch videos from Game-Intention (CC BY-NC 4.0). | true |  |
+| `public_marvelrivals_yolo` | active | Marvel_Rivals | MARVELRIVALSYOLO | https://huggingface.co/datasets/Chappieut/MARVELRIVALSYOLO | Apache-2.0 | review | Marvel Rivals screenshots from MARVELRIVALSYOLO (Chappieut), Apache-2.0 packaging; game content remains with its publisher. | true | 2026-11-19 |
 <!-- ledger:end -->
 
 ## Filtered out (no labelled stills/videos for this pipeline)

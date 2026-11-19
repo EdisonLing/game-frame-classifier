@@ -2,7 +2,10 @@
   "sources": [
     {
       "source_id": "public_gamed",
-      "games": ["Valorant", "CS2"],
+      "games": [
+        "Valorant",
+        "CS2"
+      ],
       "dataset_name": "Gamed game-classification",
       "official_url": "https://huggingface.co/datasets/ybashir/gamed-game-classification-dataset",
       "license_spdx": "CC-BY-4.0",
@@ -14,7 +17,9 @@
     },
     {
       "source_id": "public_gameplay_images",
-      "games": ["Minecraft"],
+      "games": [
+        "Minecraft"
+      ],
       "dataset_name": "Gameplay Images",
       "official_url": "https://www.kaggle.com/datasets/aditmagotra/gameplay-images",
       "license_spdx": "CC-BY-4.0",
@@ -26,31 +31,37 @@
     },
     {
       "source_id": "public_vpt_contractor",
-      "games": ["Minecraft"],
+      "games": [
+        "Minecraft"
+      ],
       "dataset_name": "OpenAI VPT contractor demos",
       "official_url": "https://github.com/openai/Video-Pre-Training/",
       "license_spdx": "MIT",
       "license_url": "https://raw.githubusercontent.com/spdx/license-list-data/main/text/MIT.txt",
       "commercial_ok": "review",
       "attribution_text": "OpenAI Video Pre-Training contractor demonstrations (MIT); Minecraft © Microsoft/Mojang.",
-      "approved": false,
-      "notes": ""
+      "approved": true,
+      "notes": "Approved 2026-11-19 for local non-commercial use. Quirks: OpenAI contractors on a modified Java client; 640x360 at 20 fps H.264 (~34 MB/min), lower resolution and frame rate than any other source; fixed capture look; contractor names are pseudonymous ids; Minecraft IP not licensed by OpenAI (Mojang usage guidelines apply)."
     },
     {
       "source_id": "public_bedd_basalt",
-      "games": ["Minecraft"],
+      "games": [
+        "Minecraft"
+      ],
       "dataset_name": "BEDD / BASALT demos",
       "official_url": "https://arxiv.org/html/2312.02405",
       "license_spdx": "MIT",
       "license_url": "https://raw.githubusercontent.com/spdx/license-list-data/main/text/MIT.txt",
       "commercial_ok": "review",
       "attribution_text": "BEDD/BASALT demonstration videos (MIT as stated on datasheet/Zenodo).",
-      "approved": false,
-      "notes": ""
+      "approved": true,
+      "notes": "Approved 2026-11-19 for local non-commercial use. Quirks: same capture setup and look as the VPT contractor data (640x360, 20 fps) so it adds tasks, not a new recording setup; task-directed play (find cave, waterfall, pen animals, build house); treat VPT and BEDD as one person group when judging generalisation."
     },
     {
       "source_id": "public_minerl",
-      "games": ["Minecraft"],
+      "games": [
+        "Minecraft"
+      ],
       "dataset_name": "MineRL human demos",
       "official_url": "https://github.com/minerllabs/minerl/",
       "license_spdx": "CC-BY-NC-SA-4.0",
@@ -62,7 +73,9 @@
     },
     {
       "source_id": "public_pawa",
-      "games": ["Minecraft"],
+      "games": [
+        "Minecraft"
+      ],
       "dataset_name": "PAWA",
       "official_url": "https://huggingface.co/datasets/YOUSIKI/pawa-dataset",
       "license_spdx": "CC-BY-NC-4.0",
@@ -74,27 +87,31 @@
     },
     {
       "source_id": "public_game_intention_ow",
-      "games": ["Overwatch_2"],
+      "games": [
+        "Overwatch_2"
+      ],
       "dataset_name": "Game-Intention (OW subset)",
       "official_url": "https://huggingface.co/datasets/GameIntention/Game-Intention",
       "license_spdx": "CC-BY-NC-4.0",
       "license_url": "https://raw.githubusercontent.com/spdx/license-list-data/main/text/CC-BY-NC-4.0.txt",
       "commercial_ok": "no",
       "attribution_text": "Overwatch videos from Game-Intention (CC BY-NC 4.0).",
-      "approved": false,
-      "notes": ""
+      "approved": true,
+      "notes": "Approved 2026-11-19 for local non-commercial use (CC BY-NC). Quirks: gated on Hugging Face (manual access request needed before download); multi-game collection; confirm frames show the normal gameplay HUD before training."
     },
     {
       "source_id": "public_marvelrivals_yolo",
-      "games": ["Marvel_Rivals"],
+      "games": [
+        "Marvel_Rivals"
+      ],
       "dataset_name": "MARVELRIVALSYOLO",
       "official_url": "https://huggingface.co/datasets/Chappieut/MARVELRIVALSYOLO",
       "license_spdx": "Apache-2.0",
       "license_url": "https://raw.githubusercontent.com/spdx/license-list-data/main/text/Apache-2.0.txt",
       "commercial_ok": "review",
-      "attribution_text": "Marvel Rivals replay screenshots from MARVELRIVALSYOLO (Apache-2.0 packaging).",
-      "approved": false,
-      "notes": ""
+      "attribution_text": "Marvel Rivals screenshots from MARVELRIVALSYOLO (Chappieut), Apache-2.0 packaging; game content remains with its publisher.",
+      "approved": true,
+      "notes": "Approved 2026-11-19 for local non-commercial use. Quirks: an object-detection dataset; only the full-screen 1920x1080 captures (file names screenshot_<unix time>, 1,158 of 2,051 images) are used, the rest are character crops; whether a capture is live play or a replay/spectator view is not verified; no publisher grant; groups are 10-minute windows of the capture time, and the 300-still sample falls in 14 windows, so few sessions; the first download also fetched 125 crops, which were deleted, never ingested and are not listed in provenance."
     }
   ]
 }

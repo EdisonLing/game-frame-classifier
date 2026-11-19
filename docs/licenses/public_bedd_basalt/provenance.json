@@ -1,0 +1,91 @@
+{
+  "source_id": "public_bedd_basalt",
+  "dataset_url": "https://arxiv.org/html/2312.02405",
+  "dataset_revision": "",
+  "license_spdx": "MIT",
+  "license_url": "https://raw.githubusercontent.com/spdx/license-list-data/main/text/MIT.txt",
+  "license_sha256": "b05785f9f18e6716bab63424b11454513b9943a222595b70411009202fc592b5",
+  "retrieved_utc": "2026-11-19T15:56:57Z",
+  "files": [
+    {
+      "name": "Player162-f153ac423f61-20220712-155812.mp4",
+      "bytes": 103513163,
+      "sha256": "57da623735843815fc64159334e1d9f3cbacbc9a36e1413185307946691efa05"
+    },
+    {
+      "name": "jumpy-denim-lion-e1bbcad3d741-20220718-175055.mp4",
+      "bytes": 8027528,
+      "sha256": "d9e5ae0941bdbb1d3f6ff073bc70bfa8499163c42f486ab42e944635bb1a43af"
+    },
+    {
+      "name": "snippy-chartreuse-mastiff-71bc6ec57cfe-20220717-153016.mp4",
+      "bytes": 11782102,
+      "sha256": "80ae5be9a11cdb85e43ab9abbb6bd866194a1a5da825be81fe23022ce33c7cf9"
+    },
+    {
+      "name": "wiggy-aquamarine-tapir-1042c094a1ee-20220712-135127.mp4",
+      "bytes": 6968992,
+      "sha256": "7ba4d5c7e4e9ff8843dc0b64c67c6cc98f669880c85918cf9dbce5cd9fa8b533"
+    },
+    {
+      "name": "cheeky-cornflower-setter-00df0a566647-20220717-135630.mp4",
+      "bytes": 30711548,
+      "sha256": "b0bb860f76ef5cbb4a6588f71c38bcef59add380a099cf4369ad6f8cbb7bf266"
+    },
+    {
+      "name": "pokey-cyan-spitz-c8f76f62493f-20220717-112101.mp4",
+      "bytes": 23264248,
+      "sha256": "bfa7e168f1f0eca28f252626008b92cdb457268cfbea6548b4c7cd576049a001"
+    },
+    {
+      "name": "squeaky-magnolia-ocelot-39284676d613-20220720-171906.mp4",
+      "bytes": 11093711,
+      "sha256": "9c63b384ba99964f71b91ca4fca1287c7ea3e60600b8373284a4c41aee360c6e"
+    },
+    {
+      "name": "wiggy-aquamarine-tapir-0f6aa5c845f7-20220717-225647.mp4",
+      "bytes": 19939435,
+      "sha256": "69ada14b454b3788f9d63b8e42ea261eabe72587f616698558a383c1846638b8"
+    },
+    {
+      "name": "cheeky-cornflower-setter-00d56b385cb3-20220720-204837.mp4",
+      "bytes": 115776278,
+      "sha256": "5e168a301b42134713361e4d152629a30eb5aacbec1d7e73da8ca3a7608f39c5"
+    },
+    {
+      "name": "shabby-pink-molly-9d3408a6e0d9-20220725-095007.mp4",
+      "bytes": 124140173,
+      "sha256": "17130eb93dbafc7d87cd08c2f86a0d0bafbc514d9e7fa2e766aecfa1a59349f3"
+    },
+    {
+      "name": "squeaky-magnolia-ocelot-e93fb08cdcbd-20220724-205231.mp4",
+      "bytes": 20645142,
+      "sha256": "15fb98fdfaeb88d03aaeb1979e4bde674c6cd63db9365e940ae6d4c099faf31b"
+    },
+    {
+      "name": "wiggy-aquamarine-tapir-73677cb0ba44-20220722-132634.mp4",
+      "bytes": 28562583,
+      "sha256": "2367c64f6f85976021c504a79964caeefceb9f99e49e96ef454c09fba65266a5"
+    },
+    {
+      "name": "cheeky-cornflower-setter-02e3dffb882f-20220726-213846.mp4",
+      "bytes": 143143944,
+      "sha256": "6b7606fcfce5722fcfbef475a9ffd11dd65011096509ed83bee1ca4d1410e2b3"
+    },
+    {
+      "name": "pokey-cyan-spitz-f153ac423f61-20220726-102642.mp4",
+      "bytes": 115436923,
+      "sha256": "64a6800730d674b4ac49ca31d7c12dadc248a81a5e1e19c12b7530f1b6cc64d6"
+    },
+    {
+      "name": "squeaky-ultramarine-chihuahua-88111bcc4643-20220725-164629.mp4",
+      "bytes": 139552018,
+      "sha256": "de7bef0a13c7fa131512fd5b1ca6cbe2f414fc4acce4cb64f72b90ef6f099385"
+    },
+    {
+      "name": "wiggy-aquamarine-tapir-09a88430c661-20220725-154809.mp4",
+      "bytes": 141609542,
+      "sha256": "1ad09b53460bdc301190a5820514a93f04f098d13c94b3399623b1d26fa4a377"
+    }
+  ]
+}
