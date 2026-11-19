@@ -56,7 +56,7 @@ Each clip gets one game decision; the latest one counts, and every decision can 
 |---|---|---|
 | `1`–`6` | One of the six games, in `sourcing.labels.GAMES` order (Valorant, League of Legends, CS2, Minecraft, Overwatch 2, Marvel Rivals) | Copied to `data/raw/<Game>/<source>/<relative path>` |
 | `7` | Other; the page asks for the content name the first time (list of names used before, or a new one, normalised with `normalize_other_name`) | Copied to `data/raw/_other/<name>/<source>/<relative path>` |
-| `V` / `G` / `O` | Content type: esports VOD / gameplay / streamer overlay (press current again to clear); origin `sorter` | Written to `content_types.csv` beside copied clips |
+| `V` / `G` / `O` / `M` | Content type: esports VOD / gameplay / streamer overlay / mixed (press current again to clear); origin `sorter`. Legend on the page; `U` undoes a wrong key | Written to `content_types.csv` beside copied clips (`mixed` still copies when a game is set) |
 | `D` | **Disabled**: not confident this clip should be used; kept for a later look | Nothing; stays listed as disabled in the report |
 | `X` | **Trash**: confident it should not be used | Moved to `<folder>/_archive/<relative path>` |
 | `S` | Skip for now (undecided) | Nothing |

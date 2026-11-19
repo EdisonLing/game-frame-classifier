@@ -349,6 +349,28 @@ def test_content_type_set_toggle_undo_does_not_count_as_decision(tmp_path):
 
 
 @requires_ffmpeg
+def test_apply_mixed_content_type_still_copies(tmp_path):
+    folder = tmp_path / "inbox"
+    data_root = tmp_path / "data"
+    session = data_root / "sorting" / "mixed"
+    make_testsrc_video(folder / "clip.mp4", duration_s=2.0)
+    tools = find_tools()
+    recipe = load_recipe(RECIPE)
+    clips = scan(folder, recipe, tools, {}, source="tester")
+    qid = clips[0].quick_id
+    append(session, qid, "clip.mp4", "content", content_type="mixed")
+    append(session, qid, "clip.mp4", "label", game="Valorant")
+    state = replay(session)
+    assert state[qid]["content_type"] == "mixed"
+    assert state[qid]["decision"] == "label"
+    actions = plan(session, folder, clips, "tester", data_root)
+    report = run(actions, dry_run=False)
+    assert report["counts"]["copied"] == 1
+    ct = (data_root / "raw" / "Valorant" / "tester" / "content_types.csv").read_text(encoding="utf-8")
+    assert "mixed" in ct and "clip.mp4" in ct
+
+
+@requires_ffmpeg
 def test_accept_hints_and_apply_writes_content_types(tmp_path):
     from game_frame_classifier.clip_sorter.apply import accept_hints
 

@@ -22,7 +22,7 @@ SLUG_GAMES: dict[str, str] = {
     "marvel-rivals": "Marvel_Rivals",
 }
 
-CONTENT_TYPES = ("esports_vod", "gameplay", "streamer_overlay")
+CONTENT_TYPES = ("esports_vod", "gameplay", "streamer_overlay", "mixed")
 
 OLD_MEDAL_ERROR = "old Medal link form; ask for the full medal.tv/games/... link"
 UNSUPPORTED_SITE_ERROR = "unsupported site: only Medal and YouTube links are supported"

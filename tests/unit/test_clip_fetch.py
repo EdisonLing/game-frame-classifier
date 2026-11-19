@@ -964,4 +964,5 @@ def test_list_channel_writes_file_and_uploader(tmp_path: Path):
 def test_proposed_source_prefixes():
     assert proposed_source("Example Channel", prefix="yt") == "yt_example_channel"
     assert proposed_source("Uploader A!", prefix="friend") == "friend_uploader_a"
-    assert set(CONTENT_TYPES) == {"esports_vod", "gameplay", "streamer_overlay"}
+    assert set(CONTENT_TYPES) == {"esports_vod", "gameplay", "streamer_overlay", "mixed"}
+    assert parse_content_type("mixed") == "mixed"

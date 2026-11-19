@@ -14,7 +14,7 @@ from .download import print_summary, run
 from .links import CONTENT_TYPES, parse_content_type, parse_game_field, read_link_entries
 from .users import tag_uploader, validate_source
 
-__version__ = "1.2.0"
+__version__ = "1.2.1"
 
 
 def build_parser() -> argparse.ArgumentParser:
