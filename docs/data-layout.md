@@ -10,6 +10,7 @@ data/
   README.md          # short pointer (tracked)
   raw/               # source videos/clips (local only) — collect here
   clip_links/        # link lists as received and the Medal uploader file (local only, permanent)
+  received_originals/  # files sent outside the kit (zips of original videos), kept as received; backup only
   incoming_clips/    # gfc-fetch-clips downloads (local only), then gfc-sort-clips
   sorting/           # clip sorter sessions (sheets cache, decisions, apply reports)
   frame_sources/     # native-res stills per clip (local only) — D26; from gfc-ingest-pack / gfc-make-sources
@@ -19,6 +20,18 @@ data/
 ```
 
 How the folders feed each other: [training-pipeline.md](training-pipeline.md).
+
+## Received originals (`data/received_originals/`)
+
+Files people sent in a non-standard form (for example zips of original videos), kept exactly as received after their contents were extracted into `data/raw/`. No tool reads this folder; it exists only so `data/raw/` can be rebuilt. Never committed.
+
+```text
+data/received_originals/
+  <person>/
+    <file as received>.zip
+```
+
+Kit packs are not kept here; they go in `data/contributor_packs/`.
 
 ## Clip links (`data/clip_links/`)
 

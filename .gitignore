@@ -229,6 +229,7 @@ data/manifests/
 data/runs/
 data/incoming_clips/
 data/clip_links/
+data/received_originals/
 data/bench_extract/
 data/bench_handoff/
 data/contributor_packs/
