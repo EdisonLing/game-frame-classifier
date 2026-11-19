@@ -53,7 +53,7 @@ Automatic sources (default), uploader file, and skip rules: [clip-link-auto-sour
 | Flag | Meaning |
 |---|---|
 | `<links>` | One or more links files or folders (`*.txt` in name order); blank lines and `#` lines ignored; duplicates removed |
-| `--source` | Override: every link under this source (normalised); no uploader prompts. Must not start with `contributor_` |
+| `--source` | Override: every link under this source (normalised); no uploader lookup. Must not start with `contributor_` |
 | `--data-root` | Data root (default `data`) |
 | `--pause-s` | Seconds between downloads (default 3) |
 | `--limit N` | Stop after N new downloads |

@@ -579,8 +579,9 @@ def test_users_decide_y_n_typed_and_invalid(tmp_path: Path):
     assert decided["id_3"]["allowed"] == "yes" and decided["id_3"]["source"] == "friend_shared"
     assert decided["id_4"]["allowed"] == "yes" and decided["id_4"]["source"] == "friend_uploader_d"
 
-    pending = decide([("id_5", "uploader_e", 1)], ask=None)
-    assert pending["id_5"]["allowed"] == ""
+    auto = decide([("id_5", "uploader_e", 1)], ask=None)
+    assert auto["id_5"]["allowed"] == "yes" and auto["id_5"]["source"] == "friend_uploader_e"
+    assert auto["id_5"]["note"] == "auto"
 
 
 def test_auto_mode_mixed_uploaders(tmp_path: Path):
@@ -622,16 +623,15 @@ def test_auto_mode_mixed_uploaders(tmp_path: Path):
         pause_s=0,
         sleep=lambda _s: None,
     )
-    assert summary.exit_code == 4
-    assert summary.by_status["ok"] == 2
+    assert summary.exit_code == 0
+    assert summary.by_status["ok"] == 3
     assert summary.by_status["not_allowed"] == 1
-    assert summary.by_status["pending_permission"] == 1
     assert (incoming / "friend_a").is_dir()
     assert list((incoming / "friend_a").glob("*.mp4"))
+    assert list((incoming / "friend_uploader_c").glob("*.mp4"))  # new uploader accepted
     assert not (incoming / "friend_b").exists()
-    assert "id_333" in summary.pending
     users = load_users(users_path)
-    assert users["id_333"]["allowed"] == ""
+    assert users["id_333"]["allowed"] == "yes"
     assert users["id_111"]["source"] == "friend_a"  # unchanged
     with open(incoming / "fetch_log.csv", encoding="utf-8", newline="") as f:
         rows = list(csv.DictReader(f))
@@ -710,7 +710,7 @@ def test_two_uploaders_one_source(tmp_path: Path):
     assert users["id_a"]["source"] == users["id_b"]["source"] == "friend_shared"
 
 
-def test_pending_uploader_asked_again_and_answer_appended(tmp_path: Path):
+def test_pending_uploader_decided_on_next_run_and_answer_appended(tmp_path: Path):
     incoming = tmp_path / "incoming"
     users_path = tmp_path / "medal_users.csv"
     users_path.write_text(
@@ -727,10 +727,6 @@ def test_pending_uploader_asked_again_and_answer_appended(tmp_path: Path):
 
     common = dict(users_path=users_path, metadata=lambda _u: meta, downloader=fake_dl,
                   pause_s=0, sleep=lambda _s: None)
-    still = run([link], incoming, ask=None, **common)
-    assert still.exit_code == 4
-    assert users_path.read_text(encoding="utf-8").count("id_333") == 1  # not appended again
-
     asked: list[str] = []
     done = run([link], incoming, ask=lambda q: asked.append(q) or "y", **common)
     assert done.exit_code == 0 and len(asked) == 1
@@ -738,3 +734,11 @@ def test_pending_uploader_asked_again_and_answer_appended(tmp_path: Path):
     assert lines[1] == "id_333,uploader_c,friend_uploader_c,,2026-01-01,"  # original row untouched
     assert load_users(users_path)["id_333"]["allowed"] == "yes"
     assert list((incoming / "friend_uploader_c").glob("*.mp4"))
+
+
+def test_cli_ask_needs_terminal(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    links = tmp_path / "links.txt"
+    links.write_text("https://medal.tv/games/valorant/clips/X\n", encoding="utf-8")
+    monkeypatch.setattr("sys.stdin.isatty", lambda: False)
+    code = cli_main([str(links), "--ask", "--data-root", str(tmp_path / "data"), "--dry-run"])
+    assert code == 2

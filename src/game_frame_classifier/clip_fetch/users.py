@@ -67,7 +67,8 @@ def decide(
     new_uploaders: list[tuple[str, str, int]],
     ask: AskFn | None,
 ) -> dict[str, dict[str, str]]:
-    """Ask about each new uploader (or mark pending). Returns rows keyed by uploader_id."""
+    """Decide each new uploader: accept as friend_<username> when ask is None, else ask.
+    Returns rows keyed by uploader_id."""
     decided: dict[str, dict[str, str]] = {}
     first_seen = _today_utc()
     for uid, name, count in new_uploaders:
@@ -77,9 +78,9 @@ def decide(
                 "uploader_id": uid,
                 "uploader": name,
                 "source": proposed,
-                "allowed": "",
+                "allowed": "yes",
                 "first_seen": first_seen,
-                "note": "",
+                "note": "auto",
             }
             continue
         while True:

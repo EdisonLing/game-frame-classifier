@@ -35,9 +35,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="Override: put every link under this source (no uploader prompts)",
     )
     p.add_argument(
-        "--no-prompt",
+        "--ask",
         action="store_true",
-        help="Do not ask about new uploaders; leave them pending (exit 4)",
+        help="Ask before using each new uploader (default: accept as friend_<username>)",
     )
     p.add_argument(
         "--refetch-missing",
@@ -104,7 +104,10 @@ def main(argv: list[str] | None = None) -> int:
     incoming_dir = data_root / "incoming_clips"
     users_path = Path(args.users) if args.users else data_root / "clip_links" / "medal_users.csv"
     ask = None
-    if source_override is None and not args.no_prompt and sys.stdin.isatty():
+    if args.ask and source_override is None:
+        if not sys.stdin.isatty():
+            print("error: --ask needs a terminal", file=sys.stderr)
+            return 2
         ask = input
 
     summary = run(

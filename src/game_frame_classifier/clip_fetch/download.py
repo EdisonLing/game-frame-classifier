@@ -432,8 +432,6 @@ def run(
             known = users.get(uid)
             if known is not None and (known.get("allowed") or "").strip():
                 continue  # decided (yes or no)
-            if known is not None and ask is None:
-                continue  # still pending; nothing new to record
             if uid not in counts:
                 counts[uid] = 0
                 order.append((uid, uname))

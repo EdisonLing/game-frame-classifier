@@ -57,11 +57,11 @@ def test_fetch_mixed_then_sort_apply(tmp_path: Path):
         pause_s=0,
         sleep=lambda _s: None,
     )
-    assert summary.exit_code == 4
-    assert summary.by_status["ok"] == 2
+    assert summary.exit_code == 0
+    assert summary.by_status["ok"] == 3
     assert summary.by_status["not_allowed"] == 1
-    assert summary.by_status["pending_permission"] == 1
     assert (incoming / "friend_a").is_dir()
+    assert (incoming / "friend_uploader_c").is_dir()
     assert not (incoming / "friend_b").exists()
     assert (incoming / "fetch_log.csv").is_file()
     assert (incoming / "hints.csv").is_file()
