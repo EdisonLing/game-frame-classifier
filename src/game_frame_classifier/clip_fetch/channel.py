@@ -27,15 +27,30 @@ def ytdlp_flat_list(url: str) -> list[dict]:
     parsed = urlparse(cleaned)
     parts = [p for p in parsed.path.split("/") if p]
     list_url = cleaned
-    # Channel root (@handle or /channel/<id>) → its /videos tab.
+    # Channel root (@handle or /channel/<id>) → its /videos tab (do not double /videos).
     if parts and (parts[0].startswith("@") or parts[0] == "channel"):
-        list_url = cleaned + "/videos"
+        if "videos" not in parts:
+            list_url = cleaned + "/videos"
 
     opts = {"extract_flat": "in_playlist", "quiet": True}
     with yt_dlp.YoutubeDL(opts) as ydl:
         info = ydl.extract_info(list_url, download=False) or {}
-    entries = info.get("entries") or []
-    return [e for e in entries if isinstance(e, dict)]
+    # Flat entries often omit channel fields; the playlist/channel object has them.
+    channel_id = str(
+        info.get("channel_id") or info.get("uploader_id") or info.get("id") or ""
+    )
+    channel_name = str(info.get("channel") or info.get("uploader") or "")
+    out: list[dict] = []
+    for entry in info.get("entries") or []:
+        if not isinstance(entry, dict):
+            continue
+        row = dict(entry)
+        if channel_id and not (row.get("channel_id") or row.get("uploader_id")):
+            row["channel_id"] = channel_id
+        if channel_name and not (row.get("channel") or row.get("uploader")):
+            row["channel"] = channel_name
+        out.append(row)
+    return out
 
 
 def _channel_meta(entries: list[dict], url: str) -> tuple[str, str, str]:
