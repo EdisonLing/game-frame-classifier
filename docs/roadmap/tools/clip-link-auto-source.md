@@ -67,7 +67,7 @@ Exit codes: `0`, `1`, `2`, `3` as in 1.0; `4` some links wait for an uploader de
      `Uploader "<name>" (<n> clips). Use as source friend_<x>? [y = yes / n = no / or type a source name]`.
      `y` saves `allowed = yes` with the proposed source; `n` saves `allowed = no`; any other answer is normalised with `normalize_handle` and saved with `allowed = yes` (refused and asked again if empty, starting with `contributor_` or `_`). Several uploaders may share one source (one person, two accounts).
    - With `--no-prompt`, or when stdin is not a terminal: a new uploader is saved with `allowed` empty, and its links are logged `pending_permission`.
-   New rows are appended immediately (`first_seen` = today, UTC); existing rows are never changed by the tool.
+   New rows are appended immediately (`first_seen` = today, UTC); existing rows are never changed by the tool. A pending uploader is asked again on the next run with prompts, and the answer is appended as a new row; when an uploader has several rows, the last one counts. A person may also edit `allowed` and `source` by hand.
 5. **Download** as in 1.0 into `data/incoming_clips/<source>/`, then log `ok`.
 6. **Log.** One `data/incoming_clips/fetch_log.csv` for all sources: the 1.0 columns plus `source`, `uploader_id`, `uploader`; `file` is relative to `data/incoming_clips/` (`<source>/<file name>`).
 7. **Hints.** One `data/incoming_clips/hints.csv` (`file, game, other_name`), `file` relative to `data/incoming_clips/`, rebuilt from `ok` rows after each run.

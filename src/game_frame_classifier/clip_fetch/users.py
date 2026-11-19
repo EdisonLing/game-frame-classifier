@@ -32,7 +32,7 @@ def validate_source(text: str) -> str:
 
 
 def load_users(path: Path | str) -> dict[str, dict[str, str]]:
-    """Load medal_users.csv keyed by uploader_id."""
+    """Load medal_users.csv keyed by uploader_id; a later row for the same uploader wins."""
     path = Path(path)
     if not path.is_file():
         return {}

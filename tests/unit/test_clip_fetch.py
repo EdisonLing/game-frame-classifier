@@ -708,3 +708,33 @@ def test_two_uploaders_one_source(tmp_path: Path):
     assert len(list((incoming / "friend_shared").glob("*.mp4"))) == 2
     users = load_users(users_path)
     assert users["id_a"]["source"] == users["id_b"]["source"] == "friend_shared"
+
+
+def test_pending_uploader_asked_again_and_answer_appended(tmp_path: Path):
+    incoming = tmp_path / "incoming"
+    users_path = tmp_path / "medal_users.csv"
+    users_path.write_text(
+        "uploader_id,uploader,source,allowed,first_seen,note\n"
+        "id_333,uploader_c,friend_uploader_c,,2026-01-01,\n",
+        encoding="utf-8",
+    )
+    link = "https://medal.tv/games/minecraft/clips/clip_c1"
+    meta = {"uploader_id": "id_333", "uploader": "uploader_c"}
+
+    def fake_dl(url: str, out_dir: Path, temp_name: str) -> dict:
+        (out_dir / temp_name).write_bytes(b"clip")
+        return {"timestamp": 1_700_000_000, **meta}
+
+    common = dict(users_path=users_path, metadata=lambda _u: meta, downloader=fake_dl,
+                  pause_s=0, sleep=lambda _s: None)
+    still = run([link], incoming, ask=None, **common)
+    assert still.exit_code == 4
+    assert users_path.read_text(encoding="utf-8").count("id_333") == 1  # not appended again
+
+    asked: list[str] = []
+    done = run([link], incoming, ask=lambda q: asked.append(q) or "y", **common)
+    assert done.exit_code == 0 and len(asked) == 1
+    lines = users_path.read_text(encoding="utf-8").splitlines()
+    assert lines[1] == "id_333,uploader_c,friend_uploader_c,,2026-01-01,"  # original row untouched
+    assert load_users(users_path)["id_333"]["allowed"] == "yes"
+    assert list((incoming / "friend_uploader_c").glob("*.mp4"))

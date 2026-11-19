@@ -429,9 +429,11 @@ def run(
         for info, _g, _o in work:
             meta = meta_by_url[info.url]
             uid, uname = _uploader_fields(meta)
-            if uid in users:
-                # Already known (yes, no, or pending); never change or re-append.
-                continue
+            known = users.get(uid)
+            if known is not None and (known.get("allowed") or "").strip():
+                continue  # decided (yes or no)
+            if known is not None and ask is None:
+                continue  # still pending; nothing new to record
             if uid not in counts:
                 counts[uid] = 0
                 order.append((uid, uname))
