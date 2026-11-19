@@ -1,16 +1,16 @@
 # Public dataset use plan (draft)
 
-Draft justification and operational plan for using creator-licensed public gameplay datasets in this **course / personal, non-commercial** project. Complements [public-game-datasets.md](public-game-datasets.md). **Does not close D12.**
+Draft justification and operational plan for using creator-licensed public gameplay datasets in this **personal, non-commercial research** project. Complements [public-game-datasets.md](public-game-datasets.md). **Does not close D12.**
 
 **Hard filter (2026-11-18):** keep only packages that ship **labelled still frames** or **labelled videos** (game/class label on the media). Drop metadata-only catalogs, annotation tables without media, and non-gameplay UI crops. Live list: [public-sources-ledger.md](public-sources-ledger.md).
 
-**Working stance (for this draft):** for school and local personal research, rely on the **dataset creator’s stated license** when it permits non-commercial / educational use with clear attribution. Publisher IP is noted but not treated as an automatic blocker for *local, non-redistributed* training in this course context. This is a project ethics note, not legal advice.
+**Working stance (for this draft):** for local, non-commercial research, rely on the **dataset creator’s stated license** when it permits non-commercial / educational use with clear attribution. Publisher IP is noted but not treated as an automatic blocker for *local, non-redistributed* training in this project. This is a project ethics note, not legal advice.
 
 **Related:** [source acquisition](../roadmap/tools/source-acquisition.md) · [data layout](../data-layout.md) · [D12](../design-decisions.md#d12--confirmed-sources-for-lol-overwatch-2-marvel-rivals) · [D19](../design-decisions.md) · [D26](../design-decisions.md) · [D33](../design-decisions.md)
 
 ---
 
-## Draft justification (course / personal)
+## Draft justification (non-commercial research)
 
 **Need.** Current runs cover Valorant, League of Legends and CS2 only ([results](../results.md)). Minecraft, Overwatch 2 and Marvel Rivals lack enough local footage for the ~2–3k frames/game target. Public research dumps are the only near-term way to add Minecraft volume; OW2 / Rivals still lean on personal and friends’ clips.
 
@@ -20,7 +20,7 @@ Draft justification and operational plan for using creator-licensed public gamep
 
 **Limits we accept in the draft.**
 
-- NC licenses (**MineRL** as BY-NC-SA, **PAWA**, **Game-Intention**) are fine for the course; they must be **removed before any monetization**.
+- NC licenses (**MineRL** as BY-NC-SA, **PAWA**, **Game-Intention**) are fine for non-commercial research; they must be **removed before any monetization**.
 - YouTube-derived packs (**Gameplay Images**, **Gamed**) are last-resort / thin probes: creator CC BY on packaging, weak provenance, leakage risk if frames are shuffled.
 - Public data does **not** replace personal/friends captures for OW2 / Marvel Rivals volume or for in-the-wild Minecraft (shaders, packs, Bedrock).
 
@@ -35,8 +35,8 @@ Rank is **freest → most constrained** for *this* local educational use. “Fre
 | Rank | Tier | Meaning | Datasets |
 |---:|---|---|---|
 | 1 | **Permissive research media** | MIT (or equivalent) on the released demos; keep copyright notice; no NC clause from the dataset authors | **BEDD / BASALT** demos; **OpenAI VPT** contractor demos (MIT + Mojang disclaimer on the card) |
-| 2 | **Attribution-only (CC BY)** | Free to use if you attribute; commercial use of the *packaging* is often allowed under CC BY, but YouTube/game residual rights remain messy — treat as course-OK, monetize-only-after-review or drop | **Gameplay Images** (Minecraft stills); **Gamed** (Valorant/CS2) |
-| 3 | **Non-commercial / share-alike** | Explicitly OK for school/personal NC; **must drop before monetization**; ShareAlike may affect how derivatives are shared | **MineRL** (treat as **CC BY-NC-SA 4.0** despite Zenodo MIT label — confirm before download); **PAWA** (CC BY-NC 4.0); **Game-Intention** OW subset (CC BY-NC 4.0) |
+| 2 | **Attribution-only (CC BY)** | Free to use if you attribute; commercial use of the *packaging* is often allowed under CC BY, but YouTube/game residual rights remain messy — treat as OK for non-commercial use, monetize-only-after-review or drop | **Gameplay Images** (Minecraft stills); **Gamed** (Valorant/CS2) |
+| 3 | **Non-commercial / share-alike** | Explicitly OK for personal non-commercial use; **must drop before monetization**; ShareAlike may affect how derivatives are shared | **MineRL** (treat as **CC BY-NC-SA 4.0** despite Zenodo MIT label — confirm before download); **PAWA** (CC BY-NC 4.0); **Game-Intention** OW subset (CC BY-NC 4.0) |
 | 4 | **Last-resort stills** | Uploader-tagged free packaging on labelled screenshots | **MARVELRIVALSYOLO** (Apache-2.0 tag) |
 
 Dropped by the labelled-media filter: MineDojo YT metadata, LoL-V2T annotations-only, OW2 killfeed crops, match-stat tables, ungated VOD scrapes. See the ledger.
@@ -54,12 +54,12 @@ Dropped by the labelled-media filter: MineDojo YT metadata, LoL-V2T annotations-
 
 Common steps for every public source:
 
-1. Add a ledger row (`status: planned` → `active` when files land).  
-2. Create **one** folder under `frame_sources/<Game>/public_…/` (stills) or `data/raw/<Game>/public_…/` then make-sources (videos). Never mix datasets in one source folder.  
-3. Record URL, license SPDX, attribution blurb, date accessed, and “commercial OK?” on the ledger.  
-4. Ingest → clean → split with **clip/session** units (D01/D02); enforce source caps (D33).  
-5. **Toggle for a run** without deleting files: pick a split preset under `config/splits/` or set `include_source_kinds` / `exclude_sources` in a new `split_id` (see [dataset-splitter.md](../roadmap/tools/dataset-splitter.md)).  
-6. Cite active ledger rows that actually appear in that run’s `sources.csv`.  
+1. Add a ledger row (`status: planned` → `active` when files land).
+2. Create **one** folder under `frame_sources/<Game>/public_…/` (stills) or `data/raw/<Game>/public_…/` then make-sources (videos). Never mix datasets in one source folder.
+3. Record URL, license SPDX, attribution blurb, date accessed, and “commercial OK?” on the ledger.
+4. Ingest → clean → split with **clip/session** units (D01/D02); enforce source caps (D33).
+5. **Toggle for a run** without deleting files: pick a split preset under `config/splits/` or set `include_source_kinds` / `exclude_sources` in a new `split_id` (see [dataset-splitter.md](../roadmap/tools/dataset-splitter.md)).
+6. Cite active ledger rows that actually appear in that run’s `sources.csv`.
 7. To remove a dataset for good: ledger `retired` + delete its `public_*` tree + rebuild.
 
 | Source id (proposed) | Game(s) | Tier | Before first use | Ingest notes | Attribution obligation (while active) | Drop before monetize? |
@@ -129,9 +129,8 @@ While any public row is active, the ethics / data section can say:
 
 ## Open for your approval
 
-1. Keep `public_gamed` + `public_gameplay_images` active for course experiments, or retire them after the smoke?
+1. Keep `public_gamed` + `public_gameplay_images` active for experiments, or retire them after the smoke?
 2. Next video prototype: `public_vpt_contractor` / `public_bedd_basalt` / `public_minerl`?
 3. For D12 (OW2 / Rivals): personal/friends only, or also `public_game_intention_ow` / `public_marvelrivals_yolo`?
 
-Prototype stills for Gamed and Gameplay Images were downloaded into this worktree’s gitignored `data/` only (not the main checkout).
-
+Prototype stills for Gamed and Gameplay Images were downloaded into the git-ignored `data/` only; no public media is committed.

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Prototype: turn labelled public stills into frame_sources quick-mode clips.
 
-Does not touch the main checkout. Writes only under this worktree's data/.
+Writes only under data/ (frame_sources, and the download cache data/_public_cache/).
 
 Supported --dataset values:
   gamed              Hugging Face ybashir/gamed-game-classification-dataset (eval zip)
