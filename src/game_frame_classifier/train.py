@@ -24,6 +24,7 @@ import torch.nn.functional as F
 from torch import nn
 from torch.utils.data import DataLoader
 
+from game_frame_classifier.public_sources import copy_split_licenses
 from game_frame_classifier.dataset import (
     AugmentConfig,
     FrameDataset,
@@ -808,6 +809,7 @@ def train_run(
     (run_dir / "run.json").write_text(
         json.dumps(run_meta, indent=2) + "\n", encoding="utf-8"
     )
+    copy_split_licenses(split_dir, run_dir)
 
     module_name = "game_frame_classifier.evaluation"
     try:

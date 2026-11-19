@@ -169,6 +169,34 @@ def test_overfit_and_run_folder(tmp_path):
     assert np.allclose(probs, expected, atol=1e-5)
 
 
+def test_run_folder_copies_split_licenses(tmp_path):
+    data_root, split_dir = _overfit_fixture(tmp_path, n_per_class=4, n_val=1)
+    payload = {
+        "sources": [
+            {
+                "source_id": "public_gamed",
+                "dataset_name": "Gamed",
+                "license_spdx": "CC-BY-4.0",
+                "attribution_text": "Made-up attribution.",
+                "slots": {"train": {"Valorant": 4}},
+            }
+        ]
+    }
+    (split_dir / "licenses.json").write_text(json.dumps(payload) + "\n", encoding="utf-8")
+    config = _no_aug_config(Path("config/train_cnn.json"))
+    config["epochs"] = 1
+    run_dir = tmp_path / "run_lic"
+    train_run(
+        split_dir=split_dir,
+        data_root=data_root,
+        config=config,
+        run_dir=run_dir,
+        run_id="lic",
+    )
+    copied = json.loads((run_dir / "licenses.json").read_text(encoding="utf-8"))
+    assert copied == payload
+
+
 def test_same_seed_same_first_epoch_loss(tmp_path):
     data_root, split_dir = _overfit_fixture(tmp_path, n_per_class=4, n_val=1)
     config = _no_aug_config(Path("config/train_cnn.json"))

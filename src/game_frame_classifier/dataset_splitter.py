@@ -18,6 +18,12 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Iterable
 
+from game_frame_classifier.public_sources import (
+    PublicSourcesError,
+    load_sources,
+    resolve_sources_path,
+    write_split_licenses,
+)
 from game_frame_classifier.sourcing.labels import CLASSES, OTHER
 from game_frame_classifier.sourcing.manifests import write_json, write_table
 
@@ -698,6 +704,22 @@ def run_split(data_root: Path, config_path: Path, *, plan: bool = False, reset: 
         write_json({"time": now, "git_commit": commit, "test_design": config["test_design"]}, freeze_path)
         summary["frozen"] = True
     write_json(summary, output / "summary.json")
+    # Licences after split_hashes so the new files never enter the hash set.
+    try:
+        sources = load_sources(resolve_sources_path(config_path))
+    except PublicSourcesError as exc:
+        # No catalogue yet and no public slots → empty licence list is fine.
+        if any(
+            (slot.get("source_kind") == "public")
+            or str(slot.get("source", "")).startswith("public_")
+            for slot in assigned_slots
+        ):
+            raise SplitterError(str(exc), exc.exit_code) from exc
+        sources = {}
+    try:
+        write_split_licenses(output, assigned_slots, sources)
+    except PublicSourcesError as exc:
+        raise SplitterError(str(exc), exc.exit_code) from exc
     for warning in warnings:
         print(f"warning: {warning}", file=sys.stderr)
     return summary

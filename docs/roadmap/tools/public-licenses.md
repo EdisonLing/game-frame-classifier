@@ -1,7 +1,7 @@
 # Public dataset licences (`gfc-licenses`)
 
 **Stage:** 1 — Collection  
-**Status:** specified  
+**Status:** implemented  
 **Back to:** [ROADMAP.md](../ROADMAP.md) · [public sources ledger](../../research/public-sources-ledger.md) · [dataset splitter](dataset-splitter.md)
 
 ## What it does (high level)
@@ -77,10 +77,10 @@ Public datasets come with different licences (CC BY, CC BY-NC, MIT, Apache 2.0),
 
 ## Acceptance checks
 
-- [ ] A public download saves its licence and provenance first, and refuses unapproved sources
-- [ ] `docs/THIRD_PARTY_DATA.md` lists exactly the active public sources
-- [ ] Every split and run records the public sources it used
-- [ ] CLI entry `gfc-licenses` in `pyproject.toml`
+- [x] A public download saves its licence and provenance first, and refuses unapproved sources
+- [x] `docs/THIRD_PARTY_DATA.md` lists exactly the active public sources
+- [x] Every split and run records the public sources it used
+- [x] CLI entry `gfc-licenses` in `pyproject.toml`
 
 ## Build instructions
 

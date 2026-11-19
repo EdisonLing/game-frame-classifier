@@ -199,6 +199,7 @@ data/manifests/
     train.csv  val.csv  test_session.csv  test_source.csv
     ledger.csv  sessions.csv  counts.csv  sources.csv
     unused.csv  reassigned.csv  summary.json  freeze.json
+    licenses.json  licenses.md      # public sources used by this split
     report/                         # gfc-evaluate --data-report
 ```
 

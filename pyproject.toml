@@ -31,6 +31,7 @@ gfc-evaluate = "game_frame_classifier.evaluation:main"
 gfc-train-baseline = "game_frame_classifier.baseline:main"
 gfc-train-cnn = "game_frame_classifier.train:main"
 gfc-fetch-clips = "game_frame_classifier.clip_fetch.cli:main"
+gfc-licenses = "game_frame_classifier.public_sources:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

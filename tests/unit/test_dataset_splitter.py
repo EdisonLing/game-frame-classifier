@@ -547,3 +547,62 @@ def test_source_kind_and_source_toggles(tmp_path) -> None:
         row["source"] for row in csv.DictReader((data / "manifests/splits/public_permissive/test_session.csv").open(encoding="utf-8"))
     }
     assert any(row["source"] == "public_minerl" and row["reason"] == "excluded_source" for row in unused)
+
+
+def test_split_writes_licenses_json(tmp_path) -> None:
+    data = tmp_path / "data"
+    clips = [
+        {"source": "me", "source_kind": "personal", "recorded_start_utc": "2026-01-01T00:00:00Z"},
+        {
+            "source": "public_gamed",
+            "source_kind": "public",
+            "game": "Valorant",
+            "recorded_start_utc": "2026-01-01T02:00:00Z",
+        },
+    ]
+    write_split_inputs(data, clips, slots_per_clip=2)
+    config = write_split_config(tmp_path / "split.json", split_id="with_public", max_source_share=1.0)
+    before_hashes = None
+    run_split(data, config)
+    out = data / "manifests" / "splits" / "with_public"
+    licenses = json.loads((out / "licenses.json").read_text(encoding="utf-8"))
+    assert [s["source_id"] for s in licenses["sources"]] == ["public_gamed"]
+    entry = licenses["sources"][0]
+    assert entry["license_spdx"] == "CC-BY-4.0"
+    assert entry["attribution_text"]
+    total = sum(n for games in entry["slots"].values() for n in games.values())
+    assert total == 2
+    assert "public_gamed" in (out / "licenses.md").read_text(encoding="utf-8")
+    summary = json.loads((out / "summary.json").read_text(encoding="utf-8"))
+    assert "licenses.json" not in summary["split_hashes"]
+    before_hashes = dict(summary["split_hashes"])
+    run_split(data, config)
+    after = json.loads((out / "summary.json").read_text(encoding="utf-8"))
+    assert after["split_hashes"] == before_hashes
+
+
+def test_split_licenses_empty_without_public(tmp_path) -> None:
+    data = tmp_path / "data"
+    clips = [{"source": "me", "recorded_start_utc": "2026-01-01T00:00:00Z"}]
+    write_split_inputs(data, clips)
+    config = write_split_config(tmp_path / "personal.json", split_id="no_public")
+    run_split(data, config)
+    licenses = json.loads(
+        (data / "manifests/splits/no_public/licenses.json").read_text(encoding="utf-8")
+    )
+    assert licenses == {"sources": []}
+
+
+def test_split_refuses_unknown_public_source(tmp_path) -> None:
+    data = tmp_path / "data"
+    clips = [
+        {
+            "source": "public_not_in_catalogue",
+            "source_kind": "public",
+            "recorded_start_utc": "2026-01-01T00:00:00Z",
+        }
+    ]
+    write_split_inputs(data, clips)
+    config = write_split_config(tmp_path / "bad.json", split_id="bad_public", max_source_share=1.0)
+    with pytest.raises(SplitterError, match="missing from config/public_sources"):
+        run_split(data, config)

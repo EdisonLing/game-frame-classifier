@@ -32,8 +32,18 @@ if str(ROOT / "src") not in sys.path:
     sys.path.insert(0, str(ROOT / "src"))
 
 from game_frame_classifier.derive_frames import frame_name  # noqa: E402
+from game_frame_classifier.public_sources import (  # noqa: E402
+    PublicSourcesError,
+    fetch_license,
+    record_download,
+)
 from game_frame_classifier.sourcing.hashing import jpeg_size  # noqa: E402
 from game_frame_classifier.sourcing.manifests import CLIP_COLUMNS, blank_clip_row  # noqa: E402
+
+SOURCE_IDS = {
+    "gamed": "public_gamed",
+    "gameplay_images": "public_gameplay_images",
+}
 
 GAME_MAP_GAMED = {
     "valorant": "Valorant",
@@ -124,6 +134,8 @@ def write_clip(
 
 
 def prototype_gamed(args: argparse.Namespace) -> None:
+    source = SOURCE_IDS["gamed"]
+    fetch_license(source, repo_root=ROOT)
     cache = Path(args.cache_dir)
     zip_path = cache / "gamed_eval_frames.zip"
     manifest_path = cache / "gamed_eval_manifest.csv"
@@ -131,10 +143,12 @@ def prototype_gamed(args: argparse.Namespace) -> None:
         "https://huggingface.co/datasets/ybashir/gamed-game-classification-dataset/resolve/main/eval/frames.zip",
         zip_path,
     )
+    record_download(source, zip_path, repo_root=ROOT)
     download(
         "https://huggingface.co/datasets/ybashir/gamed-game-classification-dataset/resolve/main/eval/manifest.csv",
         manifest_path,
     )
+    record_download(source, manifest_path, repo_root=ROOT)
 
     extract_root = cache / "gamed_eval_extract"
     if extract_root.exists():
@@ -179,7 +193,6 @@ def prototype_gamed(args: argparse.Namespace) -> None:
         per_game[game] += 1
 
     fs_root = Path(args.data_root) / "frame_sources"
-    source = "public_gamed"
     written = []
     base_time = datetime(2024, 1, 1, tzinfo=timezone.utc)
     for i, (game, video_id, paths) in enumerate(selected):
@@ -221,6 +234,8 @@ def prototype_gameplay_images(args: argparse.Namespace) -> None:
 
     Prefer a small local cache of PNGs downloaded with huggingface_hub when available.
     """
+    source = SOURCE_IDS["gameplay_images"]
+    fetch_license(source, repo_root=ROOT)
     cache = Path(args.cache_dir) / "gameplay_images"
     cache.mkdir(parents=True, exist_ok=True)
 
@@ -249,7 +264,6 @@ def prototype_gameplay_images(args: argparse.Namespace) -> None:
     # Group into synthetic clips of N stills for session-ish splits.
     group = max(args.images_per_clip, 1)
     fs_root = Path(args.data_root) / "frame_sources"
-    source = "public_gameplay_images"
     written = []
     base_time = datetime(2022, 1, 1, tzinfo=timezone.utc)
     for gi in range(0, len(rows), group):
@@ -293,10 +307,14 @@ def main() -> int:
     args.data_root.mkdir(parents=True, exist_ok=True)
     args.cache_dir.mkdir(parents=True, exist_ok=True)
 
-    if args.dataset == "gamed":
-        prototype_gamed(args)
-    else:
-        prototype_gameplay_images(args)
+    try:
+        if args.dataset == "gamed":
+            prototype_gamed(args)
+        else:
+            prototype_gameplay_images(args)
+    except PublicSourcesError as exc:
+        print(f"prototype_public_stills: {exc}", file=sys.stderr)
+        return exc.exit_code
     print("done", utc_now())
     return 0
 

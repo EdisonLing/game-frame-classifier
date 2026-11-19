@@ -19,6 +19,7 @@ from typing import Any, Sequence
 
 import numpy as np
 
+from game_frame_classifier.public_sources import copy_split_licenses
 from game_frame_classifier.split_manifest import (
     SlotRow,
     image_path,
@@ -355,6 +356,7 @@ def train_baseline(
         "n_val": len(val_rows),
     }
     write_json(payload, run_dir / "run.json")
+    copy_split_licenses(split_dir, run_dir)
     return payload
 
 

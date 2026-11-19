@@ -259,3 +259,28 @@ def test_seven_way_refuses_split_without_other(tmp_path):
             config=load_config(Path("config/baseline.json")),
             run_dir=tmp_path / "run",
         )
+
+
+def test_run_folder_copies_split_licenses(tmp_path):
+    data_root, split_dir = build_split_fixture(tmp_path, n_per_game=2, splits=("train", "val"))
+    payload = {
+        "sources": [
+            {
+                "source_id": "public_gamed",
+                "dataset_name": "Gamed",
+                "license_spdx": "CC-BY-4.0",
+                "attribution_text": "Made-up attribution.",
+                "slots": {"train": {"Valorant": 2}},
+            }
+        ]
+    }
+    (split_dir / "licenses.json").write_text(json.dumps(payload) + "\n", encoding="utf-8")
+    run_dir = tmp_path / "run_lic"
+    train_baseline(
+        split_dir=split_dir,
+        data_root=data_root,
+        config=_six_config(),
+        run_dir=run_dir,
+    )
+    copied = json.loads((run_dir / "licenses.json").read_text(encoding="utf-8"))
+    assert copied == payload
