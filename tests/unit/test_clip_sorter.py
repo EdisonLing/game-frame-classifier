@@ -348,6 +348,25 @@ def test_content_type_set_toggle_undo_does_not_count_as_decision(tmp_path):
     assert filter_unlabelled(clips, state) == [clips[0]]
 
 
+def test_old_session_file_without_content_type_column_is_upgraded(tmp_path):
+    session = tmp_path / "sess"
+    session.mkdir()
+    (session / "decisions.csv").write_text(
+        "utc,quick_id,rel_path,decision,game,other_name\n"
+        "2026-01-01T00:00:00Z,qid_oldold01,o.mp4,label,Valorant,\n",
+        encoding="utf-8",
+    )
+    c1 = "qid_oldold02"
+    append(session, c1, "u.mp4", "content", content_type="gameplay")
+    state = replay(session)
+    assert state["qid_oldold01"]["game"] == "Valorant"
+    assert state["qid_oldold01"]["content_type"] == ""
+    assert state[c1]["content_type"] == "gameplay"
+    assert (session / "decisions.csv").read_text(encoding="utf-8").startswith(
+        "utc,quick_id,rel_path,decision,game,other_name,content_type\n"
+    )
+
+
 def test_mixed_combines_with_kind_and_skip_reset_unlabel(tmp_path):
     session = tmp_path / "sess"
     c1 = "qid_eeeeeeee"

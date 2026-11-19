@@ -30,6 +30,26 @@ def _decisions_path(session_dir: Path) -> Path:
     return Path(session_dir) / "decisions.csv"
 
 
+def upgrade_header(path: Path) -> None:
+    """Add the content_type column to a decisions.csv written before it existed.
+
+    Without it, content types written by newer versions are not read back.
+    Only the header line changes; rows with no content_type read as empty.
+    """
+    if not path.is_file():
+        return
+    raw = path.read_bytes()
+    first, sep, rest = raw.partition(b"\n")
+    eol = b"\r" if first.endswith(b"\r") else b""
+    header = first.rstrip(b"\r").decode("utf-8-sig").split(",")
+    if not header or header[0] != "utc" or "content_type" in header:
+        return
+    new_header = ",".join(header + ["content_type"]).encode("utf-8")
+    tmp = path.with_suffix(".csv.tmp")
+    tmp.write_bytes(new_header + eol + sep + rest)
+    tmp.replace(path)
+
+
 def append(
     session_dir: Path,
     quick_id: str,
@@ -44,6 +64,7 @@ def append(
         raise ValueError(f"invalid decision: {decision}")
     path = _decisions_path(session_dir)
     path.parent.mkdir(parents=True, exist_ok=True)
+    upgrade_header(path)
     write_header = not path.is_file() or path.stat().st_size == 0
     utc = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     with open(path, "a", newline="", encoding="utf-8") as f:
@@ -138,6 +159,7 @@ def replay(session_dir: Path) -> dict[str, dict[str, Any]]:
     history: dict[str, list[dict[str, Any]]] = {}
     if not path.is_file():
         return {}
+    upgrade_header(path)
     with open(path, newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
