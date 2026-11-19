@@ -223,6 +223,7 @@ Package what exists; keep text short and figure-heavy.
 | 4d | [Clip sorter](tools/clip-sorter.md) | 1 | **implemented** | Contact sheets in a local page; label, disable or trash; copies into `data/raw/` |
 | 4e | [Clip link downloader](tools/clip-link-downloader.md) | 1 | **implemented** (Medal only) | Medal clip links → files with game and time in the name; other sites refused (YouTube etc. later) |
 | 4e.1 | [Clip link auto sources](tools/clip-link-auto-source.md) | 1 | **implemented** | One source per Medal uploader (`friend_<username>` by default, remembered; block in the uploader file); sorter takes sources from folders |
+| 4e.2 | [YouTube links and channel listing](tools/clip-link-youtube.md) | 1 | specified | YouTube links (one source per channel, permission required); list a channel's videos into a links file |
 | 4f | [Label review](tools/label-review.md) | 2 | specified | Flag frames a model disagrees with; quarantine, confirm or relabel; out-of-fold for train |
 | 4h | [Ingest stills](tools/ingest-stills.md) | 1 | **implemented** | Labelled still images to frame_sources clips; dataset groups kept whole, made-up groups marked; licence gate for public sources |
 | 4g | [Public dataset licences](tools/public-licenses.md) | 1 | **implemented** | Save each public dataset's licence before its media; generated attribution document for active sources; per-split licence list |
