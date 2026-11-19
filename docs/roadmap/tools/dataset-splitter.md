@@ -56,7 +56,7 @@ Exit codes: `0` success, `1` policy conflict (see Ledger rules), `2` usage or mi
   "train_slots_per_source": 0,
   "source_slots": {},
   "source_groups": {},
-  "include_source_kinds": [],
+  "include_source_kinds": ["personal", "contributor"],
   "exclude_source_kinds": [],
   "include_sources": [],
   "exclude_sources": [],
@@ -64,7 +64,7 @@ Exit codes: `0` success, `1` policy conflict (see Ledger rules), `2` usage or mi
 }
 ```
 
-Preset policies (same keys, different `split_id` / filters) live under `config/splits/`: `personal_only.json`, `no_public.json`, `everything.json`, `public_permissive.json`.
+Default `config/split.json` is **no public**: `include_source_kinds` = `personal` + `contributor` (public opt-in). Preset policies under `config/splits/`: `personal_only.json`, `no_public.json`, `everything.json`, `public_permissive.json`.
 
 | Key | Meaning |
 |---|---|
@@ -73,7 +73,7 @@ Preset policies (same keys, different `split_id` / filters) live under `config/s
 | `session_gap_min` | Session rule (below) |
 | `holdout_sources` | `{ "<Game>": ["<source-or-group>", ...] }`; every clip of those sources (or every source in a named group) for that game goes to `test_source` |
 | `holdout_other` | `["<other_name>", ...]`; every Other clip with one of those names goes to `test_source`, regardless of source |
-| `include_source_kinds` | If non-empty, only these kinds: `personal`, `contributor`, `public`. Empty = all kinds. Optional, default `[]` |
+| `include_source_kinds` | If non-empty, only these kinds: `personal`, `contributor`, `public`. Empty = all kinds. Default config uses `personal` + `contributor` (public off). |
 | `exclude_source_kinds` | Drop these kinds before assignment (slots go to `unused.csv` with reason `excluded_kind`). Optional, default `[]` |
 | `include_sources` | If non-empty, only these source folder names. Optional, default `[]` |
 | `exclude_sources` | Drop these source folders (reason `excluded_source`). Use to toggle individual `public_*` datasets off without deleting files. Optional, default `[]` |

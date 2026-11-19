@@ -15,7 +15,7 @@
   "train_slots_per_source": 0,
   "source_slots": {},
   "source_groups": {},
-  "include_source_kinds": [],
+  "include_source_kinds": ["personal", "contributor"],
   "exclude_source_kinds": [],
   "include_sources": [],
   "exclude_sources": [],
