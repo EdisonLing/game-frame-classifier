@@ -232,7 +232,7 @@ def _clip_dirs(data_root: Path, source_id: str) -> list[Path]:
     return found
 
 
-def frames_on_disk(data_root: Path, source_id: str) -> dict[str, int]:
+def clips_on_disk(data_root: Path, source_id: str) -> dict[str, int]:
     """Map game → number of clip folders for a source."""
     counts: dict[str, int] = defaultdict(int)
     for clip in _clip_dirs(data_root, source_id):
@@ -299,7 +299,7 @@ def build_third_party(
         lines.extend(["## Active sources", ""])
         for source_id in active:
             entry = sources[source_id]
-            frames = frames_on_disk(data_root, source_id)
+            frames = clips_on_disk(data_root, source_id)
             frames_txt = ", ".join(f"{game}: {n}" for game, n in frames.items()) or "(none)"
             retrieved = _retrieved_date(repo_root, source_id) or "(unknown)"
             lines.extend(
@@ -311,7 +311,7 @@ def build_third_party(
                     f"- Attribution: {entry['attribution_text']}",
                     f"- Commercial use: {entry['commercial_ok']}",
                     f"- Retrieved: {retrieved}",
-                    f"- Frames on disk: {frames_txt}",
+                    f"- Clips on disk: {frames_txt}",
                     "",
                 ]
             )
