@@ -159,6 +159,19 @@ header .progress { margin-left: auto; color: var(--muted); }
   gap: 0.5rem;
   font-size: 0.88rem;
   color: var(--fg);
+  border-radius: 4px;
+  padding: 0.15rem 0.35rem;
+  margin: 0 -0.35rem;
+}
+.legend li.active {
+  background: var(--tag-bg);
+  outline: 1px solid var(--accent);
+  font-weight: 600;
+}
+.legend li.active kbd {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
 }
 .legend kbd {
   display: inline-block;
@@ -229,20 +242,20 @@ dialog button {
     </div>
     <div>
       <h2>Content type</h2>
-      <ul>
-        <li><kbd>Q</kbd> Esports VOD</li>
-        <li><kbd>W</kbd> Gameplay</li>
-        <li><kbd>E</kbd> Streamer overlay</li>
-        <li><kbd>R</kbd> Mixed</li>
+      <ul id="legendContent">
+        <li data-content="esports_vod"><kbd>Q</kbd> Esports VOD</li>
+        <li data-content="gameplay"><kbd>W</kbd> Gameplay</li>
+        <li data-content="streamer_overlay"><kbd>E</kbd> Streamer overlay</li>
+        <li data-content="mixed"><kbd>R</kbd> Mixed</li>
       </ul>
     </div>
     <div>
       <h2>Actions</h2>
-      <ul>
+      <ul id="legendActions">
+        <li data-action="disabled"><kbd>D</kbd> Disable</li>
+        <li data-action="trash"><kbd>X</kbd> Trash</li>
+        <li data-action="skip"><kbd>S</kbd> Skip</li>
         <li><kbd>Enter</kbd> Accept suggestion</li>
-        <li><kbd>D</kbd> Disable</li>
-        <li><kbd>X</kbd> Trash</li>
-        <li><kbd>S</kbd> Skip</li>
         <li><kbd>U</kbd> Undo last</li>
         <li><kbd>←</kbd>/<kbd>→</kbd> Previous / next</li>
         <li><kbd>F</kbd> First undecided</li>
@@ -326,12 +339,27 @@ dialog button {
     ul.innerHTML = "";
     games.forEach((g, i) => {
       const li = document.createElement("li");
+      li.dataset.game = g;
       li.innerHTML = "<kbd>" + (i + 1) + "</kbd> " + displayName(g);
       ul.appendChild(li);
     });
     const other = document.createElement("li");
+    other.dataset.game = "Other";
     other.innerHTML = "<kbd>7</kbd> Other";
     ul.appendChild(other);
+  }
+
+  function highlightLegend(c) {
+    el("legendGames").querySelectorAll("li").forEach((li) => {
+      const on = c.decision === "label" && li.dataset.game === c.game;
+      li.classList.toggle("active", on);
+    });
+    el("legendContent").querySelectorAll("li").forEach((li) => {
+      li.classList.toggle("active", !!c.content_type && li.dataset.content === c.content_type);
+    });
+    el("legendActions").querySelectorAll("li[data-action]").forEach((li) => {
+      li.classList.toggle("active", li.dataset.action === c.decision);
+    });
   }
 
   function render() {
@@ -374,6 +402,7 @@ dialog button {
     }
 
     el("problem").textContent = c.problem ? "Problem: " + c.problem : "";
+    highlightLegend(c);
     const n = state.clips.length;
     const done = decidedCount();
     el("status").textContent = done + " / " + n + " decided · clip " + (current + 1);
