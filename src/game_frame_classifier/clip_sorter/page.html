@@ -13,6 +13,7 @@
   --accent: #0b5;
   --border: #ccc;
   --warn: #a60;
+  --tag-bg: #e8f6ee;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -23,11 +24,15 @@
     --accent: #3d8;
     --border: #333;
     --warn: #fc6;
+    --tag-bg: #1a2e24;
   }
 }
 * { box-sizing: border-box; }
 body {
   margin: 0;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
   font-family: "Segoe UI", system-ui, sans-serif;
   background: var(--bg);
   color: var(--fg);
@@ -37,34 +42,36 @@ header {
   flex-wrap: wrap;
   gap: 1rem;
   align-items: baseline;
-  padding: 0.75rem 1rem;
+  padding: 0.75rem 1.25rem;
   border-bottom: 1px solid var(--border);
   background: var(--panel);
 }
 header .progress { margin-left: auto; color: var(--muted); }
-main {
+.workspace {
+  flex: 1;
   display: grid;
-  grid-template-columns: 1fr 280px;
+  grid-template-columns: minmax(0, 1fr) 280px;
   gap: 1rem;
-  padding: 1rem;
-  max-width: 1200px;
-  margin: 0 auto;
+  padding: 1rem 1.25rem 0.5rem;
+  min-height: 0;
 }
-@media (max-width: 800px) {
-  main { grid-template-columns: 1fr; }
+@media (max-width: 900px) {
+  .workspace { grid-template-columns: 1fr; }
 }
 .sheet-wrap {
   background: var(--panel);
   border: 1px solid var(--border);
-  min-height: 240px;
+  min-height: 320px;
   display: flex;
   align-items: center;
   justify-content: center;
-  position: relative;
+  overflow: hidden;
 }
 .sheet-wrap img {
-  max-width: 100%;
+  width: 100%;
   height: auto;
+  max-height: calc(100vh - 280px);
+  object-fit: contain;
   display: block;
 }
 .placeholder {
@@ -72,32 +79,99 @@ main {
   padding: 2rem;
   text-align: center;
 }
-.meta h1 {
-  font-size: 1.1rem;
-  margin: 0 0 0.5rem;
-  word-break: break-all;
+.meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 0;
 }
-.meta p { margin: 0.25rem 0; color: var(--muted); font-size: 0.9rem; }
-.meta .decision { color: var(--fg); font-weight: 600; }
-.meta .problem { color: var(--warn); }
-.legend {
-  font-size: 0.85rem;
-  line-height: 1.45;
+.meta h1 {
+  font-size: 1.05rem;
+  margin: 0;
+  word-break: break-all;
+  line-height: 1.35;
+}
+.meta .path { margin: 0; color: var(--muted); font-size: 0.8rem; word-break: break-all; }
+.meta .tech { margin: 0; color: var(--muted); font-size: 0.9rem; }
+.meta .problem { margin: 0; color: var(--warn); font-size: 0.9rem; }
+.tags {
+  background: var(--tag-bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.65rem 0.75rem;
+}
+.tags h2 {
+  margin: 0 0 0.4rem;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
   color: var(--muted);
+  font-weight: 600;
+}
+.tags dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.25rem 0.65rem;
+  font-size: 0.9rem;
+}
+.tags dt { color: var(--muted); }
+.tags dd { margin: 0; font-weight: 600; color: var(--fg); word-break: break-word; }
+.tags dd.empty { font-weight: 400; color: var(--muted); }
+.hint {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.legend {
   border-top: 1px solid var(--border);
-  margin-top: 1rem;
-  padding-top: 0.75rem;
+  background: var(--panel);
+  padding: 0.85rem 1.25rem 1.1rem;
+}
+.legend-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem 1.5rem;
+  max-width: 1100px;
+}
+@media (max-width: 800px) {
+  .legend-grid { grid-template-columns: 1fr; }
+}
+.legend h2 {
+  margin: 0 0 0.45rem;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  font-weight: 600;
+}
+.legend ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.28rem;
+}
+.legend li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  font-size: 0.88rem;
+  color: var(--fg);
 }
 .legend kbd {
   display: inline-block;
-  min-width: 1.4em;
+  min-width: 1.55em;
   text-align: center;
   border: 1px solid var(--border);
   border-radius: 3px;
-  padding: 0 0.25em;
+  padding: 0.05em 0.3em;
   background: var(--bg);
   color: var(--fg);
   font-family: inherit;
+  font-size: 0.85em;
+  flex-shrink: 0;
 }
 dialog {
   border: 1px solid var(--border);
@@ -127,26 +201,56 @@ dialog button {
   <strong>Clip sorter</strong>
   <span id="status" class="progress">Loading…</span>
 </header>
-<main>
+<div class="workspace">
   <div class="sheet-wrap" id="sheet">
     <div class="placeholder" id="placeholder">Loading…</div>
   </div>
   <aside class="meta">
     <h1 id="name">—</h1>
-    <p id="path"></p>
-    <p id="tech"></p>
-    <p id="suggest"></p>
-    <p id="contentType"></p>
-    <p class="decision" id="decision"></p>
-    <p class="problem" id="problem"></p>
-    <div class="legend">
-      <div><kbd>1</kbd>–<kbd>6</kbd> games · <kbd>7</kbd> Other · <kbd>Enter</kbd> accept suggestion</div>
-      <div><kbd>Q</kbd> esports VOD · <kbd>W</kbd> gameplay · <kbd>E</kbd> streamer overlay · <kbd>R</kbd> mixed</div>
-      <div><kbd>D</kbd> disable · <kbd>X</kbd> trash · <kbd>S</kbd> skip · <kbd>U</kbd> undo last</div>
-      <div><kbd>←</kbd>/<kbd>→</kbd> move · <kbd>F</kbd> first undecided · <kbd>P</kbd> open clip</div>
+    <p class="path" id="path"></p>
+    <p class="tech" id="tech"></p>
+    <div class="tags" id="tags">
+      <h2>Current tags</h2>
+      <dl>
+        <dt>Game</dt><dd id="tagGame" class="empty">(none)</dd>
+        <dt>Content</dt><dd id="tagContent" class="empty">(none)</dd>
+        <dt>Suggested</dt><dd id="tagSuggest" class="empty">(none)</dd>
+      </dl>
     </div>
+    <p class="problem" id="problem"></p>
+    <p class="hint">Press a key to label. Content type is optional and separate from the game.</p>
   </aside>
-</main>
+</div>
+<section class="legend" aria-label="Keyboard shortcuts">
+  <div class="legend-grid">
+    <div>
+      <h2>Game</h2>
+      <ul id="legendGames"></ul>
+    </div>
+    <div>
+      <h2>Content type</h2>
+      <ul>
+        <li><kbd>Q</kbd> Esports VOD</li>
+        <li><kbd>W</kbd> Gameplay</li>
+        <li><kbd>E</kbd> Streamer overlay</li>
+        <li><kbd>R</kbd> Mixed</li>
+      </ul>
+    </div>
+    <div>
+      <h2>Actions</h2>
+      <ul>
+        <li><kbd>Enter</kbd> Accept suggestion</li>
+        <li><kbd>D</kbd> Disable</li>
+        <li><kbd>X</kbd> Trash</li>
+        <li><kbd>S</kbd> Skip</li>
+        <li><kbd>U</kbd> Undo last</li>
+        <li><kbd>←</kbd>/<kbd>→</kbd> Previous / next</li>
+        <li><kbd>F</kbd> First undecided</li>
+        <li><kbd>P</kbd> Open clip</li>
+      </ul>
+    </div>
+  </div>
+</section>
 <dialog id="otherDlg">
   <form method="dialog" id="otherForm">
     <strong>Other — content name</strong>
@@ -163,12 +267,36 @@ dialog button {
 <script>
 (function () {
   const games = [];
+  const DISPLAY = {
+    Valorant: "Valorant",
+    League_of_Legends: "League of Legends",
+    CS2: "CS2",
+    Minecraft: "Minecraft",
+    Overwatch_2: "Overwatch 2",
+    Marvel_Rivals: "Marvel Rivals",
+    Other: "Other",
+    esports_vod: "Esports VOD",
+    gameplay: "Gameplay",
+    streamer_overlay: "Streamer overlay",
+    mixed: "Mixed",
+  };
   let state = null;
   let current = 0;
   let pollTimer = null;
   let busy = false;
 
   const el = (id) => document.getElementById(id);
+
+  function displayName(key) {
+    if (!key) return "";
+    return DISPLAY[key] || String(key).replace(/_/g, " ");
+  }
+
+  function setTag(id, text, isEmpty) {
+    const node = el(id);
+    node.textContent = text;
+    node.classList.toggle("empty", !!isEmpty);
+  }
 
   async function api(path, body) {
     const opts = body === undefined
@@ -193,6 +321,19 @@ dialog button {
     return state.clips.filter((c) => lasting(c.decision)).length;
   }
 
+  function fillLegendGames() {
+    const ul = el("legendGames");
+    ul.innerHTML = "";
+    games.forEach((g, i) => {
+      const li = document.createElement("li");
+      li.innerHTML = "<kbd>" + (i + 1) + "</kbd> " + displayName(g);
+      ul.appendChild(li);
+    });
+    const other = document.createElement("li");
+    other.innerHTML = "<kbd>7</kbd> Other";
+    ul.appendChild(other);
+  }
+
   function render() {
     if (!state || !state.clips.length) {
       el("status").textContent = "No clips";
@@ -205,27 +346,33 @@ dialog button {
     el("path").textContent = c.rel_path;
     const dur = c.duration_s == null ? "?" : Number(c.duration_s).toFixed(1) + "s";
     el("tech").textContent = dur + " · " + (c.width || "?") + "×" + (c.height || "?");
-    if (c.suggestion) {
-      const origin = c.origin ? " (" + c.origin + ")" : "";
-      el("suggest").textContent = "Suggested: " + c.suggestion +
-        (c.suggestion === "Other" && c.other_name ? " / " + c.other_name : "") + origin;
-    } else {
-      el("suggest").textContent = "Suggested: (none)";
-    }
-    if (c.content_type) {
-      const ctor = c.content_type_origin ? " (" + c.content_type_origin + ")" : "";
-      el("contentType").textContent = "Content type: " + c.content_type + ctor;
-    } else {
-      el("contentType").textContent = "Content type: (none)";
-    }
+
     if (c.decision === "label") {
-      el("decision").textContent = "Decision: " + c.game +
+      const gameLabel = displayName(c.game) +
         (c.game === "Other" && c.other_name ? " / " + c.other_name : "");
-    } else if (c.decision) {
-      el("decision").textContent = "Decision: " + c.decision;
+      setTag("tagGame", gameLabel, false);
+    } else if (c.decision === "disabled" || c.decision === "trash") {
+      setTag("tagGame", c.decision, false);
     } else {
-      el("decision").textContent = "Decision: (none)";
+      setTag("tagGame", "(none)", true);
     }
+
+    if (c.content_type) {
+      const ctor = c.content_type_origin ? " · " + c.content_type_origin : "";
+      setTag("tagContent", displayName(c.content_type) + ctor, false);
+    } else {
+      setTag("tagContent", "(none)", true);
+    }
+
+    if (c.suggestion) {
+      const origin = c.origin ? " · " + c.origin : "";
+      const sug = displayName(c.suggestion) +
+        (c.suggestion === "Other" && c.other_name ? " / " + c.other_name : "") + origin;
+      setTag("tagSuggest", sug, false);
+    } else {
+      setTag("tagSuggest", "(none)", true);
+    }
+
     el("problem").textContent = c.problem ? "Problem: " + c.problem : "";
     const n = state.clips.length;
     const done = decidedCount();
@@ -267,6 +414,7 @@ dialog button {
     state = await api("/api/state");
     if (games.length === 0) {
       state.games.forEach((g) => games.push(g));
+      fillLegendGames();
     }
     current = state.current;
     render();
