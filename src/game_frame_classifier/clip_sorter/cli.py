@@ -10,7 +10,7 @@ from game_frame_classifier.sourcing.ffbin import find_tools
 from game_frame_classifier.sourcing.labels import normalize_handle
 from game_frame_classifier.sourcing.recipe import load_recipe
 
-from .apply import plan, print_summary, run, write_report
+from .apply import accept_hints, plan, print_summary, run, write_report
 from .scan import read_hints, scan
 from .server import Session, serve
 from .sheets import SheetWorker
@@ -47,6 +47,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--no-open", action="store_true", help="Do not open the browser")
     p.add_argument("--apply", action="store_true", help="Apply decisions instead of serving the page")
     p.add_argument("--dry-run", action="store_true", help="With --apply: print plan, write nothing")
+    p.add_argument(
+        "--accept-hints",
+        action="store_true",
+        help="Label every undecided clip with its hints game (Medal tag), then apply; no page",
+    )
     return p
 
 
@@ -86,6 +91,13 @@ def main(argv: list[str] | None = None) -> int:
     print(f"scanned {len(clips)} clips -> session {session_dir}", flush=True)
 
     plan_source = source_override or ""
+    if args.accept_hints:
+        if args.dry_run:
+            print("error: --accept-hints writes decisions; run it without --dry-run", file=sys.stderr)
+            return 2
+        labelled = accept_hints(session_dir, clips)
+        print(f"accepted hints for {labelled} clips", flush=True)
+        args.apply = True
     if args.apply:
         actions = plan(session_dir, folder, clips, plan_source, data_root)
         report = run(actions, dry_run=args.dry_run)

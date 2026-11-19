@@ -30,7 +30,7 @@ Sources are what the splitter caps (D33) and groups (`source_groups`), and what 
 |---|---|
 | **Reads** | Links files or a folder of them; `data/clip_links/medal_users.csv`; Medal metadata |
 | **Writes** | `data/incoming_clips/<source>/`, `data/incoming_clips/fetch_log.csv`, `data/incoming_clips/hints.csv`; rows of `medal_users.csv` |
-| **Then** | `gfc-sort-clips data/incoming_clips` (sources from the folders, hints found automatically) |
+| **Then** | `gfc-sort-clips data/incoming_clips --accept-hints` (labels by Medal game tag and copies into `data/raw/`), or without the flag to check clips in the page |
 
 ## Usage
 

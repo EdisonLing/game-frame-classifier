@@ -13,7 +13,37 @@ from game_frame_classifier.sourcing.hashing import sha256_file
 from game_frame_classifier.sourcing.labels import OTHER, GAMES
 
 from .scan import Clip
-from .store import replay
+from .store import append, replay
+
+LASTING_DECISIONS = frozenset({"label", "disabled", "trash"})
+
+
+def accept_hints(session_dir: Path, clips: list[Clip]) -> int:
+    """Label every undecided clip whose game came from a hints file (the Medal game tag).
+
+    Clips with a problem, an Other suggestion without a content name, or a lasting
+    decision already are left alone. Returns the number of clips labelled.
+    """
+    state = replay(session_dir)
+    labelled = 0
+    for clip in clips:
+        if clip.suggestion_origin != "hints" or not clip.suggestion or clip.problem:
+            continue
+        if clip.suggestion == OTHER and not clip.other_name:
+            continue
+        entry = state.get(clip.quick_id)
+        if entry is not None and entry.get("decision") in LASTING_DECISIONS:
+            continue
+        append(
+            session_dir,
+            clip.quick_id,
+            clip.rel_path,
+            "label",
+            game=clip.suggestion,
+            other_name=clip.other_name if clip.suggestion == OTHER else "",
+        )
+        labelled += 1
+    return labelled
 
 
 @dataclass

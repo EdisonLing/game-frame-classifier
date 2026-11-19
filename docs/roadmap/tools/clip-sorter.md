@@ -28,6 +28,7 @@ gfc-sort-clips <folder> --source <name>                 # override: one source f
 gfc-sort-clips <folder> --hints <csv>                   # suggested labels (default: <folder>/hints.csv)
 gfc-sort-clips <folder> --apply                         # copy labelled clips, archive trashed ones
 gfc-sort-clips <folder> --apply --dry-run
+gfc-sort-clips data/incoming_clips --accept-hints       # label clips by their Medal game tag, then apply; no page
 python -m game_frame_classifier.clip_sorter ...
 ```
 
@@ -44,6 +45,7 @@ Automatic sources from folders: [clip-link-auto-source.md](clip-link-auto-source
 | `--no-open` | Do not open the browser |
 | `--apply` | Apply the decisions instead of starting the page |
 | `--dry-run` | With `--apply`: print what would happen, change nothing |
+| `--accept-hints` | Record a label for every undecided clip whose suggestion came from the hints file (the Medal game tag; Other only with a content name), then apply. Clips with a problem, without a hint, or already labelled, disabled or trashed are left for the page. Not with `--dry-run`. Decided 2026-11-19: Medal clips go into `data/raw/` on their tag without a manual pass; wrong or unusable frames are caught later by the frame cleaner and label review |
 
 ## Decisions
 

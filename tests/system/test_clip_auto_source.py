@@ -113,3 +113,33 @@ def test_sorter_apply_from_incoming_folders(tmp_path: Path):
     assert (data_root / "raw" / "CS2" / "friend_c" / "clip_c.mp4").is_file()
     # No doubled source folder.
     assert not (data_root / "raw" / "Valorant" / "friend_a" / "friend_a").exists()
+
+
+@requires_ffmpeg
+def test_accept_hints_labels_tagged_clips_only(tmp_path: Path):
+    from game_frame_classifier.clip_sorter.apply import accept_hints
+
+    data_root = tmp_path / "data"
+    incoming = data_root / "incoming_clips"
+    session = data_root / "sorting" / "incoming_clips_auto"
+    make_testsrc_video(incoming / "friend_a" / "clip_a.mp4", duration_s=2.5)
+    make_testsrc_video(incoming / "friend_a" / "clip_o.mp4", duration_s=2.5)
+    make_testsrc_video(incoming / "friend_a" / "clip_untagged.mp4", duration_s=2.5)
+    make_testsrc_video(incoming / "friend_a" / "clip_trashed.mp4", duration_s=2.5)
+    (incoming / "hints.csv").write_text(
+        "file,game,other_name\n"
+        "friend_a/clip_a.mp4,Valorant,\n"
+        "friend_a/clip_o.mp4,Other,some_game\n"
+        "friend_a/clip_trashed.mp4,Valorant,\n",
+        encoding="utf-8",
+    )
+    clips = scan(incoming, load_recipe(RECIPE), find_tools(), read_hints(incoming / "hints.csv"))
+    trashed = next(c for c in clips if c.rel_path.endswith("clip_trashed.mp4"))
+    append(session, trashed.quick_id, trashed.rel_path, "trash")
+    assert accept_hints(session, clips) == 2
+    assert accept_hints(session, clips) == 0  # rerun labels nothing new
+    report = apply_run(plan(session, incoming, clips, "", data_root), dry_run=False)
+    assert report["counts"]["copied"] == 2
+    assert (data_root / "raw" / "Valorant" / "friend_a" / "clip_a.mp4").is_file()
+    assert (data_root / "raw" / "_other" / "some_game" / "friend_a" / "clip_o.mp4").is_file()
+    assert not list((data_root / "raw").rglob("clip_untagged.mp4"))
