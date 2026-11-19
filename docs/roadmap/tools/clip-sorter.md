@@ -56,7 +56,7 @@ Each clip gets one game decision; the latest one counts, and every decision can 
 |---|---|---|
 | `1`–`6` | One of the six games, in `sourcing.labels.GAMES` order (Valorant, League of Legends, CS2, Minecraft, Overwatch 2, Marvel Rivals) | Copied to `data/raw/<Game>/<source>/<relative path>` |
 | `7` | Other; the page asks for the content name the first time (list of names used before, or a new one, normalised with `normalize_other_name`) | Copied to `data/raw/_other/<name>/<source>/<relative path>` |
-| `Q` / `W` / `E` / `R` | Content type (in addition to the game): esports VOD / gameplay / streamer overlay / mixed (press current again to clear); origin `sorter`. Row under `1`–`4`; legend on the page; `U` undoes a wrong key | Written to `content_types.csv` beside copied clips (`mixed` still copies when a game is set) |
+| `Q` / `W` / `E` / `R` | Content type (in addition to the game): esports VOD / gameplay / streamer overlay / mixed (press current again to clear); origin `sorter`. Row under `1`–`4`; legend on the page; `U` undoes a wrong key | Written to `content_types.csv` beside copied clips (`mixed` still copies when a game is set; `gfc-make-sources` skips those until scene splitting) |
 | `D` | **Disabled**: not confident this clip should be used; kept for a later look | Nothing; stays listed as disabled in the report |
 | `X` | **Trash**: confident it should not be used | Moved to `<folder>/_archive/<relative path>` |
 | `S` | Skip for now (undecided) | Nothing |

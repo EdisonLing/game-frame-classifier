@@ -84,7 +84,7 @@ data/raw/
     <source>/
       anything.mp4
       another_clip.mkv
-      content_types.csv   # optional; file,content_type,content_type_origin (from gfc-sort-clips)
+      content_types.csv   # optional; file,content_type,content_type_origin (from gfc-sort-clips); mixed skipped by make-sources
   _other/
     <other_name>/
       <source>/

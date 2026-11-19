@@ -9,10 +9,12 @@ import pytest
 
 from game_frame_classifier.make_sources import (
     CLIP_COLUMNS,
+    MIXED_SKIP_DETAIL,
     MakeSourcesError,
     apply_rebuilds,
     build_clip_row,
     check_source_name,
+    is_mixed_content_type,
     main,
     sanitize_text,
     unique_run_id,
@@ -234,3 +236,35 @@ def test_write_clip_json_includes_content_type(tmp_path):
     payload = json.loads((dest / "clip.json").read_text(encoding="utf-8"))
     assert payload["content_type"] == "gameplay"
     assert payload["content_type_origin"] == "video"
+
+
+def test_is_mixed_content_type():
+    assert is_mixed_content_type("mixed")
+    assert is_mixed_content_type(" mixed ")
+    assert not is_mixed_content_type("gameplay")
+    assert not is_mixed_content_type("")
+
+
+@requires_ffmpeg
+def test_skip_mixed_content_type_does_not_extract(tmp_path):
+    data_root, source_dir = data_tree(tmp_path)
+    make_raw_clip(source_dir, "ok.mp4", duration_s=6.0)
+    make_raw_clip(source_dir, "mixed.mp4", duration_s=6.0)
+    (source_dir / "content_types.csv").write_text(
+        "file,content_type,content_type_origin\n"
+        "mixed.mp4,mixed,sorter\n"
+        "ok.mp4,gameplay,video\n",
+        encoding="utf-8",
+    )
+    assert main(["--data-root", str(data_root), "--recipe", str(RECIPE), "--cpu"]) == 0
+    clip_dirs = list((data_root / "frame_sources" / "Valorant" / "tester").glob("c*"))
+    assert len(clip_dirs) == 1
+    ok_clip = json.loads((clip_dirs[0] / "clip.json").read_text(encoding="utf-8"))
+    assert ok_clip["content_type"] == "gameplay"
+    personal = list((data_root / "frame_sources" / "_personal").glob("*/clips.json"))
+    assert len(personal) == 1
+    rows = json.loads(personal[0].read_text(encoding="utf-8"))
+    by_name = {r["original_relpath"]: r for r in rows}
+    assert by_name["mixed.mp4"]["status"] == "skipped"
+    assert by_name["mixed.mp4"]["status_detail"] == MIXED_SKIP_DETAIL
+    assert by_name["ok.mp4"]["status"] == "ok"

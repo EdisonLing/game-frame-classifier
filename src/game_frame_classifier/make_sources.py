@@ -363,6 +363,11 @@ def place_clip(frames_root: Path, dest: Path) -> None:
     (frames_root / dest.name).replace(dest)
 
 
+# Shelved until a scene splitter can emit accurately labelled segments.
+MIXED_CONTENT_TYPE = "mixed"
+MIXED_SKIP_DETAIL = "mixed_content_type"
+
+
 def read_content_types(source_dir: Path) -> dict[str, tuple[str, str]]:
     """Load content_types.csv beside raw videos: file → (content_type, content_type_origin)."""
     path = Path(source_dir) / "content_types.csv"
@@ -379,6 +384,11 @@ def read_content_types(source_dir: Path) -> dict[str, tuple[str, str]]:
                 (row.get("content_type_origin") or "").strip(),
             )
     return out
+
+
+def is_mixed_content_type(content_type: str) -> bool:
+    """True when the clip must stay out of frame_sources until scene splitting."""
+    return (content_type or "").strip() == MIXED_CONTENT_TYPE
 
 
 def write_clip_json(
@@ -576,6 +586,15 @@ def main(argv: list[str] | None = None) -> int:
                     videos_found += 1
                     rel = rel_under(source_dir, path)
                     print(f"  {game}/{source}/{rel}")
+                    ct_early, _cto_early = content_types.get(path.name, ("", ""))
+                    if is_mixed_content_type(ct_early):
+                        clip_rows.append(build_clip_row(
+                            path=path, source_root=source_dir, game=game, info=None, times=None,
+                            sha="", clip_key="", status="skipped", status_detail=MIXED_SKIP_DETAIL,
+                            result=None, wall_s=None,
+                        ))
+                        print(f"    skipped: {MIXED_SKIP_DETAIL} (awaiting scene split)")
+                        continue
                     info: ProbeInfo | None = None
                     times: RecordingTimes | None = None
                     sha = ""
