@@ -966,3 +966,104 @@ def test_proposed_source_prefixes():
     assert proposed_source("Uploader A!", prefix="friend") == "friend_uploader_a"
     assert set(CONTENT_TYPES) == {"esports_vod", "gameplay", "streamer_overlay", "mixed"}
     assert parse_content_type("mixed") == "mixed"
+
+def test_cli_prints_next_sort_and_no_sort_skips_launch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys):
+    from collections import Counter
+
+    from game_frame_classifier.clip_fetch import cli as cli_mod
+    from game_frame_classifier.clip_fetch.download import Summary
+
+    links = tmp_path / "links.txt"
+    links.write_text("https://medal.tv/games/valorant/clips/SortNext1\n", encoding="utf-8")
+    data_root = tmp_path / "data"
+
+    def fake_run(*_a, **_k):
+        s = Summary()
+        s.by_status = Counter({"ok": 1})
+        s.unlabelled = 0
+        return s
+
+    monkeypatch.setattr(cli_mod, "run", fake_run)
+    monkeypatch.setattr(cli_mod, "print_summary", lambda _s: None)
+
+    def boom(*_a, **_k):
+        raise AssertionError("no-sort must not open")
+
+    monkeypatch.setattr(cli_mod, "maybe_open_sorter", boom)
+    code = cli_main([str(links), "--data-root", str(data_root), "--no-sort"])
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "next: gfc-sort-clips" in out
+    assert "incoming_clips" in out
+
+
+def test_cli_sort_flag_launches_sorter(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    from collections import Counter
+
+    from game_frame_classifier.clip_fetch import cli as cli_mod
+    from game_frame_classifier.clip_fetch.download import Summary
+
+    links = tmp_path / "links.txt"
+    links.write_text("https://www.youtube.com/watch?v=abcdefghijk\n", encoding="utf-8")
+    data_root = tmp_path / "data"
+    launched: list[list[str]] = []
+
+    def fake_run(*_a, **_k):
+        s = Summary()
+        s.by_status = Counter({"ok": 2})
+        s.unlabelled = 1
+        return s
+
+    def fake_launch(argv: list[str]) -> int:
+        launched.append(argv)
+        return 0
+
+    monkeypatch.setattr(cli_mod, "run", fake_run)
+    monkeypatch.setattr(cli_mod, "print_summary", lambda _s: None)
+
+    real_maybe = cli_mod.maybe_open_sorter
+
+    def wrap(incoming, data_root, summary, **kw):
+        kw["launch"] = fake_launch
+        return real_maybe(incoming, data_root, summary, **kw)
+
+    monkeypatch.setattr(cli_mod, "maybe_open_sorter", wrap)
+    code = cli_main([str(links), "--data-root", str(data_root), "--sort"])
+    assert code == 0
+    assert launched and "--unlabelled" in launched[0]
+
+
+def test_sort_prompt_yes_and_no(tmp_path: Path):
+    from game_frame_classifier.clip_fetch.cli import maybe_open_sorter
+    from game_frame_classifier.clip_fetch.download import Summary
+    from collections import Counter
+
+    summary = Summary()
+    summary.by_status = Counter({"ok": 1})
+    launched: list[list[str]] = []
+    assert (
+        maybe_open_sorter(
+            tmp_path / "incoming_clips",
+            tmp_path,
+            summary,
+            sort=False,
+            no_sort=False,
+            ask=lambda _p: "n",
+            launch=lambda a: launched.append(a) or 0,
+        )
+        is None
+    )
+    assert launched == []
+    assert (
+        maybe_open_sorter(
+            tmp_path / "incoming_clips",
+            tmp_path,
+            summary,
+            sort=False,
+            no_sort=False,
+            ask=lambda _p: "y",
+            launch=lambda a: launched.append(a) or 0,
+        )
+        == 0
+    )
+    assert len(launched) == 1

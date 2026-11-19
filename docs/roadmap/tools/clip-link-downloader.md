@@ -58,6 +58,10 @@ Automatic sources (default), uploader file, and skip rules: [clip-link-auto-sour
 | `--pause-s` | Seconds between downloads (default 3) |
 | `--limit N` | Stop after N new downloads |
 | `--dry-run` | Parse links, show the game for each and what would be downloaded; no network |
+| `--sort` | After new downloads, open `gfc-sort-clips` (browser contact-sheet page) |
+| `--no-sort` | Never prompt to open the sorter (still prints the next command) |
+
+After new downloads, the tool always prints the next `gfc-sort-clips` command. In a terminal it asks whether to open the sorter now (local browser page with contact sheets; you do not open files by hand). `--list-channel` / `--tag-uploader` / `--dry-run` do not prompt.
 
 Exit codes: `0` all done (including nothing new), `1` at least one link failed, `2` usage error or yt-dlp missing, `3` stopped by rate limiting, `4` waiting for an uploader decision (see auto-source spec).
 

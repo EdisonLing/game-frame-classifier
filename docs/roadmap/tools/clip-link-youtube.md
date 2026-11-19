@@ -50,9 +50,13 @@ Empty means not marked. Values outside the table are refused (exit 2 in the CLI,
 gfc-fetch-clips --list-channel https://www.youtube.com/@<handle> --game Overwatch_2 --content-type streamer_overlay
 gfc-fetch-clips --tag-uploader yt_<handle> --content-type esports_vod     # tag a channel already known
 gfc-fetch-clips data/clip_links --max-minutes 30
+gfc-fetch-clips data/clip_links --sort                 # after downloads, open the sorter page
+gfc-fetch-clips data/clip_links --no-sort              # scripts: print next command, never prompt
 gfc-sort-clips data/incoming_clips --accept-hints      # tagged clips straight into data/raw
 gfc-sort-clips data/incoming_clips --unlabelled        # page with only the unlabelled ones
 ```
+
+After new downloads, fetch always prints the `gfc-sort-clips …` next step. In a terminal it also asks `Open sorter now? [y/N]` unless `--sort` or `--no-sort`. The sorter is a local browser page with contact sheets (no file-explorer browsing).
 
 ## Testing
 

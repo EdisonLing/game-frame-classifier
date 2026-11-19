@@ -4,17 +4,21 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import shlex
 import sys
 from pathlib import Path
+from typing import Callable
 
 from game_frame_classifier.sourcing.labels import normalize_handle
 
 from .channel import list_channel
-from .download import print_summary, run
+from .download import Summary, print_summary, run
 from .links import CONTENT_TYPES, parse_content_type, parse_game_field, read_link_entries
 from .users import tag_uploader, validate_source
 
-__version__ = "1.2.1"
+__version__ = "1.2.2"
+
+AskFn = Callable[[str], str]
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -92,8 +96,75 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Parse links and show games; no network",
     )
+    sort = p.add_mutually_exclusive_group()
+    sort.add_argument(
+        "--sort",
+        action="store_true",
+        help="After new downloads, open gfc-sort-clips (browser contact-sheet page)",
+    )
+    sort.add_argument(
+        "--no-sort",
+        action="store_true",
+        help="Never prompt to open the sorter (scripts / batch)",
+    )
     p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     return p
+
+
+def sort_argv(incoming_dir: Path, data_root: Path, *, unlabelled: bool) -> list[str]:
+    """Args for gfc-sort-clips after a fetch (folder + data-root, optional --unlabelled)."""
+    argv = [str(incoming_dir), "--data-root", str(data_root)]
+    if unlabelled:
+        argv.append("--unlabelled")
+    return argv
+
+
+def format_sort_command(incoming_dir: Path, data_root: Path, *, unlabelled: bool) -> str:
+    parts = ["gfc-sort-clips", *sort_argv(incoming_dir, data_root, unlabelled=unlabelled)]
+    return " ".join(shlex.quote(p) for p in parts)
+
+
+def print_next_sort_step(incoming_dir: Path, data_root: Path, summary: Summary) -> None:
+    """Always print how to open the sorter after new downloads."""
+    unlabelled = summary.unlabelled > 0
+    cmd = format_sort_command(incoming_dir, data_root, unlabelled=unlabelled)
+    print(f"next: {cmd}")
+    if unlabelled:
+        print("  (uses --unlabelled because this run downloaded clips with no game)")
+    print("  Contact sheets open in the browser; you do not open files by hand.")
+
+
+def maybe_open_sorter(
+    incoming_dir: Path,
+    data_root: Path,
+    summary: Summary,
+    *,
+    sort: bool,
+    no_sort: bool,
+    ask: AskFn | None = None,
+    launch: Callable[[list[str]], int] | None = None,
+) -> int | None:
+    """Prompt or --sort to open the sorter. Returns sorter exit code, or None if skipped."""
+    if summary.by_status.get("ok", 0) <= 0:
+        return None
+    unlabelled = summary.unlabelled > 0
+    argv = sort_argv(incoming_dir, data_root, unlabelled=unlabelled)
+    open_it = False
+    if sort:
+        open_it = True
+    elif no_sort:
+        open_it = False
+    elif ask is not None:
+        answer = (ask("Open sorter now? [y/N] ") or "").strip().lower()
+        open_it = answer in ("y", "yes")
+    if not open_it:
+        return None
+    if launch is None:
+        from game_frame_classifier.clip_sorter.cli import main as sort_main
+
+        launch = sort_main
+    print(f"opening sorter: {' '.join(shlex.quote(a) for a in argv)}", flush=True)
+    return launch(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -207,6 +278,26 @@ def main(argv: list[str] | None = None) -> int:
         max_minutes=args.max_minutes,
     )
     print_summary(summary)
+    if args.dry_run or summary.by_status.get("ok", 0) <= 0:
+        return summary.exit_code
+
+    print_next_sort_step(incoming_dir, data_root, summary)
+    if args.no_sort:
+        return summary.exit_code
+    sort_ask: AskFn | None = None
+    if not args.sort and sys.stdin.isatty():
+        sort_ask = input
+    # Non-TTY without --sort: print next step only (no prompt).
+    sorter_code = maybe_open_sorter(
+        incoming_dir,
+        data_root,
+        summary,
+        sort=args.sort,
+        no_sort=False,
+        ask=sort_ask,
+    )
+    if sorter_code is not None and sorter_code != 0:
+        return sorter_code
     return summary.exit_code
 
 
