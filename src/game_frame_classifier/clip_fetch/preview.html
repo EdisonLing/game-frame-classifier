@@ -162,6 +162,8 @@ async function submit() {
     body: JSON.stringify({kept}),
   });
   document.body.innerHTML = "<header><strong>Submitted.</strong> You can close this tab.</header>";
+  // Best-effort: browsers often block this unless the tab was script-opened.
+  try { window.close(); } catch (_) {}
 }
 
 document.addEventListener("keydown", (ev) => {
