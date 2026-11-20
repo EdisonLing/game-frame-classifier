@@ -97,7 +97,6 @@ def run_preview(
                 result["kept"] = [i for i in ids if i in valid]
                 self._json(200, {"ok": True})
                 done.set()
-                threading.Thread(target=httpd.shutdown, daemon=True).start()
                 return
             self._json(404, {"error": "not found"})
 
@@ -123,5 +122,11 @@ def run_preview(
     thread = threading.Thread(target=httpd.serve_forever, daemon=True)
     thread.start()
     done.wait()
-    httpd.server_close()
+    # Shut down from this thread after submit; avoid server_close racing select (WinError 10038).
+    httpd.shutdown()
+    thread.join(timeout=5.0)
+    try:
+        httpd.server_close()
+    except OSError:
+        pass
     return result["kept"]
