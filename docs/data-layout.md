@@ -123,7 +123,7 @@ data/raw/
       VALORANT_replay_....mp4
 ```
 
-`<source>` ≈ channel for the ~1/15 cap (you, a friend, a streamer name, etc.). Friends' clips placed by `gfc-sort-clips` use a `friend_<handle>` source name (for example `friend_alex`); derive and the splitter treat `friend_*` as `contributor`. Pair a friend's raw source with their kit packs through `source_groups` in `config/split.json`.
+`<source>` ≈ channel for the ~1/15 cap (you, a friend, a streamer name, etc.). Friends' clips placed by `gfc-sort-clips` use a `friend_<handle>` source name (for example `friend_alex`); derive and the splitter treat `friend_*` as `contributor`. A YouTube channel with no agreement from its owner uses `yt_<handle>` (kind `web`: downloaded from the public web, no licence, never redistributed, not used for public examples). Pair a friend's raw source with their kit packs through `source_groups` in `config/split.json`.
 
 ### Clip sorter sessions (`data/sorting/`)
 

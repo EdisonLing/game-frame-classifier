@@ -125,9 +125,9 @@ def load_config(path: Path) -> dict[str, Any]:
         if not isinstance(value, list) or any(not isinstance(item, str) or not item for item in value):
             raise SplitterError(f"{key} must be a list of non-empty strings", 2)
     kind_values = set(config["include_source_kinds"]) | set(config["exclude_source_kinds"])
-    if kind_values - {"personal", "contributor", "public"}:
+    if kind_values - {"personal", "contributor", "public", "web"}:
         raise SplitterError(
-            "include_source_kinds / exclude_source_kinds may only use personal, contributor, public",
+            "include_source_kinds / exclude_source_kinds may only use personal, contributor, public, web",
             2,
         )
     limits = [config["max_slots_per_source"], config["train_slots_per_source"], *config["source_slots"].values()]
@@ -329,6 +329,8 @@ def _source_kind(source: str) -> str:
         return "contributor"
     if source.startswith("public_"):
         return "public"
+    if source.startswith("yt_"):
+        return "web"
     return "personal"
 
 

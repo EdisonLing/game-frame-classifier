@@ -15,6 +15,7 @@
 
 - **Permission is assumed.** A link or channel given to the tool means permission was obtained. New YouTube channels are accepted automatically, as Medal uploaders are (decided 2026-11-19).
 - **No account access**: no cookies or logins; public or unlisted videos only. Other sites stay refused.
+- **Two kinds of YouTube source, told apart by the source name** (decided 2026-11-19). `yt_<handle>` is the **web** label: downloaded from the public web, no licence granted or checked, used for educational research only, never redistributed (`source_kind` `web`, `public_examples_ok` false). It is a statement of where the clips came from, not a licence. A channel whose owner agreed to be used is a contributor: its source is `friend_<handle>` (`source_kind` `contributor`, handled like any contributor's clips). Download a contributor's links with `--source friend_<handle>`, or type that name when `--ask` offers a source; the uploader file's newest row for the channel decides later downloads. Default splits include `web` sources; a split can leave them out with `exclude_source_kinds: ["web"]`.
 
 ## Content types
 

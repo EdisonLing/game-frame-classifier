@@ -100,6 +100,8 @@ def source_kind(source: str) -> str:
         return "contributor"
     if source.startswith("public_"):
         return "public"
+    if source.startswith("yt_"):
+        return "web"
     return "personal"
 
 

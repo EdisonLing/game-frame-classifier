@@ -63,6 +63,7 @@ def test_pair_slots_quick_mode():
         ("contributor_alex", "contributor"),
         ("friend_bob", "contributor"),
         ("public_twitch", "public"),
+        ("yt_somechannel", "web"),
         ("tester", "personal"),
     ],
 )
@@ -72,6 +73,10 @@ def test_source_kind(source, kind):
 
 def test_public_examples_ok_personal():
     assert public_examples_ok("personal", None) is True
+
+
+def test_public_examples_not_ok_for_web():
+    assert public_examples_ok("web", None) is False
 
 
 def test_public_examples_ok_consenting(tmp_path):

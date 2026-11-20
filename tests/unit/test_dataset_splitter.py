@@ -606,3 +606,35 @@ def test_split_refuses_unknown_public_source(tmp_path) -> None:
     config = write_split_config(tmp_path / "bad.json", split_id="bad_public", max_source_share=1.0)
     with pytest.raises(SplitterError, match="missing from config/public_sources"):
         run_split(data, config)
+
+
+def test_web_source_kind_can_be_included_or_left_out(tmp_path) -> None:
+    data = tmp_path / "data"
+    clips = [
+        {"source": "me", "source_kind": "personal", "recorded_start_utc": "2026-01-01T00:00:00Z"},
+        {"source": "yt_somechannel", "source_kind": "web", "recorded_start_utc": "2026-01-01T01:00:00Z"},
+    ]
+    write_split_inputs(data, clips, slots_per_clip=2)
+
+    with_web = write_split_config(
+        tmp_path / "with_web.json",
+        split_id="with_web",
+        include_source_kinds=["personal", "web"],
+        max_source_share=1.0,
+    )
+    run_split(data, with_web)
+    kept = set()
+    for name in ("train", "val", "test_session"):
+        path = data / "manifests/splits/with_web" / f"{name}.csv"
+        kept |= {row["source"] for row in csv.DictReader(path.open(encoding="utf-8"))}
+    assert "yt_somechannel" in kept
+
+    without_web = write_split_config(
+        tmp_path / "without_web.json",
+        split_id="without_web",
+        include_source_kinds=["personal"],
+        max_source_share=1.0,
+    )
+    run_split(data, without_web)
+    unused = list(csv.DictReader((data / "manifests/splits/without_web/unused.csv").open(encoding="utf-8")))
+    assert {(row["source"], row["reason"]) for row in unused} == {("yt_somechannel", "excluded_kind")}

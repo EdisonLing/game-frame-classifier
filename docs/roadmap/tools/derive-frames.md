@@ -62,9 +62,9 @@ Exit codes: `0` success, `1` at least one clip failed, `2` usage or missing inpu
 |---|---|
 | `clip_key`, `clip_sha256` | Identity |
 | `game`, `other_name`, `source` | `game` is `Other` and `other_name` is the normalised `_other` folder for non-six content; `other_name` is empty for the six games |
-| `source_kind` | `contributor` when `source` starts with `contributor_` or `friend_`, `public` when it starts with `public_`, else `personal` |
+| `source_kind` | `contributor` when `source` starts with `contributor_` or `friend_`, `public` when it starts with `public_`, `web` when it starts with `yt_` (downloaded from the public web, no licence), else `personal` |
 | `origin` | `pack_id` from the index (`personal:<run_id>` for make-sources) |
-| `public_examples_ok` | `true` for personal sources; for contributor sources the pack's `consent.public_examples`; `false` when unknown |
+| `public_examples_ok` | `true` for personal sources; for contributor sources the pack's `consent.public_examples`; `false` for web sources and when unknown |
 | `recorded_start_utc`, `recorded_start_source`, `duration_s` | From `clip.json`; input to sessions |
 | `native_width`, `native_height`, `padded` | Native geometry (`width`, `height` in `clip.json`); `padded` = aspect pad applied |
 | `hdr`, `vfr`, `video_codec`, `encoder_tag` | From `clip.json`, for shortcut analysis |
