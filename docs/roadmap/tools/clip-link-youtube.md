@@ -2,6 +2,7 @@
 
 **Stage:** 1 — Collection  
 **Status:** implemented  
+**See also:** [channel sampling](clip-channel-sample.md)  
 **Back to:** [ROADMAP.md](../ROADMAP.md) · [clip link downloader](clip-link-downloader.md) · [automatic sources](clip-link-auto-source.md) · [clip sorter](clip-sorter.md)
 
 ## What it does
