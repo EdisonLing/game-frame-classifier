@@ -683,6 +683,9 @@ def run_sample(
         downloaded_s = sum(d for _, d in held_final.values())
     shortfall_s = max(0.0, plan.target_s - downloaded_s)
 
+    # The picks file lists what was downloaded; a pick that failed is not a pick.
+    picks = [c for c in picks if c.video_id in held_final]
+
     picks_path = out
     if picks_path is None:
         picks_path = data_root / "clip_links" / f"{day}_yt_{handle_norm}_sample.txt"

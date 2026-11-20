@@ -370,6 +370,54 @@ def test_run_sample_downloads_and_picks_file(tmp_path: Path):
     assert "Minecraft" in text
 
 
+def test_picks_file_lists_only_downloaded_videos(tmp_path: Path):
+    users = tmp_path / "users.csv"
+    attempted: list[str] = []
+
+    def fake_list(_url: str) -> list[dict]:
+        return _entries(10, duration_s=600)
+
+    def fake_meta(url: str) -> dict:
+        vid = url.rsplit("=", 1)[-1]
+        return {
+            "id": vid,
+            "channel_id": "UCchannelfake1",
+            "channel": "Fake Channel",
+            "duration": 600,
+            "width": 1280,
+            "height": 720,
+            "fps": 30,
+            "timestamp": 1_700_000_000,
+        }
+
+    def fake_dl(url: str, out_dir: Path, temp_name: str, **_kw) -> dict:
+        attempted.append(url)
+        if len(attempted) == 1:
+            raise RuntimeError("video unavailable")
+        dest = Path(out_dir) / temp_name
+        dest.write_bytes(b"fake")
+        return fake_meta(url)
+
+    code, summary = run_sample(
+        "https://www.youtube.com/@example",
+        max_time_h=0.5,
+        seed=5,
+        preview=False,
+        data_root=tmp_path,
+        users_path=users,
+        lister=fake_list,
+        downloader=fake_dl,
+        metadata=fake_meta,
+        pause_s=0,
+        now=lambda: datetime(2026, 5, 1, tzinfo=timezone.utc),
+    )
+    assert summary is not None and summary.by_status.get("failed", 0) == 1
+    text = next((tmp_path / "clip_links").glob("*_sample.txt")).read_text(encoding="utf-8")
+    listed = [line.split(",")[0] for line in text.splitlines() if line.startswith("https://")]
+    assert attempted[0] not in listed
+    assert sorted(listed) == sorted(attempted[1:])
+
+
 def test_run_sample_preview_rejects(tmp_path: Path):
     users = tmp_path / "users.csv"
 
