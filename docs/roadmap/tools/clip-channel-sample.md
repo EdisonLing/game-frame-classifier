@@ -52,8 +52,8 @@ gfc-fetch-clips --channel <url> --no-preview                                    
 4. **Held videos.** A video of this channel is *held* when its id is in the fetch log with `status = ok` for this channel (`uploader_id = yt:<channel_id>`) and a file whose name ends in `__<id>.mp4` exists under `data/incoming_clips/<source>/` or under `data/raw/**/<source>/`. The id is the last `__`-separated token of the file name stem. Held duration sums listing `duration` for those ids (0 when unknown).
 5. **Time budget and overshoot.** Let `T` be `--max-time` in seconds. The hard ceiling for a fill is `T * 1.2` (20 % overshoot). Walk candidates in pick order: take a video if adding its duration keeps accrued time ≤ ceiling; if it would exceed the ceiling, **skip it** and try the next. If none of the remaining fit, **stop under budget** (do not keep searching for a shorter clip outside the prepared pool). Whole videos only; never cut a file.
 6. **Preview buffer.** Before the keep/skip page, take a prefix of the pick order whose cumulative duration is about **2 × T** (or the rest of the channel). That pool is shown in the preview.
-7. **Preview page.** Local browser page: each item shows the YouTube thumbnail (`https://i.ytimg.com/vi/<id>/hqdefault.jpg`), title, duration and index. All start **on**. Digit keys `1`–`9` and `0` (tenth) toggle items on the current page of ten; `[` / `]` change page; Enter submits. Toggled-off items are dropped. Remaining items stay in pick order and then the time-budget walk (step 5) selects what to download.
-8. **Mode `new`.** Candidates exclude every video id the fetch log already lists with `status = ok` for this channel (even if the file is gone). Accrued starts at 0; fill until about `T` of new downloads (with overshoot rules). A pick that ends `skipped_long`, `failed` or unavailable is replaced by the next remaining candidate under the same budget rules, until the budget is met or candidates run out (report the shortfall; exit 0).
+7. **Preview page.** Local browser page: each item shows the YouTube thumbnail (`https://i.ytimg.com/vi/<id>/hqdefault.jpg`), title, duration and index. All start **on**. Digit keys `1`–`9` and `0` (tenth) toggle items on the current page of ten; `[` / `]` change page; Enter submits. Toggled-off items are dropped. Remaining (**kept**) items stay in pick order and then the time-budget walk (step 5) selects what to download. After preview, downloads and failed-pick replacements use **only** kept items — never a video that was toggled off or never shown.
+8. **Mode `new`.** Candidates exclude every video id the fetch log already lists with `status = ok` for this channel (even if the file is gone). Accrued starts at 0; fill until about `T` of new downloads (with overshoot rules). A pick that ends `skipped_long`, `failed` or unavailable is replaced by the next remaining candidate under the same budget rules (after preview: next remaining **kept** only), until the budget is met or candidates run out (report the shortfall; exit 0).
 9. **Mode `total`.** Let `held_s` be held duration from step 4.
    - `held_s >= T`: do nothing and say so.
    - `held_s < T`: behave as mode `new` with target remaining `T - held_s`, but the overshoot ceiling is absolute: `held_s + new_s ≤ T * 1.2`.
@@ -69,7 +69,8 @@ gfc-fetch-clips --channel <url> --no-preview                                    
 - **`total` is a minimum only:** add when below; never archive or delete (user, 2026-11-19).
 - **No per-video length cap** in channel sampling (user, 2026-11-19).
 - **Overshoot cap 20 % of `--max-time`:** skip a candidate that would exceed `T * 1.2`; if none of the remaining pool fit, stop under budget (user, 2026-11-19).
-- **Preview before download:** multi-item local page; on by default; digits toggle off; Enter submits; buffer ~2× time so rejects have replacements already picked (user, 2026-11-19).
+- **Preview before download:** multi-item local page; on by default; digits toggle off; Enter submits; buffer ~2× time so rejects have replacements already picked (user, 2026-11-19). After submit, only kept ids may download (user, 2026-11-19).
+- **Preview scope:** never download unpreviewed or toggled-off videos to fill a shortfall (user, 2026-11-19).
 - **Default recency bias 2.0.**
 
 ## Testing
@@ -82,7 +83,7 @@ Unit tests with a fake lister and fake downloader (no network), in `tests/unit/t
 - mode `new`: ids already `ok` in the fetch log (file present or gone) are never picked; shortfall when the channel runs out.
 - mode `total`: below T downloads toward T; equal or above does nothing; never moves or deletes files.
 - held detection: the id is read from the last `__` token; files of another channel's source are not counted.
-- preview filter: toggling ids off removes them; remaining still respect the budget walk.
+- preview filter: toggling ids off removes them; remaining still respect the budget walk; shortfall fill never downloads outside the kept set.
 - picks file content and header; `--dry-run` changes nothing (no file, no log row).
 - CLI: a video URL, a playlist URL, `--max-time 0`, a bad mode, and `--channel` with a links file all exit 2.
 - Every existing `clip_fetch` test still passes.

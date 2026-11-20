@@ -606,20 +606,20 @@ def run_sample(
             accrued_s=accrued0,
             target_s=plan.target_s,
         )
+        # Replacements stay inside what the user left on — never pull unpreviewed ids.
+        kept_set = set(kept_ids)
+        pick_ids = {c.video_id for c in picks}
+        reserve = [
+            c for c in pool if c.video_id in kept_set and c.video_id not in pick_ids
+        ]
     else:
         picks, accrued = fill_to_budget(
             ordered,
             accrued_s=accrued0,
             target_s=plan.target_s,
         )
-
-    pick_ids = {c.video_id for c in picks}
-    rejected_ids = {c.video_id for c in rejected}
-    reserve = [
-        c
-        for c in ordered
-        if c.video_id not in pick_ids and c.video_id not in rejected_ids
-    ]
+        pick_ids = {c.video_id for c in picks}
+        reserve = [c for c in ordered if c.video_id not in pick_ids]
 
     download_kwargs: dict = {
         "source_override": source,

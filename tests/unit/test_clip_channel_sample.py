@@ -417,6 +417,63 @@ def test_run_sample_preview_rejects(tmp_path: Path):
     assert "# skipped_preview:" in text
 
 
+def test_preview_keeps_only_approved_even_when_under_budget(tmp_path: Path):
+    """After preview, do not pull unpreviewed ids to fill the time budget."""
+    users = tmp_path / "users.csv"
+    downloaded: list[str] = []
+
+    def fake_list(_url: str) -> list[dict]:
+        return _entries(12, duration_s=600)
+
+    def fake_meta(url: str) -> dict:
+        vid = url.rsplit("=", 1)[-1]
+        return {
+            "id": vid,
+            "channel_id": "UCchannelfake1",
+            "channel": "Fake Channel",
+            "duration": 600,
+            "width": 1280,
+            "height": 720,
+            "fps": 30,
+            "timestamp": 1_700_000_000,
+        }
+
+    def fake_dl(url: str, out_dir: Path, temp_name: str, **_kw) -> dict:
+        downloaded.append(url.rsplit("=", 1)[-1])
+        dest = Path(out_dir) / temp_name
+        dest.write_bytes(b"fake")
+        return fake_meta(url)
+
+    kept_only: list[str] = []
+
+    def fake_preview(cands):
+        # Approve only the first pool item; leave the rest off.
+        kept_only.clear()
+        kept_only.append(cands[0].video_id)
+        return list(kept_only)
+
+    code, summary = run_sample(
+        "https://www.youtube.com/@example",
+        max_time_h=0.5,  # 1800 s — one 600 s keep leaves a large shortfall
+        seed=2,
+        preview=True,
+        preview_fn=fake_preview,
+        data_root=tmp_path,
+        users_path=users,
+        lister=fake_list,
+        downloader=fake_dl,
+        metadata=fake_meta,
+        pause_s=0,
+        now=lambda: datetime(2026, 5, 1, tzinfo=timezone.utc),
+    )
+    assert code == 0
+    assert summary is not None
+    assert downloaded == kept_only
+    assert summary.by_status.get("ok", 0) == 1
+    text = next((tmp_path / "clip_links").glob("*_sample.txt")).read_text(encoding="utf-8")
+    assert text.count("# skipped_preview:") >= 1
+
+
 def test_cli_channel_rejects_video_url():
     code = cli_main(["--channel", "https://www.youtube.com/watch?v=abcdefghijk", "--dry-run"])
     assert code == 2
