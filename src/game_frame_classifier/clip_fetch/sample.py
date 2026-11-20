@@ -145,23 +145,34 @@ def _ok_ids_for_channel(log_path: Path, uploader_id: str) -> set[str]:
     return out
 
 
-def _find_held_file(data_root: Path, source: str, video_id: str) -> Path | None:
-    """Return path of held mp4 for video_id under incoming or raw for this source."""
-    if not video_id:
-        return None
-    suffix = f"__{video_id}.mp4"
+def _source_files(data_root: Path, source: str) -> list[Path]:
+    """Every mp4 of one source: incoming/<source>/ and raw/<Game>/<source>/ (also raw/_other/<name>/<source>/).
+
+    Only the source's own folders are walked, once per call.
+    """
+    found: dict[Path, None] = {}
     incoming = data_root / "incoming_clips" / source
     if incoming.is_dir():
         for path in incoming.glob("*.mp4"):
-            if path.name.endswith(suffix):
-                return path
+            found[path] = None
     raw = data_root / "raw"
     if raw.is_dir():
-        for path in raw.rglob("*.mp4"):
-            if source not in path.parts:
-                continue
-            if path.name.endswith(suffix):
-                return path
+        for pattern in (f"*/{source}", f"_other/*/{source}"):
+            for folder in raw.glob(pattern):
+                if folder.is_dir():
+                    for path in folder.rglob("*.mp4"):
+                        found[path] = None
+    return list(found)
+
+
+def _find_held_file(files: list[Path], video_id: str) -> Path | None:
+    """First file whose name ends in ``__<video_id>.mp4``."""
+    if not video_id:
+        return None
+    suffix = f"__{video_id}.mp4"
+    for path in files:
+        if path.name.endswith(suffix):
+            return path
     return None
 
 
@@ -179,8 +190,9 @@ def held_videos(
     ok_ids = _ok_ids_for_channel(log_path, uploader_id)
     durations = durations or {}
     out: dict[str, tuple[Path, float]] = {}
+    files = _source_files(data_root, source) if ok_ids else []
     for vid in ok_ids:
-        path = _find_held_file(data_root, source, vid)
+        path = _find_held_file(files, vid)
         if path is None:
             continue
         out[vid] = (path, float(durations.get(vid, 0.0)))

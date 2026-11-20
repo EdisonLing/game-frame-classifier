@@ -204,6 +204,38 @@ def test_held_ignores_other_source_file(tmp_path: Path):
     assert held == {}
 
 
+def test_held_finds_files_in_game_and_other_folders_of_the_source(tmp_path: Path):
+    source = "yt_fakechannel"
+    ids = ["aaaaaaaaaaa", "bbbbbbbbbbb", "ccccccccccc"]
+    name = "unlabelled__2026-01-01__00-00-00__{}.mp4"
+    raw = tmp_path / "raw"
+    (raw / "Valorant" / source).mkdir(parents=True)
+    (raw / "_other" / "discord" / source).mkdir(parents=True)
+    (raw / "Valorant" / "yt_someoneelse").mkdir(parents=True)
+    (raw / "Valorant" / source / name.format(ids[0])).write_bytes(b"x")
+    (raw / "_other" / "discord" / source / name.format(ids[1])).write_bytes(b"x")
+    (raw / "Valorant" / "yt_someoneelse" / name.format(ids[2])).write_bytes(b"x")
+    log = tmp_path / "incoming_clips" / "fetch_log.csv"
+    log.parent.mkdir(parents=True)
+    with open(log, "w", encoding="utf-8", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=LOG_COLUMNS)
+        w.writeheader()
+        for vid in ids:
+            w.writerow(
+                {
+                    "utc": "2026-01-01T00:00:00Z",
+                    "url": f"https://www.youtube.com/watch?v={vid}",
+                    "site": "youtube",
+                    "clip_id": vid,
+                    "status": "ok",
+                    "uploader_id": "yt:UCchannelfake1",
+                    "source": source,
+                }
+            )
+    held = held_videos(tmp_path, source, "UCchannelfake1", durations={v: 60.0 for v in ids})
+    assert set(held) == {ids[0], ids[1]}
+
+
 def test_plan_new_excludes_ok_even_without_file(tmp_path: Path):
     entries = _entries(5, duration_s=1800)
     ok = {entries[0]["id"], entries[1]["id"]}
