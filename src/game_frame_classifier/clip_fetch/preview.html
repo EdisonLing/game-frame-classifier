@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Channel sample preview</title>
+<style>
+:root {
+  color-scheme: light dark;
+  --bg: #f4f4f2;
+  --fg: #1a1a1a;
+  --muted: #666;
+  --panel: #fff;
+  --accent: #0b5;
+  --border: #ccc;
+  --off: #bbb;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #121212;
+    --fg: #eee;
+    --muted: #aaa;
+    --panel: #1c1c1c;
+    --accent: #3d8;
+    --border: #333;
+    --off: #555;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+}
+header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: baseline;
+  padding: 0.75rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+header .hint { color: var(--muted); font-size: 0.9rem; }
+header .progress { margin-left: auto; color: var(--muted); }
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 1rem;
+  padding: 1.25rem;
+}
+.card {
+  background: var(--panel);
+  border: 2px solid var(--accent);
+  border-radius: 6px;
+  overflow: hidden;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+}
+.card.off {
+  border-color: var(--off);
+  opacity: 0.45;
+}
+.card .thumb {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  background: #000;
+  display: block;
+}
+.card .meta {
+  padding: 0.5rem 0.65rem 0.75rem;
+}
+.card .idx {
+  display: inline-block;
+  min-width: 1.4rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+.card.off .idx { color: var(--muted); }
+.card .title {
+  font-size: 0.9rem;
+  margin: 0.25rem 0 0;
+  line-height: 1.3;
+}
+.card .dur { color: var(--muted); font-size: 0.8rem; margin-top: 0.25rem; }
+.hidden-page { display: none; }
+</style>
+</head>
+<body>
+<header>
+  <strong>Channel sample preview</strong>
+  <span class="hint">1–9,0 toggle · [ ] page · Enter submit (on by default)</span>
+  <span class="progress" id="progress"></span>
+</header>
+<main class="grid" id="grid"></main>
+<script>
+const PAGE = 10;
+let items = [];
+let page = 0;
+
+function fmtDur(s) {
+  s = Math.round(Number(s) || 0);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  if (h) return h + "h " + String(m).padStart(2, "0") + "m";
+  return m + ":" + String(sec).padStart(2, "0");
+}
+
+function pageCount() {
+  return Math.max(1, Math.ceil(items.length / PAGE));
+}
+
+function render() {
+  const grid = document.getElementById("grid");
+  grid.innerHTML = "";
+  const start = page * PAGE;
+  const slice = items.slice(start, start + PAGE);
+  slice.forEach((it, local) => {
+    const card = document.createElement("div");
+    card.className = "card" + (it.on ? "" : " off");
+    card.dataset.i = String(it.i);
+    const keyLabel = local === 9 ? "0" : String(local + 1);
+    card.innerHTML =
+      '<img class="thumb" alt="" src="' + it.thumb + '">' +
+      '<div class="meta">' +
+      '<span class="idx">' + keyLabel + '</span> ' +
+      '<span class="title"></span>' +
+      '<div class="dur"></div></div>';
+    card.querySelector(".title").textContent = it.title || it.id;
+    card.querySelector(".dur").textContent = fmtDur(it.duration_s);
+    card.addEventListener("click", () => toggle(it.i));
+    grid.appendChild(card);
+  });
+  const on = items.filter(x => x.on).length;
+  document.getElementById("progress").textContent =
+    on + "/" + items.length + " on · page " + (page + 1) + "/" + pageCount();
+}
+
+function toggle(i) {
+  const it = items[i];
+  if (!it) return;
+  it.on = !it.on;
+  render();
+}
+
+function toggleLocal(local) {
+  const i = page * PAGE + local;
+  if (i >= 0 && i < items.length) toggle(i);
+}
+
+async function submit() {
+  const kept = items.filter(x => x.on).map(x => x.id);
+  await fetch("/api/submit", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({kept}),
+  });
+  document.body.innerHTML = "<header><strong>Submitted.</strong> You can close this tab.</header>";
+}
+
+document.addEventListener("keydown", (ev) => {
+  if (ev.key === "Enter") {
+    ev.preventDefault();
+    submit();
+    return;
+  }
+  if (ev.key === "[") {
+    page = Math.max(0, page - 1);
+    render();
+    return;
+  }
+  if (ev.key === "]") {
+    page = Math.min(pageCount() - 1, page + 1);
+    render();
+    return;
+  }
+  if (ev.key >= "1" && ev.key <= "9") {
+    toggleLocal(Number(ev.key) - 1);
+    return;
+  }
+  if (ev.key === "0") {
+    toggleLocal(9);
+  }
+});
+
+fetch("/api/state").then(r => r.json()).then(data => {
+  items = (data.items || []).map(x => Object.assign({}, x, {on: x.on !== false}));
+  render();
+});
+</script>
+</body>
+</html>

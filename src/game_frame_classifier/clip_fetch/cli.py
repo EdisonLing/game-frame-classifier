@@ -14,9 +14,10 @@ from game_frame_classifier.sourcing.labels import normalize_handle
 from .channel import list_channel
 from .download import Summary, print_summary, run
 from .links import CONTENT_TYPES, parse_content_type, parse_game_field, read_link_entries
+from .sample import DEFAULT_MAX_TIME_H, DEFAULT_RECENCY_BIAS, run_sample
 from .users import tag_uploader, validate_source
 
-__version__ = "1.2.2"
+__version__ = "1.3.0"
 
 AskFn = Callable[[str], str]
 
@@ -27,7 +28,8 @@ def build_parser() -> argparse.ArgumentParser:
         description=(
             "Download Medal and YouTube clip links into data/incoming_clips/<source>/. "
             "Automatic sources from uploaders/channels by default; --source overrides. "
-            "List a YouTube channel with --list-channel; tag a channel with --tag-uploader."
+            "List a YouTube channel with --list-channel; sample with --channel; "
+            "tag a channel with --tag-uploader."
         ),
     )
     p.add_argument(
@@ -35,6 +37,49 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         nargs="*",
         help="Links file(s) or folder(s) of *.txt",
+    )
+    p.add_argument(
+        "--channel",
+        default=None,
+        metavar="URL",
+        help="Sample videos from a YouTube channel by time budget (needs no links file)",
+    )
+    p.add_argument(
+        "--max-time",
+        type=float,
+        default=DEFAULT_MAX_TIME_H,
+        metavar="H",
+        help=f"Hours to sample (default {DEFAULT_MAX_TIME_H:g}); with --channel",
+    )
+    p.add_argument(
+        "--mode",
+        choices=("new", "total"),
+        default="new",
+        help="With --channel: new hours (default) or minimum total held hours",
+    )
+    p.add_argument(
+        "--recency-bias",
+        type=float,
+        default=DEFAULT_RECENCY_BIAS,
+        metavar="B",
+        help=f"Lean toward recent uploads (default {DEFAULT_RECENCY_BIAS:g}); with --channel",
+    )
+    p.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help="RNG seed for channel sampling (printed and recorded)",
+    )
+    preview = p.add_mutually_exclusive_group()
+    preview.add_argument(
+        "--preview",
+        action="store_true",
+        help="Open the channel-sample keep/skip page before download",
+    )
+    preview.add_argument(
+        "--no-preview",
+        action="store_true",
+        help="Skip the keep/skip page (scripts / batch)",
     )
     p.add_argument(
         "--list-channel",
@@ -173,6 +218,81 @@ def main(argv: list[str] | None = None) -> int:
     data_root = Path(args.data_root)
     users_path = Path(args.users) if args.users else data_root / "clip_links" / "medal_users.csv"
 
+    channel_mode = args.channel is not None
+    if channel_mode:
+        if args.links or args.list_channel or args.tag_uploader:
+            print(
+                "error: --channel cannot be combined with links files, "
+                "--list-channel or --tag-uploader",
+                file=sys.stderr,
+            )
+            return 2
+        if args.max_time <= 0:
+            print("error: --max-time must be > 0", file=sys.stderr)
+            return 2
+        if args.recency_bias < 0:
+            print("error: --recency-bias must be >= 0", file=sys.stderr)
+            return 2
+        if args.game:
+            try:
+                parse_game_field(args.game)
+            except ValueError as exc:
+                print(f"error: {exc}", file=sys.stderr)
+                return 2
+        if args.content_type:
+            try:
+                parse_content_type(args.content_type)
+            except ValueError as exc:
+                print(f"error: {exc}", file=sys.stderr)
+                return 2
+        if not args.dry_run and importlib.util.find_spec("yt_dlp") is None:
+            print("install the fetch extra: pip install yt-dlp", file=sys.stderr)
+            return 2
+        do_preview = False
+        if not args.dry_run:
+            if args.preview:
+                do_preview = True
+            elif args.no_preview:
+                do_preview = False
+            else:
+                do_preview = sys.stdin.isatty()
+        code, summary = run_sample(
+            args.channel,
+            max_time_h=args.max_time,
+            mode=args.mode,
+            recency_bias=args.recency_bias,
+            seed=args.seed,
+            dry_run=args.dry_run,
+            preview=do_preview,
+            game=args.game,
+            content_type=args.content_type,
+            note=args.note,
+            out=args.out,
+            data_root=data_root,
+            users_path=users_path,
+            pause_s=args.pause_s,
+        )
+        if args.dry_run or summary is None or summary.by_status.get("ok", 0) <= 0:
+            return code
+        incoming_dir = data_root / "incoming_clips"
+        print_next_sort_step(incoming_dir, data_root, summary)
+        if args.no_sort:
+            return code
+        sort_ask: AskFn | None = None
+        if not args.sort and sys.stdin.isatty():
+            sort_ask = input
+        sorter_code = maybe_open_sorter(
+            incoming_dir,
+            data_root,
+            summary,
+            sort=args.sort,
+            no_sort=False,
+            ask=sort_ask,
+        )
+        if sorter_code is not None and sorter_code != 0:
+            return sorter_code
+        return code
+
     if args.tag_uploader:
         if not args.content_type:
             print("error: --tag-uploader needs --content-type", file=sys.stderr)
@@ -219,7 +339,10 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if not args.links:
-        print("error: links file(s) required (or use --list-channel / --tag-uploader)", file=sys.stderr)
+        print(
+            "error: links file(s) required (or use --channel / --list-channel / --tag-uploader)",
+            file=sys.stderr,
+        )
         return 2
 
     source_override: str | None = None
