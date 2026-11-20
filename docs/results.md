@@ -541,3 +541,73 @@ Main confusions: Overwatch 2 called CS2 (18) or Marvel Rivals (17); Other called
 **Limits and next.** Val Minecraft and Marvel Rivals come only from the public sets, so their val F1 is optimistic (shown by the held-out check). Overwatch 2 is still one person in training. Next: Minecraft, Overwatch 2 and Marvel Rivals clips from more people; the Game-Intention access request; decide whether public data enters the report's main model or stays a separate comparison.
 
 **Archive.** `data/archive/2026-11-19_public_data/` (local): both runs, both splits with the data figures, the configs, access log, README.
+
+## 2026-11-19 — CNN with more people (split `v1x`), three seeds, and a leave-one-person-out check on every person
+
+**Question.** (1) Does the data added since the last entry (new people for Overwatch 2, CS2, League of Legends and Other, two YouTube channels whose owners agreed to be used, one more Medal contributor) improve the CNN on the same validation rows, once seed noise is accounted for? (2) How well does the CNN recognise a person it never saw, for every person and game where that can be measured?
+
+**Data.** Default split policy (personal and contributor sources, no public datasets), 14 people (P1–P14), 15 sources, 683 clips, 14,996 extracted slots of which 11,055 were kept by cleaning (rejected: 3,836 near-duplicates, 104 blurred, 1 black). Split `v1x` is the `v1` ledger extended with the new data under its own id, so every earlier val and test_session slot stays where it was; `v1` itself is unchanged (split hashes identical). New people since `v1`: P12 and P13 (YouTube channels, contributors who agreed to be used, `friend_` sources), P14 (Medal clips). No source labelled as downloaded from the public web (`yt_`, kind `web`) is in this data yet.
+
+| Split `v1x` | Slots | Videos | Sessions |
+|---|---:|---:|---:|
+| train | 2,526 | 402 | 278 |
+| val | 1,510 | 82 | 63 |
+| test_session | 1,498 | 94 | 68 |
+
+| Game | train | val | test_session | Videos | Footage (min) |
+|---|---:|---:|---:|---:|---:|
+| Valorant | 830 | 588 | 602 | 246 | 359 |
+| League of Legends | 1,168 | 353 | 353 | 147 | 275 |
+| CS2 | 282 | 303 | 308 | 89 | 198 |
+| Other | 105 | 201 | 227 | 69 | 144 |
+| Overwatch 2 | 57 | 65 | 8 | 23 | 13 |
+| Marvel Rivals | 55 | 0 | 0 | 1 | 5 |
+| Minecraft | 29 | 0 | 0 | 3 | 3 |
+
+Compared with `v1` (train 3,323 / val 1,377 / test_session 1,365): val and test_session each gained 133 slots and kept all earlier ones; train fell by 1,493 slots (the 1/15 source cap tightened as sources were added, mostly P4's Other and CS2: 902 to 48 and 148 to 70 train slots) and gained 696. Overwatch 2 went from 105 to 130 used slots and from 2 to 4 people (P4, P5, P12, P14). The per-person table by split and the left-out counts are in the archive (`tables_v1x.md`). Recording properties: 1,280×720 and 1,920×1,080 H.264 for most clips, AV1 for 43 videos (League of Legends 32, CS2 6, Valorant 5), mostly 3,840×2,160; recording times mostly from the file name. Cleaning rules: black below mean 8 and std 4, blurred below Laplacian variance 400, near-duplicate within 6 bits of the 8×8 aHash of an earlier kept frame of the same source. Marvel Rivals (one person) and Minecraft (one person) have no val or test slots in this policy.
+
+**Method.** Unchanged configs (`config/baseline.json`, `config/train_cnn.json`, 7-way, seed 360; extra seeds 361 and 362 via `--set seed=`); CNN on the RX 9070 XT (`.venv-rocm`), about 10 s per epoch, early stopping with patience 6. Commands: `gfc-make-sources`, `gfc-derive-frames`, `gfc-clean-frames --slots data/manifests/slots.csv`, `gfc-split` with the `v1` ledger copied to `v1x`, `gfc-train-baseline` and `-m game_frame_classifier.train --split-dir data/manifests/splits/v1x --tag web-contrib`. Leave-one-person-out: for each person a split `lopo-p<n>` (same policy, that person's footage held out as `test_source` in every game where at least two other people have 15 or more kept slots), frozen as a development check, both models trained on it and scored once on the held-out footage with a logged reason. Commit `e8802f0`.
+
+**Results on val** (development numbers: val chose the best epoch or `C`). Scored on the 1,377 val slots that `v1` and `v1x` share:
+
+| Seed | Split | Accuracy | Macro-F1 | Overwatch 2 F1 | League of Legends F1 | Other F1 |
+|---|---|---:|---:|---:|---:|---:|
+| 360 | `v1` | 0.866 | 0.781 | 0.46 | 0.91 | 0.68 |
+| 361 | `v1` | 0.882 | 0.785 | 0.40 | 0.98 | 0.71 |
+| 362 | `v1` | 0.897 | 0.820 | 0.54 | 0.95 | 0.71 |
+| 360 | `v1x` | 0.891 | 0.859 | 0.74 | 0.98 | 0.72 |
+| 361 | `v1x` | 0.882 | 0.844 | 0.70 | 0.96 | 0.71 |
+| 362 | `v1x` | 0.880 | 0.834 | 0.66 | 0.98 | 0.68 |
+
+Over three seeds, accuracy is about the same (mean 0.882 on `v1`, 0.885 on `v1x`, ranges overlap). Macro-F1 is higher on `v1x` (mean 0.795 to 0.845; the ranges 0.781–0.820 and 0.834–0.859 do not overlap), and almost all of it is Overwatch 2 F1 (mean 0.47 to 0.70, ranges 0.40–0.54 and 0.66–0.74). The single seed-360 comparison suggested a 0.025 accuracy gain; the other seeds show that part was noise. Baseline (own val, no seed): accuracy 0.533 / macro-F1 0.440 on `v1`, 0.530 / 0.460 on `v1x`. The two changes happen together (new people added, source cap tightened), so the gain cannot be assigned to the new data alone.
+
+**Unseen people** (CNN, `test_source`, 9,879 frames from 14 people, each person held out once; development check, not the report's test design):
+
+| Held-out person | Valorant | League of Legends | CS2 | Overwatch 2 | Other | All frames |
+|---|---:|---:|---:|---:|---:|---:|
+| P1 | 176/178 | 727/746 | 155/165 | - | - | 1058/1089 (0.97) |
+| P2 | 489/498 | 12/12 | 274/282 | - | - | 775/792 (0.98) |
+| P3 | 928/939 | - | - | - | - | 928/939 (0.99) |
+| P4 | 1499/1626 | 1271/1433 | 1083/1465 | 35/40 | 690/1293 | 4578/5857 (0.78) |
+| P5 | - | - | 70/70 | 36/65 | 20/33 | 126/168 (0.75) |
+| P6 | 129/135 | - | - | - | - | 129/135 (0.96) |
+| P7 | 77/77 | - | - | - | - | 77/77 (1.00) |
+| P8 | 106/109 | - | - | - | - | 106/109 (0.97) |
+| P9 | 42/45 | - | - | - | 2/9 | 44/54 (0.81) |
+| P10 | 4/5 | - | - | - | - | 4/5 (0.80) |
+| P11 | 59/65 | - | - | - | - | 59/65 (0.91) |
+| P12 | 257/276 | 144/144 | 7/7 | 16/21 | 16/52 | 440/500 (0.88) |
+| P13 | 50/52 | - | 14/14 | - | - | 64/66 (0.97) |
+| P14 | - | - | - | 15/23 | - | 15/23 (0.65) |
+
+Pooled over all held-out frames: CNN accuracy 0.851, macro-F1 0.725 over the five games that can be evaluated; mean accuracy per person 0.887. Per game (recall / precision): Valorant 0.95 / 0.96 (12 people), League of Legends 0.92 / 0.96 (4), CS2 0.80 / 0.93 (6), Overwatch 2 0.68 / 0.21 (4), Other 0.52 / 0.57 (4). Baseline: accuracy 0.397, macro-F1 0.319, Overwatch 2 recall 0.09. Marvel Rivals and Minecraft each have one person, so no unseen-person score exists for them.
+
+**Confusion.** Overwatch 2 has low precision because Other is read as Overwatch 2: 344 held-out Other frames (335 of them P4's) were predicted Overwatch 2, with only 105 Other train slots left after the cap. Other is also read as Valorant (100) and CS2 (65). The weakest person-and-game cells are P4 in CS2 (0.74) and Other (0.53), P5 in Overwatch 2 (0.55), P12 in Other (0.31) and P14 in Overwatch 2 (0.65, 23 frames).
+
+**Integrity.** No clip, session or slot is shared between train, val and test_session in `v1x`; no val or test_session frame is within 6 bits of a train frame (smallest distance 7). The split files match the hashes stored at training time. Held-out access: each leave-one-person-out scoring is in `data/runs/holdout_access.jsonl` with its reason ("development check: leave-one-person-out, held-out person P<n>"); `test_session` and the report's held-out design are not touched.
+
+**Challenges.** The dataset is dominated by one person (P4: 5,857 of 9,879 held-out frames) and by Valorant, so pooled numbers lean on them; the source cap changes how much each person contributes whenever a source is added. Overwatch 2 rests on four people and 130 used slots, and Other on a handful of people, which also makes the Overwatch 2 versus Other confusion. One seed per fold in the leave-one-person-out check.
+
+**Limits and next.** This does not show performance on the report's held-out test design, on Marvel Rivals or Minecraft players (one person each), or on people from channels that never agreed to be used. Next: more people for Overwatch 2, Marvel Rivals and Minecraft (public YouTube channels with continuous gameplay, labelled as web sources), a larger and more varied Other class, then repeat this check; consider source-balanced sampling and a pretrained backbone.
+
+**Archive.** `data/archive/2026-11-19_v1x_seeds_and_lopo/` (local): split `v1x`, the seed runs, the leave-one-person-out run metrics and predictions, the data tables, the access log, README.
